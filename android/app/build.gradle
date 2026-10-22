@@ -1,0 +1,45 @@
+plugins {
+  id 'com.android.application'
+}
+
+android {
+  namespace 'com.godseye.view'
+  compileSdk 36
+
+  defaultConfig {
+    applicationId 'com.godseye.view'
+    minSdk 24
+    targetSdk 36
+    versionCode 1
+    versionName '1.0'
+  }
+
+  // The whole Vite build (Cesium, models, icons) rides along as assets.
+  sourceSets {
+    main {
+      assets.srcDirs += ['src/main/assets']
+    }
+  }
+
+  buildTypes {
+    debug {
+      minifyEnabled false
+    }
+    release {
+      minifyEnabled false
+      // Signed with the debug key so a local build installs without a keystore.
+      signingConfig signingConfigs.debug
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  // Cesium streams .wasm and model binaries; letting aapt store them verbatim
+  // avoids a decompress pass on every request.
+  androidResources {
+    noCompress 'wasm', 'glb', 'gltf', 'bin', 'gz'
+  }
+}

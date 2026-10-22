@@ -647,9 +647,9 @@
 .data-toggle-btn {
   padding: 3px 10px;
   font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 1.5px;
-  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  color: var(--text-secondary);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px;
@@ -719,7 +719,7 @@
 
 .data-toggle-meta {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.5px;
   color: var(--text-dim);
   padding-left: 26px;
@@ -745,7 +745,7 @@
 .data-toggle-chip {
   padding: 2px 7px;
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 1.2px;
   color: var(--text-dim);
   background: rgba(255, 255, 255, 0.04);

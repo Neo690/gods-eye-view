@@ -112,7 +112,7 @@
   padding-top: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 1.4px;
   text-transform: uppercase;
@@ -1233,7 +1233,7 @@
   border-radius: 6px;
   color: #8fcfff;
   background: rgba(42, 113, 171, 0.09);
-  font: 8px/1.15 var(--font-mono);
+  font: 10px/1.15 var(--font-mono);
   letter-spacing: 0.09em;
   cursor: pointer;
   transition:
@@ -1281,14 +1281,14 @@
   padding: 12px;
   border: 1px dashed rgba(98, 181, 255, 0.2);
   border-radius: 7px;
-  color: rgba(190, 230, 230, 0.5);
+  color: rgba(190, 230, 230, 0.68);
   text-align: center;
-  font: 8px/1.45 var(--font-mono);
+  font: 10px/1.45 var(--font-mono);
   letter-spacing: 0.1em;
 }
 .context-mode-standby strong {
   color: #8fcfff;
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.16em;
 }
 .context-mode-view {
@@ -1308,7 +1308,7 @@
   border-radius: 5px;
   color: #8fcfff;
   background: rgba(42, 113, 171, 0.12);
-  font: 7px/1.1 var(--font-mono);
+  font: 9px/1.1 var(--font-mono);
   letter-spacing: 0.1em;
   cursor: pointer;
 }
@@ -1332,7 +1332,7 @@
   width: 100%;
   min-height: 30px;
   padding: 6px 8px;
-  font-size: 8px;
+  font-size: 9px;
 }
 #global-context-panel #cockpit-entry {
   position: static;
@@ -1342,7 +1342,7 @@
   padding: 5px 8px;
   border-radius: 5px;
   justify-content: center;
-  font-size: 8px;
+  font-size: 9px;
   box-shadow: none;
 }
 #global-context-panel #cockpit-entry .material-symbols-outlined {

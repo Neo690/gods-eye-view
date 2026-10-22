@@ -344,7 +344,11 @@ test('the Display selector, voice schema and final stylesheet expose Cyber', () 
   );
   assert.match(display, /id="cyber-sonar-sector"/);
   assert.deepEqual(setHud.parameters.properties.layout.enum, HUD_LAYOUTS);
-  assert.match(stylesheet, /@import '\.\/src\/ui\/styles\/cyber\.css';\s*$/);
+  // Cyber is the last THEME sheet; the phone shell loads after it so its
+  // structural rules outrank the dock sheets, and that position is pinned too.
+  const imports = [...stylesheet.matchAll(/@import '([^']+)';/g)].map((match) => match[1]);
+  assert.equal(imports.at(-1), './src/ui/styles/mobile-compact.css');
+  assert.equal(imports.at(-2), './src/ui/styles/cyber.css');
   assert.match(cyberStyles, /:root\[data-ui-theme='cyber'\]/);
   assert.match(cyberStyles, /\.material-symbols-outlined/);
   assert.match(cyberStyles, /\.pp-label/);

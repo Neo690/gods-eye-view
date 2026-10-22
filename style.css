@@ -23,3 +23,5 @@
 
 @import './src/ui/styles/weather.css';
 @import './src/ui/styles/cyber.css';
+/* Last: the phone shell has to outrank the dock sheets it reshapes. */
+@import './src/ui/styles/mobile-compact.css';

@@ -702,7 +702,9 @@ test('mobile Cockpit prioritizes flight instruments and collision-safe controls'
   assert.match(mobileCockpit[1], /body\.cockpit-mode #intel-hud/);
   assert.match(mobileCockpit[1], /body\.cockpit-mode \.cockpit-context-window/);
   assert.match(mobileCockpit[1], /body\.cockpit-mode \.cockpit-signal-window/);
-  assert.match(mobileCockpit[1], /body\.cockpit-mode \.cockpit-utility-controls[\s\S]*?bottom:\s*152px;/);
+  // 152px put the launcher cards on the KTS/FT readout units; the lane now
+  // anchors above the instrument row.
+  assert.match(mobileCockpit[1], /body\.cockpit-mode \.cockpit-utility-controls[\s\S]*?bottom:\s*238px;/);
   assert.match(mobileCockpit[1], /body\.cockpit-mode \.cockpit-utility-control\.is-expanded[\s\S]*?top:\s*96px;/);
   assert.match(mobileCockpit[1], /body\.cockpit-mode \.cockpit-utility-popover[\s\S]*?position:\s*static;/);
   assert.match(

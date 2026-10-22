@@ -57,7 +57,7 @@
 
 .panel-mini-label {
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 1.4px;
   color: var(--text-dim);
   text-transform: uppercase;
@@ -65,7 +65,7 @@
 
 .panel-mini-value {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 1.8px;
   color: var(--accent);
   text-transform: uppercase;
@@ -89,7 +89,7 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 1.4px;
   color: var(--text-dim);
 }
@@ -105,9 +105,9 @@
 
 .panel-title {
   font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 3px;
-  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 2.4px;
+  color: var(--text-secondary);
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -124,7 +124,7 @@
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.03);
-  color: var(--text-dim);
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1;
@@ -252,7 +252,7 @@
   top: 6px;
   right: 6px;
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 9px;
   color: var(--text-dim);
   opacity: 0;
   transition: opacity var(--transition-fast);
@@ -446,9 +446,10 @@
 
 #pp-toggles .pp-header-label {
   font-family: var(--font-mono);
-  font-size: 8px;
-  letter-spacing: 1.4px;
-  color: var(--text-dim);
+  /* Match .panel-title so the three right-rail launchers read as one set. */
+  font-size: 11px;
+  letter-spacing: 1.8px;
+  color: var(--text-secondary);
 }
 
 #pp-toggles > .pp-header-row .pp-collapse-btn {
@@ -505,7 +506,7 @@
 
 .pp-label {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 1.5px;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -579,7 +580,7 @@
 
 .pp-slider-value {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.5px;
   color: var(--accent);
   min-width: 28px;
@@ -654,7 +655,7 @@
 
 .pp-slider-mini-label {
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 1px;
   color: var(--text-dim);
   text-transform: uppercase;
@@ -684,7 +685,7 @@
 }
 
 .detection-allocation-seg .pp-mode-btn {
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.35px;
 }
 
@@ -727,9 +728,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: rgba(190, 221, 230, 0.62);
+  color: rgba(190, 221, 230, 0.78);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 1.35px;
 }
 
@@ -746,7 +747,7 @@
   gap: 4px;
   padding: 4px 7px;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.6px;
   text-transform: uppercase;
   white-space: nowrap;
@@ -827,7 +828,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.8px;
   color: var(--accent);
   text-align: center;
@@ -915,9 +916,9 @@ body.gev-drawing #cesiumContainer canvas {
   height: 22px;
   background: rgba(255, 255, 255, 0.04);
   border: none;
-  color: var(--text-dim);
+  color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.6px;
   text-transform: uppercase;
   cursor: pointer;
@@ -1101,7 +1102,7 @@ body.ui-clean-view #scene-runtime.active {
 
 .param-panel-title {
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 2.5px;
   color: var(--text-dim);
   text-transform: uppercase;
@@ -1136,7 +1137,7 @@ body.ui-clean-view #scene-runtime.active {
 
 .param-label {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 1px;
   color: var(--text-secondary);
   min-width: 72px;

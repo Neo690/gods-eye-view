@@ -156,7 +156,7 @@
 
 .hud-top-bar-left,
 .hud-top-bar-right {
-  opacity: 0.6;
+  opacity: 0.76;
 }
 
 /* Corner blocks */
@@ -204,7 +204,7 @@
   max-width: 340px;
   white-space: pre-line;
   line-height: 1.35;
-  opacity: 0.64;
+  opacity: 0.8;
 }
 
 .hud-ais-vessel.active {
@@ -232,13 +232,15 @@
 
 .hud-summary-wrap {
   margin-top: 6px;
-  max-width: 420px;
+  /* The summary now truncates on a 1600px-wide view; give it room before the
+     ellipsis, since the left rail only starts at 52px. */
+  max-width: 560px;
 }
 
 .hud-summary-label {
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 1.8px;
-  opacity: 0.55;
+  opacity: 0.72;
 }
 
 .hud-summary {
@@ -266,7 +268,7 @@
 
 .hud-orbital {
   font-size: 12px;
-  opacity: 0.7;
+  opacity: 0.82;
   letter-spacing: 1.5px;
 }
 
@@ -275,7 +277,7 @@
   position: absolute;
   font-size: 10px;
   letter-spacing: 1.5px;
-  opacity: 0.5;
+  opacity: 0.62;
 }
 
 .hud-left-edge {

@@ -12,8 +12,10 @@
   --accent-dim: rgba(0, 212, 255, 0.15);
   --accent-glow: rgba(0, 212, 255, 0.4);
   --text-primary: #e8eaed;
-  --text-secondary: rgba(232, 234, 237, 0.5);
-  --text-dim: rgba(232, 234, 237, 0.3);
+  /* Chrome labels sit over a live globe, not a flat panel: 0.5/0.3 left the
+     smallest readouts below a comfortable contrast on bright imagery. */
+  --text-secondary: rgba(232, 234, 237, 0.62);
+  --text-dim: rgba(232, 234, 237, 0.44);
   /* Opaque surface for browser-painted menus, which cannot use --glass-bg. */
   --menu-bg: #12121c;
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
