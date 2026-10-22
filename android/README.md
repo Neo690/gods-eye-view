@@ -59,16 +59,51 @@ uninstall, then updates are seamless.
 - Back button: WebView history, then exit.
 - Console messages are mirrored to logcat under the `GodsEyeView` tag.
 
-## What it does not carry
+## Live data: point the shell at a running server
 
-The repository's own Vite server hosts `/api/*` proxies (OpenSky/AIS/adsb.lol
-helpers, military installations, routes, transit, TomTom tiles, Google search,
-the AI summary, key setup). A standalone WebView has no Node process, so those
-layers report a network error exactly as the web build would without the
-server. Everything that talks to public endpoints directly — Cesium imagery,
-the HUD, layers, scenes, display controls, the radio browser — works offline
-from the bundled build.
+The live layers (satellites, flights, military aircraft, vessels, CCTV,
+traffic, launches, the HUD's AI summary) are served by this repository's own
+Vite middleware: the client asks its own origin for `/api/*` and the server
+does the proxying, caching and key handling. A standalone APK has no Node
+process, so those requests used to land on the asset store and come back 404.
 
-To exercise the proxied layers on a phone, run `npm run dev` on the computer
-and use `adb reverse tcp:5173 tcp:5173` with the phone pointed at
-`http://127.0.0.1:5173`; that path is intentionally not baked into the APK.
+`ApiForwarder` fixes that without a second implementation: when the build
+carries a server origin, every `/api/*` request the page makes is replayed over
+the network from Java and the response is handed back to the WebView. The call
+is issued outside the browser, so the server's source gate sees no foreign
+`Origin` and no CORS preflight is involved.
+
+The origin is a build input, `GEV_API_BASE`:
+
+```bash
+npm run build && rm -rf android/app/src/main/assets/www/* \
+  && cp -r dist/* android/app/src/main/assets/www/
+cd android
+GEV_API_BASE=http://127.0.0.1:5173 ./gradlew assembleRelease   # local server
+```
+
+For the GitHub build it is a repository variable, so no secret and no code
+change is needed:
+
+1. Deploy this repository's server somewhere always-on. The `Dockerfile` is the
+   whole app (Vite serves the client and the `/api` middleware), so any
+   container or Node host works — Render, Fly.io, Koyeb, a VPS. Give it the
+   environment it needs (`GEV_ALLOWED_HOSTS` for the public hostname, plus the
+   optional provider keys) and note the HTTPS URL it answers on.
+2. Set the URL as a repository variable:
+   `gh variable set GEV_API_BASE --body https://your-host` — or Settings →
+   Secrets and variables → Actions → Variables.
+3. Re-run the `Android APK` workflow. The log prints which server the build was
+   wired to, and the app logs `Data server: …` on launch.
+
+Leaving `GEV_API_BASE` empty keeps the app self-contained: everything that
+talks to public endpoints directly (Cesium imagery, HUD, layers, scenes,
+display controls, radio) still works, and the server-backed layers report
+`UNAVAILABLE`.
+
+### Known limit: POST endpoints
+
+`WebResourceRequest` exposes a request's URL, method and headers but not its
+entity, so only `GET`/`HEAD` can be replayed. The HUD's AI summary and the
+voice tools post a body and therefore still answer `501` through the shell;
+those need the browser build against the server.

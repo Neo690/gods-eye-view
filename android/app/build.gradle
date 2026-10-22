@@ -13,7 +13,11 @@ def ciKeyPassword = System.getenv('GEV_KEY_PASSWORD') ?: ciStorePassword
 // A per-build version code keeps the phone's installer on the "update" path
 // instead of treating a new download as the same version.
 def buildVersionCode = (System.getenv('GEV_VERSION_CODE') ?: '1').toInteger()
-def buildVersionName = System.getenv('GEV_VERSION_NAME') ?: '1.0'
+def buildVersionName = (System.getenv('GEV_VERSION_NAME') ?: '1.0')
+// Origin of a running copy of this project's server. The live layers ask their
+// own origin for /api/*; the shell replays those calls here. Empty keeps the
+// app self-contained, with the server-backed layers reporting unavailable.
+def dataServer = (System.getenv('GEV_API_BASE') ?: '').trim()
 
 android {
   namespace 'com.godseye.view'
@@ -25,6 +29,11 @@ android {
     targetSdk 36
     versionCode buildVersionCode
     versionName buildVersionName
+    buildConfigField 'String', 'API_BASE', "\"${dataServer}\""
+  }
+
+  buildFeatures {
+    buildConfig true
   }
 
   signingConfigs {

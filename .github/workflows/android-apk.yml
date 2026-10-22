@@ -84,7 +84,16 @@ jobs:
           GEV_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           GEV_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           GEV_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # Repository variable, not a secret: the origin of a running copy of
+          # this project's server. Empty leaves the app offline-only and the
+          # live layers report unavailable.
+          GEV_API_BASE: ${{ vars.GEV_API_BASE }}
         run: |
+          if [ -n "$GEV_API_BASE" ]; then
+            echo "Live data server: $GEV_API_BASE"
+          else
+            echo "Live data server: none (set the GEV_API_BASE repository variable to enable the live layers)"
+          fi
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease
 

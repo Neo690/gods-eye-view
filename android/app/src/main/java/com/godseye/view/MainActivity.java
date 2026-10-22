@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
 
   private WebView webView;
   private PermissionRequest pendingAudioRequest;
+  private ApiForwarder apiForwarder;
 
   @SuppressLint("SetJavaScriptEnabled")
   @Override
@@ -60,6 +61,16 @@ public class MainActivity extends Activity {
     );
     webView.setBackgroundColor(Color.parseColor("#05080A"));
     setContentView(webView);
+
+    // Empty when the build carries no data server: /api requests then fall
+    // through to the asset store exactly as before.
+    apiForwarder = new ApiForwarder(BuildConfig.API_BASE);
+    Log.i(
+      TAG,
+      apiForwarder.isEnabled()
+        ? "Data server: " + apiForwarder.describe()
+        : "Data server: none configured (live layers will report unavailable)"
+    );
 
     WebSettings settings = webView.getSettings();
     settings.setJavaScriptEnabled(true);
@@ -150,7 +161,11 @@ public class MainActivity extends Activity {
     public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
       if (request == null || request.getUrl() == null) return null;
       if (!ASSET_HOST.equals(request.getUrl().getHost())) return null;
-      return serveAsset(request.getUrl().getPath());
+      String path = request.getUrl().getPath();
+      if (apiForwarder != null && apiForwarder.handles(path)) {
+        return apiForwarder.forward(request);
+      }
+      return serveAsset(path);
     }
 
     @Override
