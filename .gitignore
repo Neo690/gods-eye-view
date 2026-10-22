@@ -28,3 +28,14 @@ pinokio/.installed
 
 # Transient: a release interrupted mid-assembly (npm run changelog recovers it)
 changelog.d/.assembling/
+
+# Android shell build output and the bundled web copy
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/assets/www/
+android/*.apk
+
+# Local signing key for CI builds (never committed)
+.signing/
