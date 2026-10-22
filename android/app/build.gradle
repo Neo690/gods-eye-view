@@ -2,6 +2,19 @@ plugins {
   id 'com.android.application'
 }
 
+// Android only installs an update signed by the same key as the copy already on
+// the device, and a CI runner's default debug keystore is regenerated per job.
+// CI therefore supplies its own key through the environment; a local build with
+// no such variables falls back to the ordinary debug key.
+def ciKeystore = System.getenv('GEV_KEYSTORE_PATH')
+def ciKeyAlias = System.getenv('GEV_KEY_ALIAS') ?: 'godseyeview'
+def ciStorePassword = System.getenv('GEV_KEYSTORE_PASSWORD')
+def ciKeyPassword = System.getenv('GEV_KEY_PASSWORD') ?: ciStorePassword
+// A per-build version code keeps the phone's installer on the "update" path
+// instead of treating a new download as the same version.
+def buildVersionCode = (System.getenv('GEV_VERSION_CODE') ?: '1').toInteger()
+def buildVersionName = System.getenv('GEV_VERSION_NAME') ?: '1.0'
+
 android {
   namespace 'com.godseye.view'
   compileSdk 36
@@ -10,8 +23,19 @@ android {
     applicationId 'com.godseye.view'
     minSdk 24
     targetSdk 36
-    versionCode 1
-    versionName '1.0'
+    versionCode buildVersionCode
+    versionName buildVersionName
+  }
+
+  signingConfigs {
+    ci {
+      if (ciKeystore) {
+        storeFile file(ciKeystore)
+        storePassword ciStorePassword
+        keyAlias ciKeyAlias
+        keyPassword ciKeyPassword
+      }
+    }
   }
 
   // The whole Vite build (Cesium, models, icons) rides along as assets.
@@ -27,8 +51,9 @@ android {
     }
     release {
       minifyEnabled false
-      // Signed with the debug key so a local build installs without a keystore.
-      signingConfig signingConfigs.debug
+      // Signed with the CI key when the workflow provides one, otherwise with
+      // the debug key so a local build installs without a keystore.
+      signingConfig ciKeystore ? signingConfigs.ci : signingConfigs.debug
     }
   }
 

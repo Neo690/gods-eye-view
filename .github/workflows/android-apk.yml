@@ -1,0 +1,110 @@
+name: Android APK
+
+# The point of this workflow is that the phone needs nothing but a browser: it
+# opens the release page, downloads the APK and installs it. No Node, no
+# Gradle, no adb, no computer.
+on:
+  push:
+    branches: [android-shell, main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Build and publish the APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: '1'
+      # A fresh version code per run keeps Android on the "update" path instead
+      # of treating the new download as the version it already has.
+      GEV_VERSION_CODE: ${{ github.run_number }}
+      GEV_VERSION_NAME: 1.0.${{ github.run_number }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+
+      # `npm install` rather than `npm ci`: the published lock file is the local
+      # working copy's and may carry drift; the artifact here is the APK, not a
+      # reproducibility gate (the CI workflow owns that).
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build the web bundle
+        run: npm run build
+
+      - name: Bundle the build into the Android assets
+        run: |
+          set -euo pipefail
+          rm -rf android/app/src/main/assets/www
+          mkdir -p android/app/src/main/assets/www
+          cp -R dist/. android/app/src/main/assets/www/
+          test -f android/app/src/main/assets/www/index.html
+          du -sh android/app/src/main/assets/www
+
+      - name: Use JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Android refuses an update signed by a key other than the one already on
+      # the device, so the key lives in a repository secret instead of being
+      # regenerated per job.
+      - name: Restore the signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not set; the APK would be signed with a throwaway key."
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/gev-release.jks"
+          test -s "$RUNNER_TEMP/gev-release.jks"
+
+      - name: Build the APK
+        working-directory: android
+        env:
+          GEV_KEYSTORE_PATH: ${{ runner.temp }}/gev-release.jks
+          GEV_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          GEV_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          GEV_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Verify the APK is signed
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          test -f "$APK"
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
+          "$APKSIGNER" verify --print-certs "$APK"
+
+      - name: Publish the APK to the rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cp android/app/build/outputs/apk/release/app-release.apk gods-eye-view.apk
+          NOTES="Built from ${GITHUB_SHA} (${GEV_VERSION_NAME}) on ${GITHUB_REF_NAME}."
+          gh release view apk-latest >/dev/null 2>&1 \
+            || gh release create apk-latest --title "God's Eye View — Android" --notes "$NOTES" --latest
+          gh release upload apk-latest gods-eye-view.apk --clobber
+          gh release edit apk-latest --notes "$NOTES" --latest
+          echo "Download: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/latest/download/gods-eye-view.apk"

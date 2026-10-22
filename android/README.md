@@ -26,6 +26,30 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 The assets copy and the Gradle output are build artifacts: they are ignored by
 git and must be regenerated after every `npm run build`.
 
+A wrapper is checked in, so `./gradlew assembleRelease` works with no global
+Gradle; it only needs `JAVA_HOME` on JDK 17 and `ANDROID_HOME`.
+
+## Install from the phone, no computer
+
+`.github/workflows/android-apk.yml` builds the bundle, wraps it in this shell
+and uploads the APK to the rolling `apk-latest` release on every push:
+
+```
+https://github.com/Neo690/gods-eye-view/releases/latest/download/gods-eye-view.apk
+```
+
+Open that link on the phone, download, and install (the browser asks once to
+allow installs from that source). Each build gets a fresh `versionCode`, so the
+installer offers it as an update.
+
+The CI key comes from the `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` repository secrets; the keystore
+itself lives in `.signing/` locally and is git-ignored. Back that directory up:
+losing the key means every later build is a different app and must be
+uninstalled before it can be installed. A build signed by the CI key does not
+replace an APK signed by a local debug key — the first switch needs one
+uninstall, then updates are seamless.
+
 ## What the shell provides
 
 - `INTERNET` for tiles, fonts and feeds.
