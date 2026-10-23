@@ -62,6 +62,8 @@ final class LiveApi {
    * fixed rather than a general proxy.
    */
   private static final long UPSTREAM_TTL_MS = 60_000L;
+  /** Same-host hops tolerated on one read-through; anything else is refused. */
+  private static final int UPSTREAM_MAX_REDIRECTS = 3;
   // WFIGS serves its perimeter pages as GeoJSON; a peak-season page is a few MB.
   private static final int UPSTREAM_MAX_BYTES = 16 * 1024 * 1024;
   private static final String[] UPSTREAM_HOSTS = {
@@ -579,7 +581,7 @@ private static WebResourceResponse enrichment(String tail) throws IOException {
     }
     byte[] body = null;
     try {
-      body = getNoRedirect(raw);
+      body = getUpstream(raw);
     } catch (IOException failure) {
       if (entry == null) throw failure;
     }
@@ -627,37 +629,67 @@ private static WebResourceResponse enrichment(String tail) throws IOException {
 
   /* ── Transport and small helpers ────────────────────────────────────── */
 
-  /** One hop only: a redirect could point this fixed-host read somewhere else. */
-  private static byte[] getNoRedirect(String target) throws IOException {
-    HttpURLConnection connection = null;
-    try {
-      connection = (HttpURLConnection) new URL(target).openConnection();
-      connection.setRequestMethod("GET");
-      connection.setInstanceFollowRedirects(false);
-      connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-      connection.setReadTimeout(READ_TIMEOUT_MS);
-      connection.setRequestProperty("User-Agent", USER_AGENT);
-      connection.setRequestProperty("Accept", "application/json");
-      connection.setRequestProperty("Accept-Encoding", "identity");
-      int status = connection.getResponseCode();
-      if (status != 200) throw new IOException("HTTP " + status);
-      InputStream stream = connection.getInputStream();
-      if (stream == null) throw new IOException("HTTP " + status);
+  /**
+   * Read one allowlisted host, following a few redirects that stay on it.
+   *
+   * The fixed host list is what keeps this route from being a general proxy,
+   * and a redirect only keeps that promise when it does not leave the host
+   * that was checked. Operators do redirect inside their own tree — the
+   * Texas Socrata endpoint answers 302 to its own /api/views path for the
+   * CapMetro feed — so a same-host hop is followed and anything else refused.
+   */
+  private static byte[] getUpstream(String target) throws IOException {
+    String host = new URL(target).getHost();
+    String current = target;
+    for (int hop = 0; hop <= UPSTREAM_MAX_REDIRECTS; hop += 1) {
+      HttpURLConnection connection = null;
       try {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        byte[] buffer = new byte[16 * 1024];
-        int read;
-        while ((read = stream.read(buffer)) != -1) {
-          out.write(buffer, 0, read);
-          if (out.size() > UPSTREAM_MAX_BYTES) throw new IOException("body too large");
+        connection = (HttpURLConnection) new URL(current).openConnection();
+        connection.setRequestMethod("GET");
+        connection.setInstanceFollowRedirects(false);
+        connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+        connection.setReadTimeout(READ_TIMEOUT_MS);
+        connection.setRequestProperty("User-Agent", USER_AGENT);
+        connection.setRequestProperty("Accept", "application/json");
+        connection.setRequestProperty("Accept-Encoding", "identity");
+        int status = connection.getResponseCode();
+        if (status >= 300 && status < 400) {
+          String location = connection.getHeaderField("Location");
+          URL next = location == null
+            ? null
+            : new URL(new URL(current), location);
+          if (
+            next == null ||
+            !"https".equals(next.getProtocol()) ||
+            !host.equalsIgnoreCase(next.getHost()) ||
+            !upstreamHostAllowed(next.getHost())
+          ) {
+            throw new IOException("redirect refused");
+          }
+          current = next.toString();
+          continue;
         }
-        return out.toByteArray();
+        if (status != 200) throw new IOException("HTTP " + status);
+        InputStream stream = connection.getInputStream();
+        if (stream == null) throw new IOException("HTTP " + status);
+        try {
+          ByteArrayOutputStream out = new ByteArrayOutputStream();
+          byte[] buffer = new byte[16 * 1024];
+          int read;
+          while ((read = stream.read(buffer)) != -1) {
+            out.write(buffer, 0, read);
+            if (out.size() > UPSTREAM_MAX_BYTES)
+              throw new IOException("body too large");
+          }
+          return out.toByteArray();
+        } finally {
+          stream.close();
+        }
       } finally {
-        stream.close();
+        if (connection != null) connection.disconnect();
       }
-    } finally {
-      if (connection != null) connection.disconnect();
     }
+    throw new IOException("too many redirects");
   }
 
   private static byte[] get(String target) throws IOException {
