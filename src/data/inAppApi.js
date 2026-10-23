@@ -256,6 +256,8 @@ export const RADIO_MIRRORS = [
   'nl1.api.radio-browser.info',
 ];
 const RADIO_LIMIT = 750;
+/** The layer compares generations within one producer instance; this is ours. */
+let radioGeneration = 0;
 
 /**
  * `/api/radio/stations` — the click-count chart, in the directory shape the
@@ -292,12 +294,15 @@ export async function radioStationsResponse({
       if (!stations.length) continue;
       return jsonResponse(200, {
         stations,
-        updatedAt: now(),
+        // The layer reads `updatedAt` as an ISO timestamp and requires a
+        // positive accepted generation whenever the answer is neither stale
+        // nor degraded.
+        updatedAt: new Date(now()).toISOString(),
         stale: false,
         degraded: false,
         degradedReason: null,
         coverage: null,
-        acceptedGeneration: null,
+        acceptedGeneration: ++radioGeneration,
         catalogInstance: 'in-app',
       });
     } catch {

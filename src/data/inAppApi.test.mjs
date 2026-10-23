@@ -305,7 +305,9 @@ test('the radio directory answers in the tuner\'s shape', async () => {
   });
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.equal(body.updatedAt, NOW);
+  assert.equal(body.updatedAt, new Date(NOW).toISOString());
+  assert.ok(Number.isSafeInteger(body.acceptedGeneration));
+  assert.ok(body.acceptedGeneration >= 1);
   assert.equal(body.degraded, false);
   assert.equal(body.catalogInstance, 'in-app');
   assert.equal(body.stations.length, 1);
