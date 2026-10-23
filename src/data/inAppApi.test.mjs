@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  cyclonesResponse,
   firePerimetersResponse,
   gnssAnchorFromSearch,
   gnssIntegrityResponse,
@@ -218,6 +219,57 @@ test('a refused WFIGS read is reported, not thrown', async () => {
   assert.deepEqual(await response.json(), {
     error: 'fire_perimeters_unavailable',
   });
+});
+
+test('cyclones answer with the layer\'s document, and admit a dead status read', async () => {
+  const now = Date.now();
+  const iso = (ms) => new Date(now - ms).toISOString();
+  const status = {
+    activeStorms: [
+      {
+        id: 'al092026',
+        name: 'Tropical Storm Test',
+        classification: 'TS',
+        longitudeNumeric: -55.2,
+        latitudeNumeric: 22.4,
+        lastUpdate: iso(3_600_000),
+        intensity: 45,
+        pressure: 1002,
+        movementDir: 300,
+        movementSpeed: 12,
+        forecastAdvisory: {
+          advNum: '09',
+          issuance: iso(7_200_000),
+          url: 'https://www.nhc.noaa.gov/text/AL092026.shtml',
+        },
+      },
+    ],
+  };
+  const empty = { type: 'FeatureCollection', features: [] };
+  const ok = await cyclonesResponse({
+    now: () => now,
+    upstream: async (route) => {
+      const target = new URL(route, 'https://appassets.androidplatform.net/').searchParams.get('url');
+      const body = target.includes('CurrentStorms') ? status : empty;
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+  assert.equal(ok.status, 200);
+  const doc = await ok.json();
+  assert.equal(doc.schemaVersion, 1);
+  assert.equal(doc.unavailable, false);
+  assert.equal(doc.storms.length, 1);
+  // Empty but valid collections leave the storm pending, as on the server.
+  assert.equal(doc.storms[0].geometryStatus, 'pending');
+
+  const down = await cyclonesResponse({
+    upstream: async () => new Response('{}', { status: 500 }),
+  });
+  assert.equal(down.status, 502);
+  assert.deepEqual(await down.json(), { error: 'cyclones_unavailable' });
 });
 
 test('installing outside the shell changes nothing', async () => {

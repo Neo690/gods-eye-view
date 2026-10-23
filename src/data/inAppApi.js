@@ -18,6 +18,13 @@ import {
   normalizeGnssAircraft,
 } from '../layers/gnss/records.js';
 import { normalizeFirePerimeterSnapshot } from '../layers/perimeters/records.js';
+import {
+  CYCLONE_STATUS_URL,
+  attachCycloneGeometry,
+  cycloneGeometryUrls,
+  describeCycloneSnapshot,
+  parseCycloneStatus,
+} from './cycloneStorms.js';
 
 const SHELL_HOST = 'appassets.androidplatform.net';
 /** adsb.lol regional snapshot, the same radius the server asks for. */
@@ -190,12 +197,59 @@ export async function firePerimetersResponse({
   }
 }
 
+/**
+ * `/api/cyclones` — the status document plus the NHC GIS layers, in the shape
+ * the layer validates. Geometry that will not parse is not fatal: the storm
+ * list still answers, marked `unavailable` for its track and cone, exactly as
+ * the server does.
+ *
+ * @param {object} options
+ * @param {(input: string) => Promise<Response>} options.upstream
+ * @param {() => number} [options.now]
+ * @returns {Promise<Response>}
+ */
+export async function cyclonesResponse({
+  upstream,
+  now = () => Date.now(),
+} = {}) {
+  const read = async (url) => {
+    const response = await upstream(
+      `/api/upstream?url=${encodeURIComponent(url)}`,
+    );
+    if (!response?.ok) throw new Error('upstream_unavailable');
+    return response.json();
+  };
+  let storms;
+  try {
+    storms = parseCycloneStatus(await read(CYCLONE_STATUS_URL), now());
+    if (storms.length) {
+      try {
+        const collections = await Promise.all(cycloneGeometryUrls().map(read));
+        storms = attachCycloneGeometry(storms, collections);
+      } catch {
+        storms = storms.map((storm) => ({
+          ...storm,
+          geometryStatus: 'unavailable',
+        }));
+      }
+    }
+  } catch {
+    return jsonResponse(502, { error: 'cyclones_unavailable' });
+  }
+  return jsonResponse(
+    200,
+    describeCycloneSnapshot({ storms, fetchedAt: now() }),
+  );
+}
+
 /** Routes this module answers, keyed by pathname. */
 const ROUTES = {
   '/api/gnss-integrity': (search, context) =>
     gnssIntegrityResponse({ search, upstream: context.upstream }),
   '/api/fire-perimeters': (search, context) =>
     firePerimetersResponse({ upstream: context.upstream }),
+  '/api/cyclones': (search, context) =>
+    cyclonesResponse({ upstream: context.upstream }),
 };
 
 /**

@@ -67,6 +67,9 @@ final class LiveApi {
   private static final String[] UPSTREAM_HOSTS = {
     "api.adsb.lol",
     "services3.arcgis.com",
+    // NHC cyclone status and its published forecast GIS layers.
+    "www.nhc.noaa.gov",
+    "mapservices.weather.noaa.gov",
   };
 
   private static final int CONNECT_TIMEOUT_MS = 8000;
