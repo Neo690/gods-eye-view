@@ -20,8 +20,10 @@
     <span class="indicator-value" id="active-style-name" data-i18n>NORMAL</span>
   </div>
 
-  <!-- Top-center camera and share actions -->
+  <!-- Top-center camera and share actions. The alert bell rides the row too:
+       it is the free space at the top of the screen, and its list opens down. -->
   <nav id="top-center-actions" aria-label="Globe actions" data-i18n-aria-label>
+    <div id="alert-center"></div>
     <button id="clear-selected-layers" type="button" aria-label="Clear selected data layers" title="Turn off all selected data layers" data-i18n-aria-label data-i18n-title>
       <span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>
     </button>

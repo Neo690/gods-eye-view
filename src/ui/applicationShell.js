@@ -46,6 +46,7 @@ import {
   t,
 } from '../i18n/index.js';
 import { applyLocaleChoice, mountLocalePicker } from './localePicker.js';
+import { mountAlertCenter } from './alertCenter.js';
 import { bindMapViewControls, flyToFix } from './mapViewControls.js';
 
 /**
@@ -580,6 +581,7 @@ export class StyleManager extends ShellFacade {
     this._applyRuntimeStaticHeaderText();
     this._initPanelChrome();
     this._initLocaleSelector();
+    this._initAlertCenter();
     this._sizeDisplayLabelColumn();
     this._initLeftPanelAdaptiveLayout();
     this._initRightPanelAdaptiveLayout();
@@ -741,6 +743,45 @@ export class StyleManager extends ShellFacade {
       root,
       current: getLocale(),
       onSelect: (locale) => this._chooseLocale(locale),
+    });
+  }
+
+  /**
+   * Mounts the alert centre (src/ui/alertCenter.js): the HUD bell, the incident
+   * list and the toast. Its scan reads the analyst records of the layers that
+   * are ON — a layer that is off has no records, so its incidents age out
+   * rather than being reported from data the app never loaded.
+   * @returns {void}
+   */
+  _initAlertCenter() {
+    const root = globalThis.document?.getElementById?.('alert-center');
+    if (!root) return;
+    // Top of each family, not every contact: the scan clusters anyway.
+    const records = (layerId, cap) => {
+      const manager = this._dataManager;
+      if (!manager?.isEnabled?.(layerId)) return [];
+      const module = manager.layers?.get(layerId)?.module;
+      if (typeof module?.getAnalystRecords !== 'function') return [];
+      return module.getAnalystRecords(cap) || [];
+    };
+    const gnss = () => {
+      const manager = this._dataManager;
+      if (!manager?.isEnabled?.('gnss-integrity')) return null;
+      const stats = manager.layers?.get('gnss-integrity')?.module?.getStats?.();
+      if (!stats?.levels) return null;
+      return { levels: { ...stats.levels, lastUpdate: stats.lastUpdate } };
+    };
+    this._alertCenter = mountAlertCenter({
+      root,
+      provider: () => ({
+        flights: records('flights', 4000),
+        military: records('military', 4000),
+        earthquakes: records('earthquakes', 4000),
+        fires: records('local-firms', 6000),
+        cyclones: records('weather-cyclones', 200),
+        gnss: gnss(),
+      }),
+      showToast: (text) => this._showToast(text),
     });
   }
 
@@ -1732,6 +1773,8 @@ export class StyleManager extends ShellFacade {
       unregister();
     this._localePicker?.destroy();
     this._localePicker = null;
+    this._alertCenter?.destroy();
+    this._alertCenter = null;
     this._recording.destroy();
     this._panelChrome.destroy();
     this._feedback.destroy();
