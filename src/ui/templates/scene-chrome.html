@@ -39,6 +39,18 @@
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
   </nav>
+  <!-- Zoom and device position: thumb-reachable, right edge above the dock. -->
+  <div id="map-tools" role="group" aria-label="Zoom and location" data-i18n-aria-label>
+    <button id="map-zoom-in" type="button" aria-label="Zoom in" title="Zoom in" data-i18n-aria-label data-i18n-title>
+      <span aria-hidden="true">+</span>
+    </button>
+    <button id="map-zoom-out" type="button" aria-label="Zoom out" title="Zoom out" data-i18n-aria-label data-i18n-title>
+      <span aria-hidden="true">−</span>
+    </button>
+    <button id="map-locate" type="button" aria-label="Centre on my position" title="Centre on my position" aria-pressed="false" data-i18n-aria-label data-i18n-title>
+      <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
+    </button>
+  </div>
   <div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>
     <span id="global-loading-label" data-i18n>LOADING LIVE DATA</span>
     <span id="global-loading-detail"></span>

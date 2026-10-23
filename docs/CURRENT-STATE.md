@@ -6056,3 +6056,15 @@ when their footprints touch or contain one another, never across a seam toleranc
 - `scripts/qa-form-fields.mjs` exercises native selections, number validity,
   calibration commit/cancel and stale-camera/disposal guards against an installed
   controller with fixture ports, plus default/Cyber and narrow translated layouts.
+
+### Map view controls
+
+The thumb column offers stepped zoom and a device-position toggle. Zoom steps
+from the current camera height, so a press means the same at a city block and at
+the globe. The locate button watches the device position: the first fix flies
+there and rings it with the accuracy the platform reports, later fixes move the
+marker without moving the camera, and a second press stops the watch and clears
+the marker. The watch asks for a precise (satellite/GNSS) fix first; when the
+platform answers `POSITION_UNAVAILABLE` or times out, it rearms against the
+network provider (Wi-Fi and cell towers) instead of failing, and only a refused
+permission or a network failure reports "Location unavailable".

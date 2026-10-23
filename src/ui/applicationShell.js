@@ -46,6 +46,7 @@ import {
   t,
 } from '../i18n/index.js';
 import { applyLocaleChoice, mountLocalePicker } from './localePicker.js';
+import { bindMapViewControls, flyToFix } from './mapViewControls.js';
 
 /**
  * Central UI orchestrator for the God's Eye View application.
@@ -589,6 +590,7 @@ export class StyleManager extends ShellFacade {
     this._initLocationBar();
     this._initShareButton();
     this._initCameraOrientationControls();
+    this._initMapViewControls();
     this._initClearSelectedLayersButton();
     this._initHUDToggle();
     this._initModels3dToggle();
@@ -1601,6 +1603,30 @@ export class StyleManager extends ShellFacade {
     });
   }
 
+  /**
+   * Wire the right-edge zoom and device-position buttons
+   * (src/ui/mapViewControls.js). The locate button reads the phone's own GPS,
+   * which is what makes the view agree with the device.
+   * @returns {void}
+   */
+  _initMapViewControls() {
+    this._mapViewControls?.destroy();
+    this._mapViewControls = bindMapViewControls({
+      viewer: this.viewer,
+      elements: {
+        zoomIn: this._mapZoomInBtn,
+        zoomOut: this._mapZoomOutBtn,
+        locate: this._mapLocateBtn,
+      },
+      showToast: (message) => this._showToast(message),
+      // The fix arrives from outside the camera system, so it goes through the
+      // same explicit-navigation route as a searched place: that is what
+      // releases follow/orbit ownership and lets the flight actually land.
+      flyTo: (fix) =>
+        this.runImmediateLocationNavigation(() => flyToFix(this.viewer, fix)),
+    });
+  }
+
   // ── Share Button ─────────────────────────────
 
   /**
@@ -1713,6 +1739,7 @@ export class StyleManager extends ShellFacade {
     this._displayBindings.destroy();
     this._mapSourceControls?.destroy();
     this._cameraOrientationControls?.destroy();
+    this._mapViewControls?.destroy();
     this._clearLayersControl?.destroy();
     this._cctvControls?.destroy();
     this.services?.streetLevelLayer?.attachNavigation?.(null);
