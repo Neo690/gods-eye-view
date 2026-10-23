@@ -1,6 +1,11 @@
 import { createStandaloneApplication } from './standalone/application.js';
 import { describeError } from './standalone/errors.js';
+import { installInAppApi } from './data/inAppApi.js';
 import { t } from './i18n/index.js';
+
+// Inside the Android shell the page answers the routes whose logic it already
+// carries; outside it this is a no-op. Installed before anything can fetch.
+installInAppApi();
 
 const application = createStandaloneApplication({
   googleApiKey: import.meta.env.GOOGLE_MAPS_API_KEY,

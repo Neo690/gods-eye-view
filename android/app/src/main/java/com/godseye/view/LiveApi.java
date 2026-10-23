@@ -13,6 +13,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -53,6 +54,16 @@ final class LiveApi {
   private static final long TRACK_TTL_MS = 60_000L;
   private static final long LAUNCHES_TTL_MS = 15 * 60_000L;
   private static final int TOMTOM_DAILY_BUDGET = 6000;
+
+  /**
+   * The in-page adapters run the project's own normalisers over a body they
+   * cannot fetch themselves: a cross-origin GET from the WebView is refused by
+   * CORS. They ask this route instead, which is why the host list is short and
+   * fixed rather than a general proxy.
+   */
+  private static final long UPSTREAM_TTL_MS = 60_000L;
+  private static final int UPSTREAM_MAX_BYTES = 8 * 1024 * 1024;
+  private static final String[] UPSTREAM_HOSTS = { "api.adsb.lol" };
 
   private static final int CONNECT_TIMEOUT_MS = 8000;
   private static final int READ_TIMEOUT_MS = 20000;
@@ -116,6 +127,9 @@ final class LiveApi {
       }
       if (path.startsWith("/api/adsbdb/")) {
         return enrichment(path.substring("/api/adsbdb/".length()));
+      }
+      if ("/api/upstream".equals(route)) {
+        return upstream(params.get("url"));
       }
       if ("/api/vessels".equals(route) || "/api/vessels/track".equals(route)) {
         // AISStream is a long-lived socket, which a shell cannot hold.
@@ -500,7 +514,109 @@ private static WebResourceResponse enrichment(String tail) throws IOException {
     return json(200, "OK", out.toString(), headers());
   }
 
+  /* ── Bounded read-through for the in-page adapters ───────────────────── */
+
+  private static WebResourceResponse upstream(String raw) throws IOException {
+    if (raw == null || raw.isEmpty()) {
+      return json(400, "Bad Request", "{\"error\":\"missing_url\"}", headers());
+    }
+    URL url;
+    try {
+      url = new URL(raw);
+    } catch (MalformedURLException failure) {
+      return json(400, "Bad Request", "{\"error\":\"invalid_url\"}", headers());
+    }
+    if (!"https".equals(url.getProtocol()) || !upstreamHostAllowed(url.getHost())) {
+      return json(403, "Forbidden", "{\"error\":\"host_not_allowed\"}", headers());
+    }
+    Cached entry = cache.get("upstream:" + raw);
+    if (entry != null && entry.ageMs() < UPSTREAM_TTL_MS) {
+      return bytes(
+        200,
+        "OK",
+        "application/json",
+        "utf-8",
+        entry.body,
+        headers("x-upstream-cache", "HIT")
+      );
+    }
+    byte[] body = null;
+    try {
+      body = getNoRedirect(raw);
+    } catch (IOException failure) {
+      if (entry == null) throw failure;
+    }
+    if (body == null || body.length == 0 || body.length > UPSTREAM_MAX_BYTES) {
+      if (entry == null) {
+        return json(
+          502,
+          "Bad Gateway",
+          "{\"error\":\"upstream_unavailable\"}",
+          headers()
+        );
+      }
+      return bytes(
+        200,
+        "OK",
+        "application/json",
+        "utf-8",
+        entry.body,
+        headers("x-upstream-cache", "STALE")
+      );
+    }
+    remember("upstream:" + raw, new Cached(body));
+    return bytes(
+      200,
+      "OK",
+      "application/json",
+      "utf-8",
+      body,
+      headers("x-upstream-cache", "MISS")
+    );
+  }
+
+  private static boolean upstreamHostAllowed(String host) {
+    if (host == null) return false;
+    for (String allowed : UPSTREAM_HOSTS) {
+      if (allowed.equalsIgnoreCase(host)) return true;
+    }
+    return false;
+  }
+
   /* ── Transport and small helpers ────────────────────────────────────── */
+
+  /** One hop only: a redirect could point this fixed-host read somewhere else. */
+  private static byte[] getNoRedirect(String target) throws IOException {
+    HttpURLConnection connection = null;
+    try {
+      connection = (HttpURLConnection) new URL(target).openConnection();
+      connection.setRequestMethod("GET");
+      connection.setInstanceFollowRedirects(false);
+      connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+      connection.setReadTimeout(READ_TIMEOUT_MS);
+      connection.setRequestProperty("User-Agent", USER_AGENT);
+      connection.setRequestProperty("Accept", "application/json");
+      connection.setRequestProperty("Accept-Encoding", "identity");
+      int status = connection.getResponseCode();
+      if (status != 200) throw new IOException("HTTP " + status);
+      InputStream stream = connection.getInputStream();
+      if (stream == null) throw new IOException("HTTP " + status);
+      try {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = new byte[16 * 1024];
+        int read;
+        while ((read = stream.read(buffer)) != -1) {
+          out.write(buffer, 0, read);
+          if (out.size() > UPSTREAM_MAX_BYTES) throw new IOException("body too large");
+        }
+        return out.toByteArray();
+      } finally {
+        stream.close();
+      }
+    } finally {
+      if (connection != null) connection.disconnect();
+    }
+  }
 
   private static byte[] get(String target) throws IOException {
     HttpURLConnection connection = null;
@@ -600,7 +716,7 @@ private static WebResourceResponse enrichment(String tail) throws IOException {
     return "{\"ok\":true,\"service\":\"gods-eye-view android live api\",\"routes\":" +
       "[\"/api/celestrak/{group}\",\"/api/flights\",\"/api/opensky\"," +
       "\"/api/flights/track?icao24={hex}\",\"/api/military\",\"/api/adsbdb/{kind}/{id}\"," +
-      "\"/api/launches\",\"/api/tomtom/status\"]}";
+      "\"/api/launches\",\"/api/tomtom/status\",\"/api/upstream?url={https}\"]}";
   }
 
   private static Map<String, String> headers(String... pairs) {
