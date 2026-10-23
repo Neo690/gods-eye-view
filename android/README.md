@@ -59,25 +59,47 @@ uninstall, then updates are seamless.
 - Back button: WebView history, then exit.
 - Console messages are mirrored to logcat under the `GodsEyeView` tag.
 
-## Live data: point the shell at a running server
+## Live data: inside the app by default
 
 The live layers (satellites, flights, military aircraft, vessels, CCTV,
-traffic, launches, the HUD's AI summary) are served by this repository's own
-Vite middleware: the client asks its own origin for `/api/*` and the server
-does the proxying, caching and key handling. A standalone APK has no Node
-process, so those requests used to land on the asset store and come back 404.
+traffic, launches, the HUD's AI summary) are served by this repository's Vite
+middleware: the client asks its own origin for `/api/*` and the server does the
+proxying, caching and key handling. A standalone APK has no Node process, so
+those requests used to land on the asset store and come back 404 — every
+network layer showed `UNAVAILABLE · HTTP 404`.
 
-`ApiForwarder` fixes that without a second implementation: when the build
-carries a server origin, every `/api/*` request the page makes is replayed over
-the network from Java and the response is handed back to the WebView. The call
-is issued outside the browser, so the server's source gate sees no foreign
-`Origin` and no CORS preflight is involved.
+The shell answers them itself now. `LiveApi` implements the routes the layers
+actually call, with the same upstream URL, cache window and response headers as
+their `server/providers` counterparts:
 
-The origin is a build input, `GEV_API_BASE`:
+| Route                                      | Upstream                        | Cache                                                     |
+| ------------------------------------------ | ------------------------------- | --------------------------------------------------------- |
+| `/api/celestrak/{group}`                   | CelesTrak GP/TLE text           | 6 h, stale on failure                                     |
+| `/api/flights`, `/api/opensky`             | OpenSky `states/all?extended=1` | 10 s; 250 nm adsb.lol snapshot if OpenSky is rate limited |
+| `/api/flights/track`, `/api/opensky-track` | OpenSky `tracks/all`            | 60 s                                                      |
+| `/api/military`, `/api/adsblol/mil`        | adsb.lol `/v2/mil`              | 12 s                                                      |
+| `/api/adsbdb/{callsign,aircraft}/{id}`     | adsbdb v0                       | 1 h                                                       |
+| `/api/launches`                            | Launch Library 2                | 15 min                                                    |
+| `/api/tomtom/status`                       | local                           | `hasKey: false`                                           |
+
+The calls are issued from Java, so no CORS applies and no browser `Origin` is
+sent. Nothing is uploaded and no key is involved: these are the public feeds.
+
+Layers whose upstream needs a credential cannot be faked, so they answer the
+way a keyless server does instead of 404 — the traffic layer falls back to OSM
+roads and says so in its status chip, and live vessels report their AISStream
+state. TomTom live tiles, CCTV, Google places and the AI summary still need
+either a key or the server.
+
+### Pointing the shell at a hosted server instead
+
+Everything `/api/*` can also come from a hosted copy of this repository, which
+covers the keyed routes too. The origin is a build input, `GEV_API_BASE`; when
+it is set, `ApiForwarder` replays every `/api/*` request there and `LiveApi` is
+not used.
 
 ```bash
-npm run build && rm -rf android/app/src/main/assets/www/* \
-  && cp -r dist/* android/app/src/main/assets/www/
+npm run build && rm -rf android/app/src/main/assets/www/*   && cp -r dist/* android/app/src/main/assets/www/
 cd android
 GEV_API_BASE=http://127.0.0.1:5173 ./gradlew assembleRelease   # local server
 ```
@@ -96,14 +118,17 @@ change is needed:
 3. Re-run the `Android APK` workflow. The log prints which server the build was
    wired to, and the app logs `Data server: …` on launch.
 
-Leaving `GEV_API_BASE` empty keeps the app self-contained: everything that
-talks to public endpoints directly (Cesium imagery, HUD, layers, scenes,
-display controls, radio) still works, and the server-backed layers report
-`UNAVAILABLE`.
+`edge-api/` is the same idea as a Cloudflare Worker: the keyless routes only,
+deployable to a free Worker host if you would rather keep the phone's traffic
+off the device. It needs no secret and no build step; see its own README.
+
+Leaving `GEV_API_BASE` empty is the supported default: the app logs
+`Data server: in-app live API` and the keyless layers above come alive with no
+server at all.
 
 ### Known limit: POST endpoints
 
 `WebResourceRequest` exposes a request's URL, method and headers but not its
 entity, so only `GET`/`HEAD` can be replayed. The HUD's AI summary and the
-voice tools post a body and therefore still answer `501` through the shell;
-those need the browser build against the server.
+voice tools post a body: with `LiveApi` they answer `405`, through a hosted
+forwarder `501`. Both need the browser build against the server.

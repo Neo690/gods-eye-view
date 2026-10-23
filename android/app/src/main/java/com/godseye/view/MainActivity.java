@@ -65,14 +65,14 @@ public class MainActivity extends Activity {
     webView.setBackgroundColor(Color.parseColor("#05080A"));
     setContentView(webView);
 
-    // Empty when the build carries no data server: /api requests then fall
-    // through to the asset store exactly as before.
+    // Empty when the build carries no data server: the live layers then read
+    // their public feeds through LiveApi, inside the app.
     apiForwarder = new ApiForwarder(BuildConfig.API_BASE);
     Log.i(
       TAG,
       apiForwarder.isEnabled()
         ? "Data server: " + apiForwarder.describe()
-        : "Data server: none configured (live layers will report unavailable)"
+        : "Data server: in-app live API (celestrak, flights, launches)"
     );
 
     WebSettings settings = webView.getSettings();
@@ -206,6 +206,10 @@ public class MainActivity extends Activity {
       String path = request.getUrl().getPath();
       if (apiForwarder != null && apiForwarder.handles(path)) {
         return apiForwarder.forward(request);
+      }
+      if (LiveApi.handles(path)) {
+        WebResourceResponse local = LiveApi.serve(request);
+        if (local != null) return local;
       }
       return serveAsset(path);
     }
