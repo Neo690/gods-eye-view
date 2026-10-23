@@ -34,6 +34,11 @@ import {
   isAllowedGbfsHost,
   isAllowedGbfsPath,
 } from './gbfsSource.js';
+import {
+  fetchTerrainChunkWithRetry,
+  parseTerrainPoints,
+  resolveTerrainHeightRequest,
+} from './terrainHeightsProxy.js';
 import { buildTransitSnapshot } from './transitProxy.js';
 import { getTransitFeed, publicTransitCatalog } from './transitFeeds.js';
 
@@ -348,6 +353,78 @@ export async function radioClickResponse({ id, upstream } = {}) {
   return jsonResponse(503, { error: 'radio_click_unavailable' });
 }
 
+/** Terrain does not move, so one resolved point serves the whole session. */
+const TERRAIN_TTL_MS = 30 * 24 * 3600_000;
+const TERRAIN_MAX_POINTS = 2000;
+/** Points per upstream call, sized the way the server sizes it. */
+const TERRAIN_CHUNK = 64;
+/** Entry ceiling for the page's own point cache (oldest evicted first). */
+const TERRAIN_CACHE_MAX_ENTRIES = 20_000;
+const terrainCache = new Map();
+
+/**
+ * `/api/terrain/heights?points=lon,lat;…` — Re:Earth point heights, resolved in
+ * the page. The point cache, the per-point 5dp keys, the chunk size and the
+ * "any point without a real height is a 502" rule are the server's own; only
+ * the cross-origin GET goes through the shell's read-through.
+ *
+ * @param {object} options
+ * @param {string} options.search
+ * @param {(input: string) => Promise<Response>} options.upstream
+ * @param {() => number} [options.now]
+ * @returns {Promise<Response>}
+ */
+export async function terrainHeightsResponse({
+  search,
+  upstream,
+  now = () => Date.now(),
+} = {}) {
+  const points = parseTerrainPoints(new URLSearchParams(search).get('points'));
+  if (!points) {
+    return jsonResponse(400, {
+      error:
+        'invalid points parameter — expected "lon,lat;lon,lat;…" with finite numbers',
+    });
+  }
+  if (points.length > TERRAIN_MAX_POINTS) {
+    return jsonResponse(500, {
+      error: `too many points (${points.length}); max ${TERRAIN_MAX_POINTS} per request`,
+    });
+  }
+  const readChunk = async (chunk) => {
+    const out = [];
+    for (let index = 0; index < chunk.length; index += TERRAIN_CHUNK) {
+      const results = await fetchTerrainChunkWithRetry(
+        chunk.slice(index, index + TERRAIN_CHUNK),
+        {
+          fetchImpl: (url) =>
+            upstream(`/api/upstream?url=${encodeURIComponent(url)}`),
+          // A poll is worth a short retry, not the server's ten-second budget:
+          // the layer falls back to the bundled geoid per chunk, and a stale
+          // answer here would move every vehicle to sea level.
+          attemptTimeoutMs: 8000,
+          retryBudgetMs: 4000,
+          maxAttempts: 2,
+        },
+      );
+      out.push(...results);
+    }
+    return out;
+  };
+  const outcome = await resolveTerrainHeightRequest({
+    points,
+    cache: terrainCache,
+    fetchMissing: readChunk,
+    ttlMs: TERRAIN_TTL_MS,
+    now,
+  });
+  while (terrainCache.size > TERRAIN_CACHE_MAX_ENTRIES) {
+    const oldest = terrainCache.keys().next().value;
+    terrainCache.delete(oldest);
+  }
+  return jsonResponse(outcome.status, outcome.body);
+}
+
 /**
  * `/api/transit/feeds` — the catalog of pollable feeds. The registry already
  * ships in the bundle, so this is the list the server publishes.
@@ -483,6 +560,8 @@ const ROUTES = {
     radioStationsResponse({ upstream: context.upstream }),
   '/api/transit/feeds': () => transitFeedsResponse(),
   '/api/military-installations': () => militaryInstallationsResponse(),
+  '/api/terrain/heights': (search, context) =>
+    terrainHeightsResponse({ search, upstream: context.upstream }),
 };
 
 /**

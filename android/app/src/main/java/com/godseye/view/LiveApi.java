@@ -108,6 +108,8 @@ final class LiveApi {
     "chat.publicbikesystem.net",
     // Entur fronts both a transit feed and Norwegian GBFS under one host.
     "api.entur.io",
+    // Re:Earth point heights: the terrain the vehicles and floors stand on.
+    "terrain.reearth.land",
   };
 
   private static final int CONNECT_TIMEOUT_MS = 8000;

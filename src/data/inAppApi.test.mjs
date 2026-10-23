@@ -8,6 +8,7 @@ import {
   gbfsResponse,
   militaryInstallationsResponse,
   radioStationsResponse,
+  terrainHeightsResponse,
   transitFeedsResponse,
   transitVehiclesResponse,
   gnssAnchorFromSearch,
@@ -329,6 +330,77 @@ test('a dead directory reports degraded instead of pretending', async () => {
   assert.equal(body.degraded, true);
 });
 
+const heightsUpstream = (asked) => async (route) => {
+  const target = new URL(theUrlOf(route));
+  const points = decodeURIComponent(target.searchParams.get('points')).split(
+    ';',
+  );
+  asked?.push({ host: target.host, path: target.pathname, points });
+  return new Response(
+    JSON.stringify({
+      results: points.map((pair) => {
+        const [lon, lat] = pair.split(',').map(Number);
+        return {
+          lon,
+          lat,
+          elevation: 150,
+          geoid: -26,
+          ellipsoid: lat > 31 ? 165 : 30,
+        };
+      }),
+    }),
+    { status: 200, headers: { 'content-type': 'application/json' } },
+  );
+};
+
+test('terrain heights answer in order through the read-through', async () => {
+  const asked = [];
+  const response = await terrainHeightsResponse({
+    search: '?points=-97.70800%2C31.20100%3B-97.76100%2C30.31900',
+    upstream: heightsUpstream(asked),
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.results.length, 2);
+  assert.deepEqual(
+    body.results.map((row) => row.ellipsoid),
+    [165, 30],
+  );
+  assert.equal(asked[0].host, 'terrain.reearth.land');
+  assert.equal(asked[0].path, '/heights.json');
+  // The proxy's own contract: lon,lat at five decimals, semicolon separated.
+  assert.deepEqual(asked[0].points, [
+    '-97.70800,31.20100',
+    '-97.76100,30.31900',
+  ]);
+});
+
+test('a warm point is not asked for twice', async () => {
+  const asked = [];
+  const search = '?points=-96.10000%2C30.10000';
+  await terrainHeightsResponse({ search, upstream: heightsUpstream(asked) });
+  await terrainHeightsResponse({ search, upstream: heightsUpstream(asked) });
+  assert.equal(asked.length, 1);
+});
+
+test('bad points are refused, and a dead upstream is reported', async () => {
+  assert.equal((await terrainHeightsResponse({ search: '?points=nope' })).status, 400);
+  assert.equal((await terrainHeightsResponse({ search: '?points=' })).status, 400);
+  const many = Array.from({ length: 2001 }, (_, i) => `-97.${i},30.1`).join(';');
+  const tooMany = await terrainHeightsResponse({
+    search: '?points=' + encodeURIComponent(many),
+  });
+  assert.equal(tooMany.status, 500);
+  // A fresh point with no cache and a refusing upstream has no height to give:
+  // the layer then keeps its bundled geoid instead of believing a made-up one.
+  const down = await terrainHeightsResponse({
+    search: '?points=-95.50000%2C29.50000',
+    upstream: async () => new Response('{}', { status: 502 }),
+  });
+  assert.equal(down.status, 502);
+  assert.ok((await down.json()).error);
+});
+
 /** A minimal full-dataset GTFS-Realtime FeedMessage, as the page receives it. */
 function feedMessage() {
   const writer = new PbfWriter();
@@ -506,6 +578,14 @@ test('the shim routes the paths that carry their subject', async () => {
         ),
     );
     assert.equal(gbfs.status, 403);
+
+    const terrain = await globalThis.fetch(
+      '/api/terrain/heights?points=-97.75000%2C30.27000',
+    );
+    // The stub upstream answers GTFS bytes, so the terrain read fails — but it
+    // fails inside the route, which is what proves the path is wired.
+    assert.equal(terrain.status, 502);
+    assert.match(decodeURIComponent(calls.at(-1)), /terrain\.reearth\.land/);
 
     const method = await globalThis.fetch('/api/transit/feeds', {
       method: 'POST',
