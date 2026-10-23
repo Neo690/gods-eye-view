@@ -70,6 +70,10 @@ final class LiveApi {
     // NHC cyclone status and its published forecast GIS layers.
     "www.nhc.noaa.gov",
     "mapservices.weather.noaa.gov",
+    // Radio Browser mirrors; the page rotates through them.
+    "de1.api.radio-browser.info",
+    "de2.api.radio-browser.info",
+    "nl1.api.radio-browser.info",
   };
 
   private static final int CONNECT_TIMEOUT_MS = 8000;

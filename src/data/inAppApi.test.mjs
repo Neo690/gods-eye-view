@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   cyclonesResponse,
   firePerimetersResponse,
+  radioStationsResponse,
   gnssAnchorFromSearch,
   gnssIntegrityResponse,
   inAndroidShell,
@@ -270,6 +271,55 @@ test('cyclones answer with the layer\'s document, and admit a dead status read',
   });
   assert.equal(down.status, 502);
   assert.deepEqual(await down.json(), { error: 'cyclones_unavailable' });
+});
+
+test('the radio directory answers in the tuner\'s shape', async () => {
+  const row = (uuid, name, lat, lon) => ({
+    stationuuid: uuid,
+    name,
+    url_resolved: 'https://stream.example.com/live.mp3',
+    homepage: 'https://example.com',
+    geo_lat: lat,
+    geo_long: lon,
+    tags: 'jazz,news',
+    language: 'english',
+    state: 'Texas',
+    country: 'United States',
+    countrycode: 'US',
+    codec: 'MP3',
+    bitrate: 128,
+    clickcount: 12,
+    lastcheckok: 1,
+    hls: 0,
+  });
+  const response = await radioStationsResponse({
+    now: () => NOW,
+    upstream: async () =>
+      new Response(
+        JSON.stringify([
+          row('11111111-1111-1111-1111-111111111111', 'KJazz', 30.2, -97.7),
+          { stationuuid: '', name: 'broken' },
+        ]),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.updatedAt, NOW);
+  assert.equal(body.degraded, false);
+  assert.equal(body.catalogInstance, 'in-app');
+  assert.equal(body.stations.length, 1);
+  assert.equal(body.stations[0].name, 'KJazz');
+  assert.equal(body.stations[0].lat, 30.2);
+});
+
+test('a dead directory reports degraded instead of pretending', async () => {
+  const response = await radioStationsResponse({
+    upstream: async () => new Response('{}', { status: 500 }),
+  });
+  assert.equal(response.status, 503);
+  const body = await response.json();
+  assert.equal(body.degraded, true);
 });
 
 test('installing outside the shell changes nothing', async () => {

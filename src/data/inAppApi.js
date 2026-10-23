@@ -19,6 +19,10 @@ import {
 } from '../layers/gnss/records.js';
 import { normalizeFirePerimeterSnapshot } from '../layers/perimeters/records.js';
 import {
+  normalizeRadioBrowserStation,
+  publicRadioStation,
+} from '../sources/radioBrowser.js';
+import {
   CYCLONE_STATUS_URL,
   attachCycloneGeometry,
   cycloneGeometryUrls,
@@ -242,6 +246,95 @@ export async function cyclonesResponse({
   );
 }
 
+/**
+ * Radio Browser mirrors, in the order the server tries them. The station
+ * normalisers are shared with the layer, so only the query lives here.
+ */
+export const RADIO_MIRRORS = [
+  'de1.api.radio-browser.info',
+  'de2.api.radio-browser.info',
+  'nl1.api.radio-browser.info',
+];
+const RADIO_LIMIT = 750;
+
+/**
+ * `/api/radio/stations` — the click-count chart, in the directory shape the
+ * tuner reads.
+ *
+ * @param {object} options
+ * @param {(input: string) => Promise<Response>} options.upstream
+ * @param {() => number} [options.now]
+ * @returns {Promise<Response>}
+ */
+export async function radioStationsResponse({
+  upstream,
+  now = () => Date.now(),
+} = {}) {
+  const query = new URLSearchParams({
+    order: 'clickcount',
+    reverse: 'true',
+    hidebroken: 'true',
+    limit: String(RADIO_LIMIT),
+  });
+  for (const host of RADIO_MIRRORS) {
+    try {
+      const url = `https://${host}/json/stations/search?${query}`;
+      const response = await upstream(
+        `/api/upstream?url=${encodeURIComponent(url)}`,
+      );
+      if (!response?.ok) continue;
+      const rows = await response.json();
+      if (!Array.isArray(rows)) continue;
+      const stations = rows
+        .map((raw) => normalizeRadioBrowserStation(raw))
+        .filter(Boolean)
+        .map(publicRadioStation);
+      if (!stations.length) continue;
+      return jsonResponse(200, {
+        stations,
+        updatedAt: now(),
+        stale: false,
+        degraded: false,
+        degradedReason: null,
+        coverage: null,
+        acceptedGeneration: null,
+        catalogInstance: 'in-app',
+      });
+    } catch {
+      // Try the next mirror; the directory is the same on all of them.
+    }
+  }
+  return jsonResponse(503, {
+    error: 'Radio directory is temporarily unavailable',
+    degraded: true,
+    degradedReason: 'upstream_unavailable',
+  });
+}
+
+/**
+ * `/api/radio/click/{id}` — the directory counts a click per stream start.
+ * The answer is what the layer checks: a 204.
+ *
+ * @param {object} options
+ * @param {string} options.id
+ * @param {(input: string) => Promise<Response>} options.upstream
+ * @returns {Promise<Response>}
+ */
+export async function radioClickResponse({ id, upstream } = {}) {
+  for (const host of RADIO_MIRRORS) {
+    try {
+      const url = `https://${host}/json/url/${encodeURIComponent(id)}`;
+      const response = await upstream(
+        `/api/upstream?url=${encodeURIComponent(url)}`,
+      );
+      if (response?.ok) return new Response(null, { status: 204 });
+    } catch {
+      // Same mirror rotation as the directory.
+    }
+  }
+  return jsonResponse(503, { error: 'radio_click_unavailable' });
+}
+
 /** Routes this module answers, keyed by pathname. */
 const ROUTES = {
   '/api/gnss-integrity': (search, context) =>
@@ -250,6 +343,8 @@ const ROUTES = {
     firePerimetersResponse({ upstream: context.upstream }),
   '/api/cyclones': (search, context) =>
     cyclonesResponse({ upstream: context.upstream }),
+  '/api/radio/stations': (search, context) =>
+    radioStationsResponse({ upstream: context.upstream }),
 };
 
 /**
@@ -277,13 +372,27 @@ export function installInAppApi({
     const raw = typeof input === 'string' ? input : input?.url;
     if (typeof raw === 'string') {
       const url = new URL(raw, location.href);
-      const route = url.origin === location.origin && ROUTES[url.pathname];
-      if (route) {
-        const method = (init?.method || 'GET').toUpperCase();
-        if (method !== 'GET') {
-          return jsonResponse(405, { error: 'method_not_allowed' });
+      const method = (init?.method || 'GET').toUpperCase();
+      if (url.origin === location.origin) {
+        const click = url.pathname.match(
+          /^\/api\/radio\/click\/([0-9a-f-]+)$/i,
+        );
+        if (click) {
+          if (method !== 'POST') {
+            return jsonResponse(405, { error: 'method_not_allowed' });
+          }
+          return radioClickResponse({
+            id: click[1].toLowerCase(),
+            upstream: context.upstream,
+          });
         }
-        return route(url.search, context);
+        const route = ROUTES[url.pathname];
+        if (route) {
+          if (method !== 'GET') {
+            return jsonResponse(405, { error: 'method_not_allowed' });
+          }
+          return route(url.search, context);
+        }
       }
     }
     return fetchImpl(input, init);
