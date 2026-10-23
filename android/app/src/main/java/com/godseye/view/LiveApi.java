@@ -74,6 +74,38 @@ final class LiveApi {
     "de1.api.radio-browser.info",
     "de2.api.radio-browser.info",
     "nl1.api.radio-browser.info",
+    // GTFS-Realtime VehiclePositions feeds, one host per registered feed
+    // (src/data/transitFeeds.js). The page decodes the protobuf itself.
+    "cdn.mbta.com",
+    "data.texas.gov",
+    "svc.metrotransit.org",
+    "realtime.hsl.fi",
+    "gtfs.ovapi.nl",
+    "gtfsrt.api.translink.com.au",
+    "bustime.ttc.ca",
+    "www.miapp.ca",
+    "opendata.hamilton.ca",
+    "drtonline.durhamregiontransit.com",
+    "glphprdtmgtfs.glphtrpcloud.com",
+    "api.cityofkingston.ca",
+    "www.myridebarrie.ca",
+    "rtu.york.ca",
+    "opendata.burlington.ca",
+    // GBFS station documents: the bikeshare proxy's allowlist
+    // (src/data/gbfsSource.js) and the cities in its registry.
+    "gbfs.lyft.com",
+    "gbfs.bluebikes.com",
+    "gbfs.bcycle.com",
+    "gbfs.biketownpdx.com",
+    "reddybikeshare.socialbicycles.com",
+    "gbfs.nextbike.net",
+    "gbfs.urbansharing.com",
+    "api.cyclocity.fr",
+    "austin.publicbikesystem.net",
+    "hon.publicbikesystem.net",
+    "chat.publicbikesystem.net",
+    // Entur fronts both a transit feed and Norwegian GBFS under one host.
+    "api.entur.io",
   };
 
   private static final int CONNECT_TIMEOUT_MS = 8000;
@@ -140,7 +172,7 @@ final class LiveApi {
         return enrichment(path.substring("/api/adsbdb/".length()));
       }
       if ("/api/upstream".equals(route)) {
-        return upstream(params.get("url"));
+        return upstream(params.get("url"), "1".equals(params.get("binary")));
       }
       if ("/api/vessels".equals(route) || "/api/vessels/track".equals(route)) {
         // AISStream is a long-lived socket, which a shell cannot hold.
@@ -527,7 +559,8 @@ private static WebResourceResponse enrichment(String tail) throws IOException {
 
   /* ── Bounded read-through for the in-page adapters ───────────────────── */
 
-  private static WebResourceResponse upstream(String raw) throws IOException {
+  private static WebResourceResponse upstream(String raw, boolean binary)
+    throws IOException {
     if (raw == null || raw.isEmpty()) {
       return json(400, "Bad Request", "{\"error\":\"missing_url\"}", headers());
     }
@@ -542,14 +575,7 @@ private static WebResourceResponse enrichment(String tail) throws IOException {
     }
     Cached entry = cache.get("upstream:" + raw);
     if (entry != null && entry.ageMs() < UPSTREAM_TTL_MS) {
-      return bytes(
-        200,
-        "OK",
-        "application/json",
-        "utf-8",
-        entry.body,
-        headers("x-upstream-cache", "HIT")
-      );
+      return upstreamBody(entry.body, binary, "HIT");
     }
     byte[] body = null;
     try {
@@ -566,24 +592,29 @@ private static WebResourceResponse enrichment(String tail) throws IOException {
           headers()
         );
       }
-      return bytes(
-        200,
-        "OK",
-        "application/json",
-        "utf-8",
-        entry.body,
-        headers("x-upstream-cache", "STALE")
-      );
+      return upstreamBody(entry.body, binary, "STALE");
     }
     remember("upstream:" + raw, new Cached(body));
-    return bytes(
-      200,
-      "OK",
-      "application/json",
-      "utf-8",
-      body,
-      headers("x-upstream-cache", "MISS")
-    );
+    return upstreamBody(body, binary, "MISS");
+  }
+
+  /**
+   * Hand one read-through body back as the caller asked for it.
+   *
+   * A protobuf feed (GTFS-Realtime) cannot travel as text: telling the WebView
+   * the type is JSON makes it decode the bytes as UTF-8 before the page can
+   * read them. `binary=1` therefore answers octet-stream with no charset, so
+   * the body reaches the page as the bytes the operator sent.
+   */
+  private static WebResourceResponse upstreamBody(
+    byte[] body,
+    boolean binary,
+    String cache
+  ) {
+    Map<String, String> out = headers("x-upstream-cache", cache);
+    return binary
+      ? bytes(200, "OK", "application/octet-stream", null, body, out)
+      : bytes(200, "OK", "application/json", "utf-8", body, out);
   }
 
   private static boolean upstreamHostAllowed(String host) {

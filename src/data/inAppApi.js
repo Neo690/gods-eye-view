@@ -29,6 +29,13 @@ import {
   describeCycloneSnapshot,
   parseCycloneStatus,
 } from './cycloneStorms.js';
+import {
+  gbfsCacheControl,
+  isAllowedGbfsHost,
+  isAllowedGbfsPath,
+} from './gbfsSource.js';
+import { buildTransitSnapshot } from './transitProxy.js';
+import { getTransitFeed, publicTransitCatalog } from './transitFeeds.js';
 
 const SHELL_HOST = 'appassets.androidplatform.net';
 /** adsb.lol regional snapshot, the same radius the server asks for. */
@@ -63,12 +70,13 @@ export function gnssAnchorFromSearch(search) {
 /**
  * @param {number} status
  * @param {object} body
+ * @param {Record<string, string>} [extra]
  * @returns {Response}
  */
-function jsonResponse(status, body) {
+function jsonResponse(status, body, extra = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...extra },
   });
 }
 
@@ -340,6 +348,129 @@ export async function radioClickResponse({ id, upstream } = {}) {
   return jsonResponse(503, { error: 'radio_click_unavailable' });
 }
 
+/**
+ * `/api/transit/feeds` — the catalog of pollable feeds. The registry already
+ * ships in the bundle, so this is the list the server publishes.
+ *
+ * @returns {Response}
+ */
+export function transitFeedsResponse() {
+  return jsonResponse(200, { feeds: publicTransitCatalog() });
+}
+
+/**
+ * `/api/transit/vehicles/<feedId>` — the registered feed fetched and decoded
+ * in the page. As on the server, only a registry id becomes an upstream URL.
+ *
+ * @param {object} options
+ * @param {string} options.feedId
+ * @param {(input: string) => Promise<Response>} options.upstream
+ * @param {() => number} [options.now]
+ * @returns {Promise<Response>}
+ */
+export async function transitVehiclesResponse({
+  feedId,
+  upstream,
+  now = () => Date.now(),
+} = {}) {
+  const feed = getTransitFeed(feedId);
+  if (!feed) return jsonResponse(404, { error: 'unknown_transit_feed' });
+  let bytes;
+  try {
+    // The nonce keeps the shell's read-through from handing back the previous
+    // poll: bus positions are only worth drawing if they are this poll's. The
+    // body is protobuf, so the read is asked for as binary rather than text.
+    const response = await upstream(
+      `/api/upstream?binary=1&url=${encodeURIComponent(feed.url)}&_=${now()}`,
+    );
+    if (!response?.ok) throw new Error('upstream_unavailable');
+    bytes = new Uint8Array(await response.arrayBuffer());
+  } catch {
+    return jsonResponse(504, {
+      error: 'transit_feed_unavailable',
+      feedId,
+      retryInSec: 15,
+    });
+  }
+  try {
+    const snapshot = buildTransitSnapshot(feed, bytes, now());
+    return jsonResponse(200, snapshot, {
+      'x-gev-cache': 'MISS',
+      // The layer reads the operator's contact time separately from the
+      // snapshot's own fetch time.
+      'x-transit-contact': String(snapshot.fetchedAt),
+    });
+  } catch {
+    // A differential or unreadable feed is a fault, not an outage: the layer
+    // must not render it, and there is no snapshot to hand back.
+    return jsonResponse(502, {
+      error: 'transit_feed_unavailable',
+      feedId,
+      retryInSec: 60,
+    });
+  }
+}
+
+/**
+ * `/api/gbfs/<encoded-url>` — station information and status, fetched through
+ * the shell's read-through after the host and path checks the proxy applies,
+ * so the page can only reach an allowlisted GBFS endpoint.
+ *
+ * @param {object} options
+ * @param {string} options.encoded
+ * @param {(input: string) => Promise<Response>} options.upstream
+ * @returns {Promise<Response>}
+ */
+export async function gbfsResponse({ encoded, upstream } = {}) {
+  let target;
+  try {
+    target = new URL(decodeURIComponent(String(encoded || '')));
+  } catch {
+    return jsonResponse(400, { error: 'invalid_gbfs_target' });
+  }
+  if (
+    target.protocol !== 'https:' ||
+    target.username ||
+    target.password ||
+    !isAllowedGbfsHost(target.hostname) ||
+    !isAllowedGbfsPath(target.pathname, target.hostname)
+  ) {
+    return jsonResponse(403, { error: 'gbfs_target_not_allowed' });
+  }
+  try {
+    const response = await upstream(
+      `/api/upstream?url=${encodeURIComponent(target.href)}`,
+    );
+    if (!response?.ok) throw new Error('upstream_unavailable');
+    const payload = await response.json();
+    if (!payload || typeof payload !== 'object') throw new Error('not_json');
+    return jsonResponse(200, payload, {
+      'x-gbfs-upstream': target.hostname,
+      'x-gbfs-cache': 'MISS',
+      'cache-control': gbfsCacheControl(target.pathname),
+    });
+  } catch {
+    return jsonResponse(502, { error: 'gbfs_upstream_unavailable' });
+  }
+}
+
+/**
+ * `/api/military-installations` — the shell has no Overpass instance to ask,
+ * and this project only queries operator-configured ones. Answering with the
+ * same permanent capability miss the server returns when none is configured
+ * is what lets the layer fall back to its mapped tile and name sources at
+ * once instead of waiting on a query that cannot happen.
+ *
+ * @returns {Response}
+ */
+export function militaryInstallationsResponse() {
+  return jsonResponse(503, {
+    error: 'Detailed OpenStreetMap queries are not configured',
+    code: 'OVERPASS_NOT_CONFIGURED',
+    retryable: false,
+  });
+}
+
 /** Routes this module answers, keyed by pathname. */
 const ROUTES = {
   '/api/gnss-integrity': (search, context) =>
@@ -350,6 +481,8 @@ const ROUTES = {
     cyclonesResponse({ upstream: context.upstream }),
   '/api/radio/stations': (search, context) =>
     radioStationsResponse({ upstream: context.upstream }),
+  '/api/transit/feeds': () => transitFeedsResponse(),
+  '/api/military-installations': () => militaryInstallationsResponse(),
 };
 
 /**
@@ -397,6 +530,36 @@ export function installInAppApi({
             return jsonResponse(405, { error: 'method_not_allowed' });
           }
           return route(url.search, context);
+        }
+        // `/api/gbfs/<encoded target>` and `/api/transit/vehicles/<feedId>`
+        // carry their subject in the path, so they are matched here rather
+        // than in the fixed table.
+        if (url.pathname.startsWith('/api/gbfs/')) {
+          if (method !== 'GET') {
+            return jsonResponse(405, { error: 'method_not_allowed' });
+          }
+          return gbfsResponse({
+            encoded: url.pathname.slice('/api/gbfs/'.length),
+            upstream: context.upstream,
+          });
+        }
+        const vehicles = url.pathname.match(
+          /^\/api\/transit\/vehicles\/([^/]+)$/,
+        );
+        if (vehicles) {
+          if (method !== 'GET') {
+            return jsonResponse(405, { error: 'method_not_allowed' });
+          }
+          let feedId;
+          try {
+            feedId = decodeURIComponent(vehicles[1]);
+          } catch {
+            return jsonResponse(404, { error: 'unknown_transit_feed' });
+          }
+          return transitVehiclesResponse({
+            feedId,
+            upstream: context.upstream,
+          });
         }
       }
     }
