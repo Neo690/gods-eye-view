@@ -13,6 +13,15 @@
   --glass-bg: rgba(8, 16, 24, 0.46);
   --panel-glass: var(--glass-bg);
   --panel-glass-blur: blur(12px) saturate(1.25);
+  /* Floating dock windows (location popover, voice card, help and error
+     trays) sit over the same globe but carry dense text at 200-350 px wide,
+     where the rail's 0.46 glass lets the imagery vibrate through the letters.
+     They therefore get their own lighter-than-a-slab glass with a heavier
+     blur, and text that carries a shadow rather than relying on the fill. */
+  --popover-glass: rgba(8, 18, 26, 0.78);
+  --popover-glass-error: rgba(34, 10, 16, 0.78);
+  --popover-glass-blur: blur(26px) saturate(1.3);
+  --popover-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-border-hover: rgba(255, 255, 255, 0.15);
   --accent: #00d4ff;
