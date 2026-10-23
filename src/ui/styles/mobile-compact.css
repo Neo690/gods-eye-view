@@ -69,6 +69,7 @@
     max-height: none;
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: flex-start;
     gap: 6px;
     padding: 0;
@@ -95,18 +96,24 @@
   }
 
   /* A collapsed panel is a chip; an expanded panel leaves the row and
-     becomes a sheet (next block). Id-level selectors: the desktop rails set
-     `width: 100%` per panel id, which outranks a class-only rule. */
+     becomes a sheet (next block). Two ids are deliberate: the desktop rails
+     spend the second one on each panel's `width: 100%` / `flex: 0 0 auto`, and
+     a class-only rule loses to it. A panel added to a rail belongs in this
+     list — left out, it keeps its desktop width, swallows the row and leaves
+     its siblings 2px wide, which is what `#street-level-panel` did. */
   #left-panel-stack > #data-panel.collapsed,
   #left-panel-stack > #scene-panel.collapsed,
   #right-context-rail > #pp-toggles.collapsed,
   #right-context-rail > #cctv-panel.collapsed,
+  #right-context-rail > #street-level-panel.collapsed,
   #right-context-rail > #weather-panel.collapsed,
   #right-context-rail > #recent-imagery-panel.collapsed,
   #right-context-rail > #global-context-panel.collapsed {
     position: relative;
     inset: auto;
-    flex: 1 1 0;
+    /* Content width, not an equal share: 'STREET LEVEL' needs 74px where a
+       quarter of a 340px row leaves 59. A chip that does not fit wraps. */
+    flex: 0 1 auto;
     min-width: 0;
     width: auto;
     max-width: none;
@@ -208,10 +215,10 @@
        the surface here so the header row can fill it exactly. */
     border: 1px solid rgba(0, 212, 255, 0.16);
     border-radius: 12px;
-    background: var(--glass-bg);
+    background: var(--panel-glass);
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
-    backdrop-filter: blur(18px) saturate(1.3);
-    -webkit-backdrop-filter: blur(18px) saturate(1.3);
+    backdrop-filter: var(--panel-glass-blur);
+    -webkit-backdrop-filter: var(--panel-glass-blur);
   }
 
   /* Display draws its own collapsed card on the header row (its chip has no
@@ -319,9 +326,9 @@
     flex-direction: column;
     gap: 8px;
     padding: 10px;
-    background: var(--glass-bg);
-    backdrop-filter: blur(24px) saturate(1.4);
-    -webkit-backdrop-filter: blur(24px) saturate(1.4);
+    background: var(--panel-glass);
+    backdrop-filter: var(--panel-glass-blur);
+    -webkit-backdrop-filter: var(--panel-glass-blur);
     overflow: hidden;
   }
 
@@ -472,8 +479,35 @@
     display: none !important;
   }
 
+  /* That leaves the language picker alone in the corner, where its stock
+     0.9rem inset puts it squarely on the presets chip. It steps up into the
+     gap between the dock and the HUD row instead. */
+  #corner-actions {
+    inset-inline-end: 10px;
+    inset-block-end: calc(70px + env(safe-area-inset-bottom));
+  }
+
+  #corner-actions .locale-picker-button {
+    min-height: 34px;
+    padding: 0.4rem 0.7rem;
+  }
+
+  /* The list is a full-width sheet, and pinned 16px from the bottom it covers
+     the dock — including the VISUAL PRESETS label the user just read. It opens
+     from the same line as the chip instead, clear of the credit row. */
+  #corner-actions .locale-picker-popup {
+    inset-block-end: 70px;
+    max-height: calc(100dvh - 170px);
+  }
+
   /* ── Dock: full width, touch-sized ──────────── */
-  #command-dock {
+  /* The sliding module re-centres the dock with translateX(-50%) every time a
+     tray opens, on the assumption that it is a fit-content block with room to
+     slide. Here it already spans the viewport, so that transform moves it half
+     off-screen; each state keeps the same anchor instead. */
+  #command-dock,
+  #command-dock:has(#location-bar:not(.collapsed)),
+  #command-dock:has(#control-panel:not(.collapsed)) {
     left: 8px;
     right: 8px;
     bottom: 8px;
@@ -482,12 +516,19 @@
     transform: none;
     gap: 6px;
     align-items: stretch;
-    justify-content: space-between;
   }
 
+  /* The same module sizes a tray from --dock-side-compact (3.25rem at this
+     width) in both states. On a three-chip row each tray gets the half its
+     label needs, open or closed, because its body is a popover, not a growth. */
   #command-dock > #location-bar,
-  #command-dock > #control-panel {
+  #command-dock > #control-panel,
+  #command-dock > #location-bar:not(.collapsed),
+  #command-dock > #control-panel:not(.collapsed),
+  #command-dock:has(#location-bar:not(.collapsed)) > #control-panel,
+  #command-dock:has(#control-panel:not(.collapsed)) > #location-bar {
     flex: 1 1 0;
+    width: auto;
     min-width: 0;
     height: 54px;
   }
@@ -560,8 +601,13 @@
     min-height: 14px;
   }
 
-  #command-dock #gev-voice-control {
-    flex: 0 0 auto;
+  /* The mic keeps its 92px whether a tray is open or not: the sliding module
+     would otherwise blow it up to --dock-voice-width (8.75rem) and squeeze the
+     two labels out of the row. */
+  #command-dock > #gev-voice-control,
+  #command-dock:has(#location-bar:not(.collapsed)) > #gev-voice-control,
+  #command-dock:has(#control-panel:not(.collapsed)) > #gev-voice-control {
+    flex: 0 0 92px;
     min-width: 0;
     width: 92px;
     height: 54px;
@@ -573,12 +619,10 @@
   }
 
   #command-dock #gev-voice-control .gev-voice-heading,
+  #command-dock #gev-voice-control .gev-voice-kicker,
+  #command-dock #gev-voice-control #gev-voice-detail,
   #command-dock #gev-voice-control .gev-voice-readout,
   #command-dock #gev-voice-control .gev-voice-visualizer {
-    display: none;
-  }
-
-  #command-dock .gev-voice-kicker {
     display: none;
   }
 
@@ -587,9 +631,66 @@
     height: 40px;
   }
 
-  #command-dock #gev-voice-detail,
-  #command-dock .gev-voice-readout {
-    display: none;
+  /* The tray bodies are popovers above a full-width dock, so they cannot be
+     placed from the desktop chip widths (that centring maths assumes a
+     compact 52px chip beside a 140px mic). Each one spans the dock and hangs
+     off its own edge; the upstream gap above the dock still clears the
+     credit line, so only the horizontal anchor changes. */
+  #command-dock #location-bar .dock-popover-content,
+  #command-dock #location-bar:not(.collapsed) .dock-popover-content,
+  #command-dock #control-panel .dock-popover-content,
+  #command-dock #control-panel:not(.collapsed) .dock-popover-content {
+    left: 0;
+    right: auto;
+    width: calc(100vw - 16px);
+    max-width: none;
+  }
+
+  #command-dock #control-panel .dock-popover-content,
+  #command-dock #control-panel:not(.collapsed) .dock-popover-content {
+    left: auto;
+    right: 0;
+  }
+
+  /* The voice card is anchored to the mic, which stays centred in this row,
+     and voice-card.css already caps it at calc(100vw - 1.5rem) below 900px.
+     Its dismiss button is the one touch target the card never enlarged. */
+  #command-dock .gev-voice-card-dismiss {
+    width: 28px;
+    height: 28px;
+  }
+
+  /* The provider chooser hangs off the mic too, and its stock `left: 0;
+     right: 0` would render a full select in a 92px column. On a phone it is
+     one compact row — label beside the select, not a screen-wide block —
+     centred over the mic so the map stays visible around it. */
+  #command-dock .gev-voice-provider-field {
+    left: 50%;
+    right: auto;
+    box-sizing: border-box;
+    width: min(15rem, calc(100vw - 96px));
+    padding: 5px 8px;
+    gap: 8px;
+    /* The select keeps a usable floor; a long label ("Поставщик голосового
+       сервиса") ellipsises instead of pushing it out of the box. */
+    grid-template-columns: minmax(0, auto) minmax(6rem, 1fr);
+    align-items: center;
+    transform: translateX(-50%);
+    font-size: 0.55rem;
+    letter-spacing: 0.04rem;
+  }
+
+  #command-dock .gev-voice-provider-field > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #command-dock .gev-voice-provider-field select {
+    min-height: 30px;
+    padding: 0 6px;
+    font-size: 0.7rem;
   }
 
   /* Touch targets inside the sheets. */
@@ -630,6 +731,15 @@
    chip's radio launcher is the last thing that fits, and the same launcher
    sits inside the sheet it opens, so it yields first. */
 @media (max-width: 380px) {
+  /* The mic takes a fixed 92px out of the row, which leaves each label 78px
+     at 320px: 'VISUAL PRESETS' needs 84px at the 9px dock size and would
+     ellipsise. The band is one step down rather than a clipped word. */
+  #command-dock .panel-title,
+  #command-dock .location-toolbar-label {
+    font-size: 8.5px;
+    letter-spacing: 0.25px;
+  }
+
   #left-panel-stack .panel-title,
   #right-context-rail .panel-title,
   #right-context-rail .pp-header-label {
