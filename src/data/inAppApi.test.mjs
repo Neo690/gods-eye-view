@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  firePerimetersResponse,
   gnssAnchorFromSearch,
   gnssIntegrityResponse,
   inAndroidShell,
@@ -114,10 +115,16 @@ test('the shim answers its route and leaves every other request alone', async ()
     calls.push(typeof input === 'string' ? input : input.url);
     return new Response('{}', { status: 200 });
   };
+  // The shim runs on the real clock, so this snapshot has to be current.
+  const freshUpstream = async () =>
+    new Response(JSON.stringify({ ...snapshot, now: Date.now() / 1000 }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
   const installed = installInAppApi({
     location: shell,
     fetchImpl,
-    upstream: okUpstream,
+    upstream: freshUpstream,
   });
   assert.equal(installed, true);
   try {
@@ -136,6 +143,81 @@ test('the shim answers its route and leaves every other request alone', async ()
   } finally {
     globalThis.fetch = original;
   }
+});
+
+const perimeter = (id, name) => ({
+  type: 'Feature',
+  id,
+  properties: {
+    poly_IncidentName: name,
+    attr_UniqueFireIdentifier: id,
+    attr_IncidentSize: 1200,
+    attr_PercentContained: 40,
+  },
+  geometry: {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [-97.8, 30.2],
+        [-97.7, 30.2],
+        [-97.7, 30.3],
+        [-97.8, 30.2],
+      ],
+    ],
+  },
+});
+const geoJson = (features, more = false) =>
+  new Response(
+    JSON.stringify({ type: 'FeatureCollection', features, ...(more ? { exceededTransferLimit: true } : {}) }),
+    { status: 200, headers: { 'content-type': 'application/json' } },
+  );
+
+test('fire perimeters come back in the server\'s shape', async () => {
+  const asked = [];
+  const response = await firePerimetersResponse({
+    now: () => NOW,
+    upstream: async (url) => {
+      asked.push(url);
+      return geoJson([perimeter('A1', 'Bastrop')]);
+    },
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.fetchedAt, NOW);
+  assert.equal(body.rows.length, 1);
+  assert.equal(body.rows[0].stableId, 'A1');
+  assert.equal(body.rows[0].name, 'Bastrop');
+  assert.equal(asked.length, 1);
+  assert.match(asked[0], /^\/api\/upstream\?url=/);
+  assert.match(decodeURIComponent(asked[0]), /services3\.arcgis\.com\/T4QMspbfLg3qTGWY/);
+  assert.match(decodeURIComponent(asked[0]), /f=geojson/);
+});
+
+test('an exceeded transfer limit pages with resultOffset', async () => {
+  const asked = [];
+  const response = await firePerimetersResponse({
+    upstream: async (url) => {
+      asked.push(new URL(url, 'https://appassets.androidplatform.net/').searchParams.get('url'));
+      return asked.length === 1
+        ? geoJson([perimeter('A1', 'One')], true)
+        : geoJson([perimeter('A2', 'Two')]);
+    },
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.rows.length, 2);
+  assert.equal(asked.length, 2);
+  assert.match(asked[1], /resultOffset=1/);
+});
+
+test('a refused WFIGS read is reported, not thrown', async () => {
+  const response = await firePerimetersResponse({
+    upstream: async () => new Response('{}', { status: 502 }),
+  });
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), {
+    error: 'fire_perimeters_unavailable',
+  });
 });
 
 test('installing outside the shell changes nothing', async () => {

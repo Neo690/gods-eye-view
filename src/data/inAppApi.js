@@ -17,6 +17,7 @@ import {
   GNSS_WINDOW_MS,
   normalizeGnssAircraft,
 } from '../layers/gnss/records.js';
+import { normalizeFirePerimeterSnapshot } from '../layers/perimeters/records.js';
 
 const SHELL_HOST = 'appassets.androidplatform.net';
 /** adsb.lol regional snapshot, the same radius the server asks for. */
@@ -115,10 +116,86 @@ export async function gnssIntegrityResponse({
   });
 }
 
+/**
+ * WFIGS current interagency fire perimeters: the same query, offsets and
+ * offset cap the server uses, so the page sees the same snapshot.
+ */
+const WFIGS_URL =
+  'https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/' +
+  'WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query?' +
+  new URLSearchParams({
+    where: '1=1',
+    outFields: [
+      'poly_IncidentName',
+      'attr_UniqueFireIdentifier',
+      'attr_IncidentSize',
+      'attr_PercentContained',
+      'attr_POOState',
+      'attr_IncidentTypeCategory',
+      'attr_FireDiscoveryDateTime',
+      'poly_DateCurrent',
+      'attr_FireCause',
+      'attr_FireBehaviorGeneral',
+      'attr_TotalIncidentPersonnel',
+      'attr_POOCounty',
+      'attr_EstimatedCostToDate',
+      'attr_IncidentComplexityLevel',
+      'attr_CpxName',
+    ].join(','),
+    maxAllowableOffset: '0.001',
+    outSR: '4326',
+    f: 'geojson',
+  }).toString();
+/** The service caps one response at its maxRecordCount; a peak season pages. */
+const WFIGS_MAX_PAGES = 5;
+
+const exceededTransferLimit = (payload) =>
+  payload?.exceededTransferLimit === true ||
+  payload?.properties?.exceededTransferLimit === true;
+
+/**
+ * `/api/fire-perimeters` — WFIGS GeoJSON, normalised by the layer's own
+ * records module.
+ *
+ * @param {object} options
+ * @param {(input: string) => Promise<Response>} options.upstream
+ * @param {() => number} [options.now]
+ * @returns {Promise<Response>}
+ */
+export async function firePerimetersResponse({
+  upstream,
+  now = () => Date.now(),
+} = {}) {
+  const features = [];
+  try {
+    for (let page = 0; page < WFIGS_MAX_PAGES; page++) {
+      const url =
+        page === 0 ? WFIGS_URL : `${WFIGS_URL}&resultOffset=${features.length}`;
+      const response = await upstream(
+        `/api/upstream?url=${encodeURIComponent(url)}`,
+      );
+      if (!response?.ok) throw new Error('upstream_unavailable');
+      const payload = await response.json();
+      if (!Array.isArray(payload?.features)) {
+        throw new Error('invalid_snapshot');
+      }
+      features.push(...payload.features);
+      if (!exceededTransferLimit(payload) || !payload.features.length) break;
+    }
+    const rows = normalizeFirePerimeterSnapshot({ features });
+    if (!rows) throw new Error('invalid_snapshot');
+    return jsonResponse(200, { fetchedAt: now(), rows });
+  } catch {
+    return jsonResponse(502, { error: 'fire_perimeters_unavailable' });
+  }
+}
+
 /** Routes this module answers, keyed by pathname. */
 const ROUTES = {
   '/api/gnss-integrity': (search, context) =>
     gnssIntegrityResponse({ search, upstream: context.upstream }),
+  '/api/fire-perimeters': (search, context) =>
+    firePerimetersResponse({ upstream: context.upstream }),
 };
 
 /**

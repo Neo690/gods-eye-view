@@ -62,8 +62,12 @@ final class LiveApi {
    * fixed rather than a general proxy.
    */
   private static final long UPSTREAM_TTL_MS = 60_000L;
-  private static final int UPSTREAM_MAX_BYTES = 8 * 1024 * 1024;
-  private static final String[] UPSTREAM_HOSTS = { "api.adsb.lol" };
+  // WFIGS serves its perimeter pages as GeoJSON; a peak-season page is a few MB.
+  private static final int UPSTREAM_MAX_BYTES = 16 * 1024 * 1024;
+  private static final String[] UPSTREAM_HOSTS = {
+    "api.adsb.lol",
+    "services3.arcgis.com",
+  };
 
   private static final int CONNECT_TIMEOUT_MS = 8000;
   private static final int READ_TIMEOUT_MS = 20000;
