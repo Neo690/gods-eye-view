@@ -92,7 +92,7 @@
   padding: 6px 10px;
   border-radius: 7px;
   border: 1px solid rgba(0, 212, 255, 0.24);
-  background: rgba(3, 10, 18, 0.78);
+  background: var(--glass-bg);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   color: rgba(170, 252, 255, 0.92);
@@ -191,7 +191,7 @@ html:not([lang='en']) #global-loading-detail {
   padding: 6px 10px;
   border-radius: 7px;
   border: 1px solid rgba(0, 212, 255, 0.24);
-  background: rgba(3, 10, 18, 0.78);
+  background: var(--glass-bg);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   color: rgba(170, 252, 255, 0.92);

@@ -62,7 +62,9 @@
   padding: 19px 14px 12px;
   border-color: rgba(0, 212, 255, 0.36);
   border-radius: 12px;
-  background: rgba(8, 31, 42, 0.94);
+  /* Glass like the rest of the chrome: the voice bar used to be the one
+     opaque tile in the dock. */
+  background: var(--glass-bg);
   box-shadow:
     0 12px 30px rgba(0, 0, 0, 0.56),
     0 0 26px rgba(0, 212, 255, 0.12),

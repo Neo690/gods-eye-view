@@ -5,11 +5,13 @@
 
 :root {
   --bg-dark: #0a0a0f;
-  --glass-bg: rgba(12, 12, 20, 0.72);
-  /* The rail panels and their sheets sit ON the globe, so they are more
-     see-through than the small chips that must stay legible on their own:
-     the map reads through them at rest (owner request 2026-10-23). */
-  --panel-glass: rgba(8, 16, 24, 0.46);
+  /* One glass for the whole chrome (owner request 2026-10-23): the rail
+     panels, the dock, the chips and the top action row all read through the
+     globe the way the voice provider chooser does. The small chips stay
+     legible because the blur sits between them and the imagery, and their
+     text carries its own shadow. */
+  --glass-bg: rgba(8, 16, 24, 0.46);
+  --panel-glass: var(--glass-bg);
   --panel-glass-blur: blur(12px) saturate(1.25);
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-border-hover: rgba(255, 255, 255, 0.15);

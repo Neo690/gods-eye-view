@@ -96,16 +96,16 @@
   max-height: min(26rem, calc(100dvh - 8rem));
   padding: 0.55rem 0.6rem;
   color: var(--text-primary);
-  background:
-    linear-gradient(145deg, rgba(10, 27, 37, 0.94), rgba(7, 13, 22, 0.92)),
-    rgba(7, 17, 25, 0.92);
+  /* The same glass as the rest of the chrome; the rows inside carry their own
+     scrim, so the list stays readable over bright imagery. */
+  background: var(--glass-bg);
   border: 1px solid rgba(54, 220, 255, 0.42);
   border-radius: 0.55rem;
   box-shadow:
     0 1rem 3rem rgba(0, 0, 0, 0.65),
     0 0 2rem rgba(0, 212, 255, 0.08);
-  backdrop-filter: blur(18px) saturate(1.2);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: var(--panel-glass-blur);
+  -webkit-backdrop-filter: var(--panel-glass-blur);
   overflow-y: auto;
   overscroll-behavior: contain;
   /* A dark trough, so the list does not paint a light UA scrollbar. */
