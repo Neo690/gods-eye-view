@@ -39,9 +39,12 @@ public class MainActivity extends Activity {
   private static final String ASSET_HOST = "appassets.androidplatform.net";
   private static final String START_URL = "https://" + ASSET_HOST + "/index.html";
   private static final int REQUEST_MIC = 41;
+  private static final int REQUEST_LOCATION = 42;
 
   private WebView webView;
   private PermissionRequest pendingAudioRequest;
+  private GeolocationPermissions.Callback pendingLocationCallback;
+  private String pendingLocationOrigin;
   private ApiForwarder apiForwarder;
 
   @SuppressLint("SetJavaScriptEnabled")
@@ -152,6 +155,45 @@ public class MainActivity extends Activity {
         if (hasMic()) request.grant(request.getResources());
         else request.deny();
       }
+      return;
+    }
+    if (requestCode == REQUEST_LOCATION) {
+      GeolocationPermissions.Callback callback = pendingLocationCallback;
+      String origin = pendingLocationOrigin;
+      pendingLocationCallback = null;
+      pendingLocationOrigin = null;
+      if (callback != null && origin != null) {
+        // retain=false: the page asks again next launch, so a later "deny" in
+        // Android settings is not overruled by a remembered grant.
+        callback.invoke(origin, hasLocation(), false);
+      }
+    }
+  }
+
+  /**
+   * Whether the system location permission is already held. The page's locate
+   * button asks the other way round: the WebView prompt reaches us first, and
+   * this is what decides whether to answer it or to ask the user.
+   */
+  private boolean hasLocation() {
+    return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+      PackageManager.PERMISSION_GRANTED ||
+      checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) ==
+      PackageManager.PERMISSION_GRANTED;
+  }
+
+  private void ensureLocation() {
+    if (hasLocation()) return;
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      // Both, so the user may answer with the approximate fix and the marker
+      // still lands on their block.
+      requestPermissions(
+        new String[] {
+          Manifest.permission.ACCESS_FINE_LOCATION,
+          Manifest.permission.ACCESS_COARSE_LOCATION,
+        },
+        REQUEST_LOCATION
+      );
     }
   }
 
@@ -247,12 +289,20 @@ public class MainActivity extends Activity {
       if (pendingAudioRequest == request) pendingAudioRequest = null;
     }
 
+    /**
+     * The map's locate button. A fix needs the Android permission, not just the
+     * page's: without this the WebView answers "denied" on the first press and
+     * the console can only report that the position is unavailable.
+     */
     @Override
     public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
-      boolean granted =
-        checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
-        PackageManager.PERMISSION_GRANTED;
-      callback.invoke(origin, granted, false);
+      if (hasLocation()) {
+        callback.invoke(origin, true, false);
+        return;
+      }
+      pendingLocationCallback = callback;
+      pendingLocationOrigin = origin;
+      ensureLocation();
     }
 
     @Override
