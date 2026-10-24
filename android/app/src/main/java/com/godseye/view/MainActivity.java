@@ -22,6 +22,7 @@ import android.app.Activity;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -205,13 +206,47 @@ public class MainActivity extends Activity {
       if (!ASSET_HOST.equals(request.getUrl().getHost())) return null;
       String path = request.getUrl().getPath();
       if (apiForwarder != null && apiForwarder.handles(path)) {
-        return apiForwarder.forward(request);
+        WebResourceResponse forwarded = apiForwarder.forward(request);
+        WebResourceResponse rescue = rescueLocally(request, path, forwarded);
+        return rescue != null ? rescue : forwarded;
       }
       if (LiveApi.handles(path)) {
         WebResourceResponse local = LiveApi.serve(request);
         if (local != null) return local;
       }
       return serveAsset(path);
+    }
+
+    /**
+     * Re-serves a request the hosted server failed, from the shell's own client.
+     *
+     * <p>A hosted copy of this project is the primary data source, but it cannot
+     * always reach an upstream: CelesTrak answers a rebroadcast from a
+     * datacentre address with a connect timeout, which emptied the satellites
+     * layer on a phone whose own network reads the same feed fine. When the
+     * server answers 5xx for a route {@link LiveApi} already serves, the shell's
+     * copy is a better answer than an outage. A 4xx is a decision, not a
+     * failure, so it is passed through untouched.
+     *
+     * @return the in-app response, or {@code null} to keep the server's answer.
+     */
+    private WebResourceResponse rescueLocally(
+      WebResourceRequest request,
+      String path,
+      WebResourceResponse forwarded
+    ) {
+      if (forwarded == null || forwarded.getStatusCode() < 500) return null;
+      String method = request.getMethod() == null ? "GET" : request.getMethod().toUpperCase(Locale.ROOT);
+      if (!"GET".equals(method) && !"HEAD".equals(method)) return null;
+      if (!LiveApi.handles(path)) return null;
+      WebResourceResponse local = LiveApi.serve(request);
+      if (local == null || local.getStatusCode() >= 500) return null;
+      Log.i(
+        TAG,
+        "Data server answered " + forwarded.getStatusCode() + " for " + path +
+          "; served it in-app instead"
+      );
+      return local;
     }
 
     @Override

@@ -159,6 +159,13 @@ Leaving `GEV_API_BASE` empty is the supported default: the app logs
 `Data server: in-app live API` and the keyless layers above come alive with no
 server at all.
 
+A hosted server is the primary source once it is set, but not the only one: if
+it answers `5xx` for a route `LiveApi` already serves, the shell re-serves that
+request itself and logs `Data server answered 502 for …; served it in-app
+instead`. That is what keeps the satellites alive on a phone when the host
+cannot reach CelesTrak, which refuses rebroadcast from datacentre addresses.
+A `4xx` is a deliberate answer and is passed through untouched.
+
 ### Known limit: POST endpoints
 
 `WebResourceRequest` exposes a request's URL, method and headers but not its
