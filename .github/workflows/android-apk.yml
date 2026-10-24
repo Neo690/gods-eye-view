@@ -72,7 +72,19 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Build the web bundle
-        run: npm run build
+        env:
+          # Client-side map credential: Vite inlines it into the bundle at build
+          # time, so it is a repository *variable*, not a secret. A Cesium ion
+          # token is public by design and scoped by the assets it may read.
+          # Empty keeps the keyless Esri imagery fallback.
+          CESIUM_ION_TOKEN: ${{ vars.CESIUM_ION_TOKEN }}
+        run: |
+          if [ -n "$CESIUM_ION_TOKEN" ]; then
+            echo "Cesium ion token: configured"
+          else
+            echo "Cesium ion token: none (the globe stays on keyless Esri imagery)"
+          fi
+          npm run build
 
       - name: Bundle the build into the Android assets
         run: |
