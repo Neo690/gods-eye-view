@@ -131,8 +131,8 @@ That server also has to expose `GET /api/upstream?url=…`, because the feeds th
 shell cannot fetch itself — GTFS-RT among them — come back through it (see
 `src/data/inAppApi.js`). The route in `server/providers/upstream.js` is not an
 open proxy: it relays only the exact URLs this build's transit registry
-publishes, over https, with no redirects, an 8 MiB body cap and a per-IP
-throttle. A server that predates it answers 404 there, and the transit layer in
+publishes plus the terrain heights path the sprite floors come from, over
+https, with no redirects, an 8 MiB body cap and a per-IP throttle. A server that predates it answers 404 there, and the transit layer in
 the APK shows `indisponible` even though the same feeds work in a browser.
 
 ```bash

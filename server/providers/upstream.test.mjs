@@ -5,6 +5,7 @@ import {
   allowedUpstreamUrls,
   relayTarget,
   upstreamRelayProxy,
+  UPSTREAM_EXTRA_ROUTES,
 } from './upstream.js';
 import { TRANSIT_ENABLED_FEEDS } from '../../src/data/transitFeeds.js';
 
@@ -228,4 +229,37 @@ test('the relay throttles per caller, so one shell cannot hammer a feed', async 
   const third = await request();
   assert.equal(third.status, 429);
   assert.equal(third.headers['Retry-After'], '60');
+});
+
+test('the floor lookup is pinned by origin and path, not by its points query', () => {
+  const allowed = allowedUpstreamUrls();
+  const floor = (points) =>
+    relayTarget(
+      `https://terrain.reearth.land/heights.json?points=${encodeURIComponent(points)}`,
+      allowed,
+    );
+  assert.ok(
+    floor('-4.486,48.39'),
+    'a floor request the shell makes is relayed',
+  );
+  assert.ok(floor('-4.486,48.39;5.03,48.39'), 'and another chunk of points');
+  assert.equal(
+    relayTarget('https://terrain.reearth.land/height.json', allowed),
+    null,
+    'a neighbouring path is not the route',
+  );
+  assert.equal(
+    relayTarget('https://terrain.reearth.land/heights.json/x', allowed),
+    null,
+  );
+  assert.equal(
+    relayTarget('https://terrain.example.com/heights.json', allowed),
+    null,
+    'the origin is part of the route',
+  );
+  assert.equal(
+    UPSTREAM_EXTRA_ROUTES.length,
+    1,
+    'one extra route, deliberately',
+  );
 });

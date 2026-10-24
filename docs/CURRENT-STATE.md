@@ -4106,7 +4106,10 @@ the asset store; `ApiForwarder` replays those calls against `GEV_API_BASE`, and
 the feeds that send no CORS headers are fetched through
 `GET /api/upstream?url=…` (`server/providers/upstream.js`), which the in-page
 API in `src/data/inAppApi.js` has always expected. It is not an open proxy: only
-the exact URLs the enabled transit registry publishes are relayable, https on
+the exact URLs the enabled transit registry publishes are relayable, plus one
+pinned origin-and-path for the floor lookup (`terrain.reearth.land/heights.json`,
+whose `points` query is its only variable) — without a ground floor a transit
+sprite is never drawn, so the transit layer needs both. Targets are https on
 the default port with no credentials and no fragment, redirects are refused
 rather than followed, the body is read against an 8 MiB cap and a 15 s deadline,
 and callers are throttled per IP (`GEV_RATELIMIT_UPSTREAM_PER_MIN`, default 120;

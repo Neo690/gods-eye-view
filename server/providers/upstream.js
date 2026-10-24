@@ -13,8 +13,9 @@ import { makeCostRateLimiter, clientKey } from './common/rate-limit.js';
  * expected it to exist.
  *
  * It is a deliberately narrow door, not an open proxy:
- *  - only GET, and only the exact URLs this build's transit registry publishes,
- *    so a request cannot name a host the catalogue never cleared (no SSRF);
+ *  - only GET, and only the exact URLs this build's transit registry publishes
+ *    (plus the one floor lookup below), so a request cannot name a host the
+ *    catalogue never cleared (no SSRF);
  *  - https only, no credentials, no non-standard port, no fragment;
  *  - no redirects followed — an allow-listed URL cannot bounce the relay
  *    somewhere else;
@@ -24,6 +25,22 @@ import { makeCostRateLimiter, clientKey } from './common/rate-limit.js';
  * Adding a dataset is adding its URL to the registry it belongs to — never a
  * wildcard here.
  */
+
+/**
+ * The one non-registry upstream the shell needs for transit to draw at all.
+ *
+ * A transit vehicle is not shown until a ground floor resolves — a sprite
+ * parked at sea level under a hill is worse than no sprite — and the page asks
+ * for those floors through this same relay. The footprint is a single host and
+ * path whose only variable is the `points` query, so the route is pinned by
+ * origin and path rather than by exact URL.
+ */
+const EXTRA_ROUTES = Object.freeze([
+  Object.freeze({
+    origin: 'https://terrain.reearth.land',
+    pathname: '/heights.json',
+  }),
+]);
 
 const TIMEOUT_MS = 15_000;
 /** The largest registered feed is well under 1 MB; this is a hard ceiling. */
@@ -50,6 +67,9 @@ export function allowedUpstreamUrls() {
   return allowed;
 }
 
+/** The pinned origin+path routes, for the tests that hold the list still. */
+export const UPSTREAM_EXTRA_ROUTES = EXTRA_ROUTES;
+
 const ALLOWED = allowedUpstreamUrls();
 
 /**
@@ -73,7 +93,13 @@ export function relayTarget(raw, allowed = ALLOWED) {
   // probe a service this relay was never meant to speak to.
   if (url.port && url.port !== '443') return null;
   if (url.hash) return null;
-  return allowed.has(url.href) ? url.href : null;
+  if (allowed.has(url.href)) return url.href;
+  // A pinned origin+path is still a cleared upstream: only the query, which
+  // names points rather than a destination, is free.
+  const route = EXTRA_ROUTES.some(
+    (entry) => entry.origin === url.origin && entry.pathname === url.pathname,
+  );
+  return route ? url.href : null;
 }
 
 /**
