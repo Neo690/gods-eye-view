@@ -403,7 +403,14 @@ export class LayerPanel {
           // An ordered list below the chips, for a layer whose row carries a
           // sequence (turn-by-turn directions). Its own delegated listener, its
           // own container — the chip row stays a chip row.
-          const list = document.createElement('ol');
+          // An ordered list is a sequence (a drive's turns); a list that
+          // declares `ordered: false` is a set of peers — transit networks with
+          // a switch each — and gets `<ul>`, which is what it is.
+          const list = document.createElement(
+            this._rowControlsFor(layer.id)?.list?.ordered === false
+              ? 'ul'
+              : 'ol',
+          );
           list.className = 'data-row-list';
           list.hidden = true;
           this._bind(list, 'click', (event) => {
@@ -412,7 +419,10 @@ export class LayerPanel {
             const item = this._rowControlsFor(layer.id)?.list?.items?.find(
               (entry) => entry.id === button.dataset.listItemId,
             );
-            if (item?.params)
+            // Same two shapes a chip offers: an action the layer owns, or a
+            // parameter handed to the manager.
+            if (typeof item?.onClick === 'function') item.onClick();
+            else if (item?.params)
               this.setLayerParams(layer.id, item.params, { origin: 'user' });
           });
           row.appendChild(list);

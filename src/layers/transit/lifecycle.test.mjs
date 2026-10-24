@@ -3984,3 +3984,142 @@ test('parked transit reprojects held and reported courses at the bounded camera 
     'selected unknown course also stays screen-up',
   );
 });
+
+/** Decode a data-URI SVG so a test can read what is drawn. */
+const decodeSvg = (uri) =>
+  Buffer.from(
+    String(uri).replace('data:image/svg+xml;base64,', ''),
+    'base64',
+  ).toString('utf8');
+
+const DIJON = { lat: 47.322, lon: 5.0415 };
+
+test('a French tram carries its line name and the operator colour beside the glyph', async (t) => {
+  const app = harness(t, { at: DIJON });
+  app.serve('divia-dijon', () => ({
+    status: 200,
+    body: snapshot(
+      'divia-dijon',
+      'DiviaMobilités',
+      [
+        vehicle('tram-t1', DIJON.lat, DIJON.lon, reported(), {
+          routeId: '4-T1',
+        }),
+        vehicle('bus-7', DIJON.lat + 0.002, DIJON.lon + 0.002, reported(), {
+          routeId: '4-7',
+        }),
+      ],
+      { fetchedAt: Date.now() },
+    ),
+  }));
+  app.layer.enable(app.viewer);
+  await app.layer.update();
+  app.settle();
+
+  const byKey = new Map(app.vehicles().map((v) => [v.key, v]));
+  const tram = byKey.get('divia-dijon:tram-t1');
+  const bus = byKey.get('divia-dijon:bus-7');
+
+  assert.equal(
+    tram.mode,
+    'tram',
+    'the route id, not the feed default, says tram',
+  );
+  assert.deepEqual(
+    { label: tram.railStyle.label, color: tram.railStyle.color },
+    { label: 'T1', color: '#AB0672' },
+    "Divia publishes T1's own name and colour",
+  );
+  assert.ok(tram.lineBadge, 'a tram gets a line pill');
+  const svg = decodeSvg(tram.lineBadge.image);
+  assert.match(svg, /fill="#AB0672"/, "the operator's line colour fills it");
+  assert.match(svg, />T1</, 'and it reads T1');
+  assert.equal(
+    tram.marker.color.toCssHexString(),
+    '#ab0672',
+    'the glyph wears the line colour too, so a line reads as one colour',
+  );
+  assert.ok(
+    tram.lineBadge.pixelOffset.x > tram.marker.width / 2,
+    'the pill sits clear of the glyph, not on top of it',
+  );
+
+  assert.equal(bus.railStyle, null, 'a bus route establishes no rail line');
+  assert.equal(bus.lineBadge, null, 'so it draws no pill');
+  assert.notEqual(
+    bus.marker.color.toCssHexString(),
+    '#ab0672',
+    'and it does not borrow a tram colour',
+  );
+});
+
+test('a line-published map stays readable when the operator prints black on yellow', async (t) => {
+  const NICE = { lat: 43.71, lon: 7.262 };
+  const app = harness(t, { at: NICE });
+  app.serve('lignes-dazur-nice', () => ({
+    status: 200,
+    body: snapshot(
+      'lignes-dazur-nice',
+      "Lignes d'Azur",
+      [vehicle('tram-b', NICE.lat, NICE.lon, reported(), { routeId: 'B' })],
+      { fetchedAt: Date.now() },
+    ),
+  }));
+  app.layer.enable(app.viewer);
+  await app.layer.update();
+  app.settle();
+
+  const [tram] = app.vehicles();
+  assert.equal(tram.railStyle.ink, '#000000', 'the operator publishes its ink');
+  const svg = decodeSvg(tram.lineBadge.image);
+  assert.match(svg, /fill="#000000"/, 'black text on the yellow line');
+  assert.match(svg, /fill="#FFDD00"/, 'on the line colour itself');
+});
+
+test('the line pill follows the glyph and never appears under a sensor preset', async (t) => {
+  const app = harness(t, { at: DIJON });
+  app.serve('divia-dijon', () => ({
+    status: 200,
+    body: snapshot(
+      'divia-dijon',
+      'DiviaMobilités',
+      [
+        vehicle('tram-t2', DIJON.lat, DIJON.lon, reported(), {
+          routeId: '4-T2',
+        }),
+      ],
+      { fetchedAt: Date.now() },
+    ),
+  }));
+  app.layer.enable(app.viewer);
+  await app.layer.update();
+  app.settle();
+  const [tram] = app.vehicles();
+  assert.equal(tram.lineBadge.show, true);
+
+  app.style('nvg');
+  app.frame();
+  assert.equal(
+    tram.lineBadge.show,
+    false,
+    'a night-vision frame shows silhouettes, not liveries',
+  );
+  app.style('normal');
+  app.frame();
+  assert.equal(tram.lineBadge.show, true);
+  assert.equal(
+    tram.marker.show,
+    tram.lineBadge.show,
+    'the pill is shown exactly when its glyph is',
+  );
+  assert.ok(
+    Cesium.Cartesian3.equals(tram.lineBadge.position, tram.marker.position),
+    'and rides the same point, offset in screen space',
+  );
+
+  // Dropping the vehicle takes the pill with it: a pill without its glyph
+  // would be a label on an empty road.
+  const parts = app.layer._transitPartsForTest();
+  parts.ingestion.removeVehicle(tram.key);
+  assert.equal(tram.lineBadge, null);
+});

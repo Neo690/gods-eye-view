@@ -294,6 +294,9 @@ export function createLifecycle({ state, services, parts }) {
       state._overlayHost.clearSource(TRANSIT_SELECTED_OVERLAY_SOURCE_ID);
       parts.height.clear();
       unbindStyleEvents();
+      // The row belongs to the panel, which outlives this layer: a listener left
+      // behind would repaint a row that no longer has switches to update.
+      parts.controls?.clearRowControlsListener?.();
       state._dataManager = null;
       state._viewer = null;
     },

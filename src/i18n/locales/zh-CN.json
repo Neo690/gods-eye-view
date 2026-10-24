@@ -2838,5 +2838,9 @@
   "Following your position": "正在跟随您的位置",
   "Location access is blocked for this app.": "此应用的定位权限已被阻止。",
   "Location unavailable": "定位不可用",
-  "Zoom and location": "缩放与定位"
+  "Zoom and location": "缩放与定位",
+  "Map windows": "地图窗口",
+  "Transit networks": "交通网络",
+  "Shown": "已显示",
+  "Hidden": "已隐藏"
 }

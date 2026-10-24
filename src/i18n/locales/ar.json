@@ -3173,5 +3173,9 @@
   "Following your position": "جارٍ تتبّع موقعك",
   "Location access is blocked for this app.": "تم حظر صلاحية الموقع لهذا التطبيق.",
   "Location unavailable": "الموقع غير متاح",
-  "Zoom and location": "التكبير والموقع"
+  "Zoom and location": "التكبير والموقع",
+  "Map windows": "نوافذ الخريطة",
+  "Transit networks": "شبكات النقل",
+  "Shown": "ظاهر",
+  "Hidden": "مخفي"
 }

@@ -3618,7 +3618,7 @@ its criteria cannot be silently ignored.
 | Traffic | Selectable TomTom / OpenStreetMap / Hybrid roads; optional TomTom flow (BYOK) | `src/data/traffic.js` | browser-direct OpenFreeMap tiles; `/api/tomtom` for flow | viewport-driven; capped tile cache |
 | CCTV                   | Austin + Caltrans (CA) + TfL London + Ontario 511 + Fintraffic (FI) + DriveBC (BC) + TxDOT (TX) + Estonia (Tallinn, Tarktee) + Live Traffic NSW + Open Calgary Open Data + Statens vegvesen (NO, stills + live HLS, Kartverket ground heights) + King County (WA) Open Data + WSDOT (WA) Open Data + NYC DOT TMC (opt-in) + City of Toronto RESCU + Catalonia (Servei Català de Trànsit) + Hong Kong Transport Department + FL511 (FL, opt-in) + Freeway Bureau, MOTC (Taiwan) + Street View fallback | `src/data/cctv.js`                                    | `/api/cctv`                                              | 10s (active)                                                                      |
 | Radio                  | Radio Browser (public-domain station directory)                                                                                                                                                 | `src/data/radio.js`                                   | `/api/radio/stations`, `/api/radio/click/:uuid`          | 45 min directory refresh                                                          |
-| Transit 🚌             | Operator GTFS-Realtime VehiclePositions (7 keyless regions, `src/data/transitFeeds.js`)                                                                                                         | `src/layers/transit/` via `src/app/layers/transit.js` | `/api/transit`                                           | 15s (poll + delayed playback)                                                     |
+| Transit 🚌             | Operator GTFS-Realtime VehiclePositions (34 keyless regions, `src/data/transitFeeds.js`)                                                                                                         | `src/layers/transit/` via `src/app/layers/transit.js` | `/api/transit`                                           | 15s (poll + delayed playback)                                                     |
 | Bikeshare 🚲           | GBFS (Lyft + BCycle + Social Bicycles + PBSC incl. Bike Share Toronto, Bike Itaú (Brazil), Bicing (Barcelona) and seven other Spanish cities + Urban Sharing, Entur, JCDecaux (Lillestrøm, Valencia, Seville) + nextbike (AMBici))                                                                                                                                        | `src/data/bikeshare.js`                               | `/api/gbfs`                                              | 60s                                                                               |
 | Directions 🧭          | OSRM on FOSSGIS servers (OpenStreetMap)                                                                                                                                                         | `src/data/directions.js`                              | `/api/route` (`steps=1`)                                 | on placement / mode change                                                        |
 | Datacenters ▣          | OSM extract (bundled)                                                                                                                                                                           | `src/data/localLayers.js`                             | —                                                        | static                                                                            |
@@ -4030,11 +4030,26 @@ Transit is off by default, and share links use token `j`. The movement panel ord
 places Transit directly after Street Traffic and before Bike Share. Cameras and
 utilities retain their own groups. The layer polls
 registered feeds near the camera every 15 seconds, below a 3,000 km altitude
-gate. Sixteen keyless regions are available: Boston, Austin, Minneapolis–St Paul,
-Helsinki, the Netherlands, Norway, South East Queensland, and nine in
+gate. Thirty-four keyless regions are available: Boston, Austin, Minneapolis–St Paul,
+Helsinki, the Netherlands, Norway, South East Queensland, nine in
 Ontario — Toronto (TTC surface vehicles; the subway publishes no
 positions), MiWay, Hamilton HSR, Durham Region, YRT/Viva, Guelph,
-Burlington, Barrie and Kingston. Mode silhouettes
+Burlington, Barrie and Kingston — and eighteen in France (Rennes, Dijon, Metz,
+Valence, Brest, Le Mans, Amiens, Vannes, Cannes, Nice, Montpellier, Rouen,
+Valenciennes, Angers, Tours, Le Havre, Lens–Béthune, Cherbourg-en-Cotentin),
+read through the transport.data.gouv.fr proxy or the producer's own endpoint
+under Licence Ouverte 2.0 or ODbL 1.0. Rail routes among them carry the mode
+the operator's own GTFS states for the route id the live feed publishes —
+trams in Dijon, Brest, Le Mans, Le Havre, Angers, Montpellier, Nice and
+Valenciennes, the metro in Rennes, and Rouen's branched tramway that the
+operator markets as "Métro" — while every other id keeps the fleet default.
+Tours publishes no route id at all, so its tram A stays a bus rather than
+being guessed from a line number, and Rouen's TEOR `T1`–`T5` stay buses because
+they are buses. The Transit row in the Layers panel lists every registered
+network with a switch: an off network is never polled, so two overlapping
+coverage circles (Cannes inside Nice's radius) no longer force a reader to
+watch both. The choice is local to the browser and deliberately out of the
+share format. Mode silhouettes
 identify buses, trams, subways, trains, ferries and unclassified vehicles.
 
 Retained transit history uses the same outlier quarantine as live observations and
@@ -4084,6 +4099,25 @@ The catalog and source tests pin that distinction and the MBTA / MassDOT credit.
 Epoch metadata grows as contexts arrive. Snapshot members are protected during
 ingestion, eviction uses receipt-ordered queues, and capacity loss is disclosed
 when history is recreated.
+
+**Rail line labels.** A French tram or metro carries a small pill beside its
+glyph showing the line name the operator publishes (`route_short_name`, so
+Nice's line is "B" and Rouen's tramway is "Métro"), filled with the operator's
+own `route_color`; the glyph itself wears the same colour under the ordinary
+view, so one line reads as one colour. Le Havre publishes no `route_color`, so
+its two trams keep the mode colour and their pill stays neutral grey rather
+than inventing a livery. Text ink is the operator's
+`route_text_color` where it publishes one, and the WCAG luma split otherwise,
+which is what keeps Montpellier's yellow line 3 and Nice's yellow line B
+readable. The pill is a sibling billboard in the stationary sprite collection:
+it shares the glyph's point and is offset to its right in screen pixels, so it
+follows a glide for free, hides and shows with the glyph, disappears under
+NVG/FLIR/CRT presets where only silhouettes belong, and is removed with the
+vehicle. It never rotates. Buses get no pill: the table is keyed by the route
+ids each operator types 0 (tram) or 1 (metro) in its own `routes.txt`, and an id
+outside it falls through to the feed default (see `src/data/transitFeeds.js`).
+Only the ten French networks with a resolvable rail route are covered; Tours
+publishes no route id at all, so its tram A still renders as the feed default.
 
 **Surface and route limitations.** Heights are aligned to work with Google 3D
 tiles. Draped history is prepared on selection even while marker floors are unresolved;

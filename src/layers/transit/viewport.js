@@ -81,8 +81,12 @@ export function createViewport({ state, services, parts }) {
     state._altitudeGateOpen = altitudeGateOpen(altitude);
     const center = state._altitudeGateOpen ? getCameraCenterLatLon() : null;
     const desired = new Map();
+    // A network switched off in the Layers row is not a candidate at either
+    // distance: being already active must not keep it alive past the switch.
+    const hidden = state._hiddenFeeds;
     if (center) {
       for (const feed of transitFeedsInRange(center.lat, center.lon)) {
+        if (hidden.has(feed.id)) continue;
         desired.set(feed.id, feed);
       }
       // Hysteresis: a feed already active stays active a little past its edge.
@@ -91,6 +95,7 @@ export function createViewport({ state, services, parts }) {
         center.lon,
         RANGE_SLACK_KM,
       )) {
+        if (hidden.has(feed.id)) continue;
         if (state._activeFeeds.has(feed.id)) desired.set(feed.id, feed);
       }
     }

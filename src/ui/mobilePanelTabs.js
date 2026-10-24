@@ -1,4 +1,4 @@
-import { t } from '../i18n/index.js';
+import { msg, t } from '../i18n/index.js';
 
 /**
  * The rail windows a phone reaches through one disclosure, in reading order.
@@ -13,15 +13,18 @@ import { t } from '../i18n/index.js';
  *
  * The labels are the panels' own English source strings, so `t()` resolves
  * them exactly as it does the chip titles. A locale switch reloads the page,
- * so the list is rebuilt with the right labels.
+ * so the list is rebuilt with the right labels. Each label is wrapped in
+ * `msg()` because the literal ships as a key rather than as page text: it is
+ * translated at `t(spec.label)`, two lines below, and the wrapper is what tells
+ * `npm run i18n` so.
  */
 export const MOBILE_PANEL_TAB_SPECS = Object.freeze([
-  Object.freeze({ id: 'data-panel', label: 'DATA LAYERS' }),
-  Object.freeze({ id: 'scene-panel', label: 'SCENES' }),
-  Object.freeze({ id: 'pp-toggles', label: 'DISPLAY' }),
-  Object.freeze({ id: 'cctv-panel', label: 'CCTV' }),
-  Object.freeze({ id: 'street-level-panel', label: 'STREET LEVEL' }),
-  Object.freeze({ id: 'global-context-panel', label: 'CONTEXT' }),
+  Object.freeze({ id: 'data-panel', label: msg('DATA LAYERS') }),
+  Object.freeze({ id: 'scene-panel', label: msg('SCENES') }),
+  Object.freeze({ id: 'pp-toggles', label: msg('DISPLAY') }),
+  Object.freeze({ id: 'cctv-panel', label: msg('CCTV') }),
+  Object.freeze({ id: 'street-level-panel', label: msg('STREET LEVEL') }),
+  Object.freeze({ id: 'global-context-panel', label: msg('CONTEXT') }),
 ]);
 
 /** The one breakpoint the disclosure exists at; above it the rails keep their chips. */

@@ -14,6 +14,7 @@ import {
   transitModeFor,
   transitModeResolved,
   transitRouteLabel,
+  transitRouteStyle,
 } from './transitFeeds.js';
 
 test('every registered feed is keyless, https, licensed, and uniquely identified', () => {
@@ -481,4 +482,116 @@ test('Burlington is live and carries its terms link, which its licence requires'
   assert.equal(bur.defaultEnabled, true);
   assert.match(bur.licenseUrl, /Open%20Data%20Terms%20of%20Use\.pdf$/);
   assert.match(bur.url, /^https:\/\//, 'port 80 has no listener at all');
+});
+
+test('French tram routes resolve as tram rather than the feed default', () => {
+  // Every French network ships `defaultMode: 'bus'`, which is the right guess
+  // for a fleet and the wrong answer for a tram. The route ids below are the
+  // ones each operator's own GTFS `routes.txt` types 0 (tram), as the realtime
+  // feed publishes them.
+  const trams = {
+    'divia-dijon': ['4-T1', '4-T2'],
+    'bibus-brest': ['A', 'B'],
+    'setram-lemans': ['T1', 'T2'],
+    'lia-lehavre': ['8-A', '8-B'],
+    'irigo-angers': ['A', 'B', 'C'],
+    'tam-montpellier': ['1', '2', '3', '4', '5'],
+    'lignes-dazur-nice': ['L1', 'L2', 'L3', 'B'],
+    'transvilles-valenciennes': [
+      'NAVINEO:Line::190:LOC',
+      'NAVINEO:Line::191:LOC',
+    ],
+  };
+  for (const [id, routeIds] of Object.entries(trams)) {
+    const feed = getTransitFeed(id);
+    assert.equal(feed.defaultMode, 'bus', `${id} still defaults to bus`);
+    for (const routeId of routeIds) {
+      assert.equal(transitModeFor(feed, routeId), 'tram', `${id} ${routeId}`);
+      assert.equal(
+        transitModeResolved(feed, routeId),
+        true,
+        `${id} ${routeId} is resolved, not defaulted`,
+      );
+    }
+  }
+});
+
+test("a French feed's rail lines that are metros say so, and its buses stay buses", () => {
+  const rennes = getTransitFeed('star-rennes');
+  assert.equal(transitModeFor(rennes, '7-1001'), 'subway', 'line a');
+  assert.equal(transitModeFor(rennes, '7-1002'), 'subway', 'line b');
+  assert.equal(transitModeFor(rennes, '7-0014'), 'bus', 'a real bus route');
+  assert.equal(transitModeResolved(rennes, '7-0014'), false);
+
+  // Rouen's branched tramway is marketed as "Métro" and typed 1 by the
+  // operator; its TEOR corridors (T1–T5) are buses and must not be lifted.
+  const rouen = getTransitFeed('astuce-rouen');
+  assert.equal(transitModeFor(rouen, 'TCAR:90'), 'subway');
+  assert.equal(transitModeFor(rouen, 'TCAR:91'), 'bus', 'TEOR T1 is a bus');
+  assert.equal(transitModeFor(rouen, 'TCAR:95'), 'bus', 'TEOR T5 is a bus');
+});
+
+test('a mode table keyed by feed never leaks across feeds', () => {
+  // `A` is a tram in Brest and Angers and an ordinary bus in Palmbus, so the
+  // lookup has to stay scoped to the feed that published it.
+  assert.equal(transitModeFor(getTransitFeed('bibus-brest'), 'A'), 'tram');
+  assert.equal(transitModeFor(getTransitFeed('irigo-angers'), 'A'), 'tram');
+  assert.equal(transitModeFor(getTransitFeed('palmbus-cannes'), 'A'), 'bus');
+  assert.equal(
+    transitModeResolved(getTransitFeed('palmbus-cannes'), 'A'),
+    false,
+  );
+});
+
+test('a French feed with no route id at all resolves nothing', () => {
+  // Fil Bleu publishes neither route id nor route in its trip ids, so Tours'
+  // tram cannot be told apart: it stays a bus rather than being guessed from
+  // the time of day or the shape of the trip key.
+  const tours = getTransitFeed('filbleu-tours');
+  assert.equal(tours.routeMode, undefined, 'no hook is attached');
+  assert.equal(transitModeFor(tours, null), 'bus');
+  assert.equal(transitModeResolved(tours, null), false);
+});
+
+test('a rail route carries the line name and colour its operator publishes', () => {
+  const divia = getTransitFeed('divia-dijon');
+  assert.deepEqual(transitRouteStyle(divia, '4-T1'), {
+    mode: 'tram',
+    label: 'T1',
+    color: '#AB0672',
+    ink: null,
+  });
+  // The feed id alone is enough: the lookup is scoped by feed, then by route.
+  assert.equal(transitRouteStyle('tam-montpellier', '3').color, '#C8D400');
+
+  // A line whose published text colour is black carries it, so the pill does
+  // not have to guess from luminance.
+  assert.equal(transitRouteStyle('lignes-dazur-nice', 'B').ink, '#000000');
+  assert.equal(transitRouteStyle('irigo-angers', 'A').ink, null);
+
+  // Le Havre publishes no route_color for its trams: the sprite keeps the
+  // mode colour rather than a livery nobody published.
+  assert.deepEqual(transitRouteStyle('lia-lehavre', '8-A'), {
+    mode: 'tram',
+    label: 'A',
+    color: null,
+    ink: null,
+  });
+
+  // A bus route establishes no rail line at all, in any feed.
+  assert.equal(transitRouteStyle(divia, '4-7'), null);
+  assert.equal(transitRouteStyle('palmbus-cannes', 'A'), null);
+  assert.equal(transitRouteStyle(null, 'T1'), null);
+  assert.equal(transitRouteStyle(divia, null), null);
+});
+
+test('the vehicle card names a rail line the way the tram is signed', () => {
+  const divia = getTransitFeed('divia-dijon');
+  assert.equal(
+    transitRouteLabel(divia, '4-T1'),
+    'T1',
+    'the published line name, not the file key',
+  );
+  // A feed with no rail table is untouched by any of this.
+  assert.equal(transitRouteLabel(getTransitFeed('mbta'), 'Red'), 'Red');
 });

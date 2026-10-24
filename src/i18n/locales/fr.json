@@ -2972,5 +2972,9 @@
   "Following your position": "Suivi de votre position",
   "Location access is blocked for this app.": "L'accès à la localisation est bloqué pour cette application.",
   "Location unavailable": "Localisation indisponible",
-  "Zoom and location": "Zoom et localisation"
+  "Zoom and location": "Zoom et localisation",
+  "Map windows": "Fenêtres de la carte",
+  "Transit networks": "Réseaux de transport",
+  "Shown": "Affiché",
+  "Hidden": "Masqué"
 }
