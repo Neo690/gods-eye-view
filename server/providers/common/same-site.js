@@ -12,13 +12,28 @@ import { admitSameSiteRequest } from '../../../src/localRequestGate.mjs';
  * @param {import('node:http').ServerResponse} res
  * @returns {boolean} True when a 403 was sent.
  */
+/**
+ * Hostnames this instance is deliberately published on (`GEV_ALLOWED_HOSTS`, the
+ * same list Vite's Host allowlist uses). On one of them a reverse-proxy header
+ * is the normal path, not a foreign caller, so the gate judges the request by
+ * its Origin and Sec-Fetch-Site instead of refusing it outright.
+ * @returns {string[]}
+ */
+function publishedHosts() {
+  return String(process.env.GEV_ALLOWED_HOSTS ?? '')
+    .split(',')
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 export function admitSameSite(req, res) {
   const verdict = admitSameSiteRequest({
     hostHeader: req.headers?.host,
-    protocol: req.socket?.encrypted ? 'https:' : 'http:',
+    protocol: forwardedProtocol(req),
     origin: req.headers?.origin,
     secFetchSite: req.headers?.['sec-fetch-site'],
     proxyHeaders: req.headers || {},
+    publishedHosts: publishedHosts(),
   });
   if (verdict.ok) return false;
   res.statusCode = verdict.status;

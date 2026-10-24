@@ -174,8 +174,18 @@ export function createBrowserViteConfig({
       headers: BROWSER_HEADERS,
     },
     // The preview server serves the same documents, so it carries the same
-    // framing + CSP hardening (one constant, no drift).
-    preview: { headers: BROWSER_HEADERS },
+    // framing + CSP hardening (one constant, no drift). It also carries the
+    // same Host policy and bind address as the dev server: a hosted copy of
+    // the built client (`vite preview` behind a container, which is how a
+    // 512 MB free instance stays inside its memory limit — the dev server's
+    // dependency pre-bundling needs twice that) must answer its own public
+    // hostname and accept the container's interface.
+    preview: {
+      host: host || 'localhost',
+      port: parseInt(port, 10) || 4173,
+      allowedHosts: [...allowedHosts],
+      headers: BROWSER_HEADERS,
+    },
     define: {
       'import.meta.env.GOOGLE_MAPS_API_KEY': JSON.stringify(googleApiKey),
       'import.meta.env.CESIUM_ION_TOKEN': JSON.stringify(cesiumToken),

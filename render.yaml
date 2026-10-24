@@ -1,0 +1,31 @@
+# Render blueprint (free tier, no card) for the /api server the Android shell
+# calls through GEV_API_BASE.
+#
+# The free instance is 512 MB / 0.1 CPU and sleeps 15 min after the last
+# request (~1 min to wake), which is why the image serves the *built* client
+# with `vite preview` instead of running the dev server: the dev server's
+# esbuild pre-bundling peaks above that limit.
+#
+# Apply: Render dashboard -> New -> Blueprint -> pick this repository.
+# Then set each `sync: false` value in the service's Environment tab. They are
+# plain environment variables there, never committed.
+services:
+  - type: web
+    name: gev-data
+    runtime: docker
+    dockerfilePath: ./Dockerfile.preview
+    plan: free
+    region: frankfurt
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: GEV_ALLOWED_HOSTS
+        sync: false
+      - key: GOOGLE_MAPS_SERVER_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: TOMTOM_API_KEY
+        sync: false
+      - key: AISSTREAM_API_KEY
+        sync: false

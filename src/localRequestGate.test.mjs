@@ -54,6 +54,44 @@ test('a reverse-proxy signal header is refused', () => {
   assert.equal(admitSameSiteRequest({ ...same, proxyHeaders: { 'x-forwarded-for': '' } }).ok, true);
 });
 
+test('a published host is judged by Origin, not by the relay header', () => {
+  const published = ['globe.example'];
+  const proxied = {
+    hostHeader: 'globe.example',
+    protocol: 'https:',
+    proxyHeaders: { 'x-forwarded-for': '203.0.113.9', 'x-forwarded-proto': 'https' },
+    publishedHosts: published,
+  };
+  // The Android shell replays /api/* from Java: no Origin, no Sec-Fetch-Site.
+  assert.equal(admitSameSiteRequest(proxied).ok, true);
+  // A same-origin browser request on that host is still admitted…
+  assert.equal(
+    admitSameSiteRequest({
+      ...proxied,
+      origin: 'https://globe.example',
+      secFetchSite: 'same-origin',
+    }).ok,
+    true,
+  );
+  // …while every cross-site shape is still refused.
+  assert.equal(
+    admitSameSiteRequest({ ...proxied, origin: 'https://evil.example' }).ok,
+    false,
+    'foreign Origin on a published host',
+  );
+  assert.equal(
+    admitSameSiteRequest({ ...proxied, secFetchSite: 'cross-site' }).ok,
+    false,
+    'cross-site Sec-Fetch-Site on a published host',
+  );
+  // Publishing one host does not publish another.
+  assert.equal(
+    admitSameSiteRequest({ ...proxied, hostHeader: 'other.example' }).ok,
+    false,
+    'proxy header on an unpublished host is still refused',
+  );
+});
+
 test('same-origin Origin with Sec-Fetch-Site same-origin is admitted', () => {
   assert.equal(admitSameSiteRequest(same).ok, true);
 });
