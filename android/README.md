@@ -127,6 +127,14 @@ covers the keyed routes too. The origin is a build input, `GEV_API_BASE`; when
 it is set, `ApiForwarder` replays every `/api/*` request there and `LiveApi` is
 not used.
 
+That server also has to expose `GET /api/upstream?url=…`, because the feeds the
+shell cannot fetch itself — GTFS-RT among them — come back through it (see
+`src/data/inAppApi.js`). The route in `server/providers/upstream.js` is not an
+open proxy: it relays only the exact URLs this build's transit registry
+publishes, over https, with no redirects, an 8 MiB body cap and a per-IP
+throttle. A server that predates it answers 404 there, and the transit layer in
+the APK shows `indisponible` even though the same feeds work in a browser.
+
 ```bash
 npm run build && rm -rf android/app/src/main/assets/www/*   && cp -r dist/* android/app/src/main/assets/www/
 cd android
@@ -136,7 +144,8 @@ GEV_API_BASE=http://127.0.0.1:5173 ./gradlew assembleRelease   # local server
 For the GitHub build it is a repository variable, so no secret and no code
 change is needed:
 
-1. Deploy this repository's server somewhere always-on. The `Dockerfile` is the
+1. Deploy this repository's server somewhere always-on, with a build new
+   enough to serve `/api/upstream`. The `Dockerfile` is the
    whole app (Vite serves the client and the `/api` middleware), so any
    container or Node host works — Render, Fly.io, Koyeb, a VPS. On a 512 MB
    instance use `Dockerfile.preview` instead: it builds the client once at

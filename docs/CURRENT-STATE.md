@@ -4100,6 +4100,21 @@ Epoch metadata grows as contexts arrive. Snapshot members are protected during
 ingestion, eviction uses receipt-ordered queues, and capacity loss is disclosed
 when history is recreated.
 
+**The standalone shell's relay.** The APK serves the bundle from
+`https://appassets.androidplatform.net`, so a layer's `fetch('/api/…')` lands on
+the asset store; `ApiForwarder` replays those calls against `GEV_API_BASE`, and
+the feeds that send no CORS headers are fetched through
+`GET /api/upstream?url=…` (`server/providers/upstream.js`), which the in-page
+API in `src/data/inAppApi.js` has always expected. It is not an open proxy: only
+the exact URLs the enabled transit registry publishes are relayable, https on
+the default port with no credentials and no fragment, redirects are refused
+rather than followed, the body is read against an 8 MiB cap and a 15 s deadline,
+and callers are throttled per IP (`GEV_RATELIMIT_UPSTREAM_PER_MIN`, default 120;
+explicit `0` disables). Bytes and the upstream `Content-Type` pass through, so
+the same route carries GTFS-RT protobuf and JSON. Any other URL answers 403
+without a network call — the point is that a request cannot name a host the
+catalogue never cleared.
+
 **Rail line labels.** A French tram or metro carries a small pill beside its
 glyph showing the line name the operator publishes (`route_short_name`, so
 Nice's line is "B" and Rouen's tramway is "Métro"), filled with the operator's
