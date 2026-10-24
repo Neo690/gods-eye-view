@@ -21,17 +21,25 @@ test('HUD sliders and location search have descriptive explicit names', () => {
   }
 });
 
-test('the location search asks a phone keyboard for a search action key', () => {
+test('fields whose Enter does something ask the phone keyboard for it', () => {
   // Gboard's return key reaches the WebView as keydown "Unidentified" with
-  // keyCode 229, which the Enter handler cannot see: the keyboard just closed
-  // and nothing was searched. enterkeyhint makes the action key an editor
-  // action, which Chromium delivers as a real Enter keydown.
-  const input = html.match(/<input\b[^>]*\bid="location-search"[^>]*>/)?.[0];
-  assert.ok(input, 'location search input exists');
-  assert.ok(
-    input.includes('enterkeyhint="search"'),
-    'the phone keyboard must offer a search key, not a plain return',
-  );
+  // keyCode 229, which an Enter handler cannot see: the keyboard just closed
+  // and the typed value was never committed. enterkeyhint turns the action key
+  // into an editor action, which Chromium delivers as a real Enter keydown.
+  for (const [id, hint] of [
+    ['location-search', 'search'],
+    ['draw-label-input', 'done'],
+    ['sdr-frequency-input', 'done'],
+  ]) {
+    const input = html.match(
+      new RegExp(`<input\\b[^>]*\\bid="${id}"[^>]*>`),
+    )?.[0];
+    assert.ok(input, `${id} exists`);
+    assert.ok(
+      input.includes(`enterkeyhint="${hint}"`),
+      `${id} must offer a "${hint}" action key, not a plain return`,
+    );
+  }
 });
 
 test('the first-run checkbox keeps its native visible label', () => {

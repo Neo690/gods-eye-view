@@ -1180,12 +1180,16 @@ destruction releases listeners, pending searches and the orbit indicator.
 
 Contacts and mapped-site search feedback filter subject-window installation matches by surface distance from the current subject position, within the stated 100 km radius; the retained tile-fetch square is only a loading window.
 
-The search field carries `enterkeyhint="search"`, so a phone keyboard offers a
-search action key. Without it Gboard's return key reaches the WebView as
-`keydown` `"Unidentified"` with keyCode 229, which the Enter handler cannot see:
-the keyboard closed, the query stayed in the field and no flight started. The
-hardware-Enter path in `ui/locationControls.js` is unchanged and still searches
-on a real `Enter` keydown.
+Every field whose `Enter` commits something carries an `enterkeyhint`, so a
+phone keyboard offers an action key: `search` for the location field, `done` for
+the drawing label and the FM frequency. Without one, Gboard's return key reaches
+the WebView as `keydown` `"Unidentified"` with keyCode 229, which an Enter
+handler cannot see: the keyboard closed, the typed value stayed in the field and
+nothing was committed. The hardware-Enter paths in `ui/locationControls.js`,
+`annotations/drawTool.js` and `ui/localSdrControls.js` are unchanged and still
+act on a real `Enter` keydown. Fields that commit on `blur` — the CCTV
+calibration chip, shot renaming — also commit when the keyboard's action key
+dismisses the field, so they need no hint.
 
 Search arrivals (location bar and voice) end above the rendered surface.
 Precise places without a detailed outline used to frame a 250 m landmark shot
