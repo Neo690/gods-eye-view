@@ -1,0 +1,47 @@
+name: Deploy to Render
+
+# The Render service was created from a public Git URL, so Render has no
+# webhook on this repository and its `autoDeploy` never fires by itself. This
+# workflow is the bridge: a push to the branch the service builds from asks
+# Render for a deploy through its API, which is the same call the dashboard's
+# "Manual Deploy" makes.
+#
+# Needs a repository secret RENDER_API_KEY (Render -> Account Settings -> API
+# Keys). Deploys are serialised, not cancelled: a push that arrives mid-build
+# queues the next one instead of leaving the service on an older commit.
+on:
+  push:
+    branches: [android-shell]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Ask Render for a deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger the deploy
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RENDER_API_KEY:-}" ]; then
+            echo "::error::RENDER_API_KEY is not set; add it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          body=$(curl -sS --fail-with-body -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}' \
+            "https://api.render.com/v1/services/srv-dbe6r4rncjis73d78o90/deploys")
+          printf '%s\n' "$body"
+          echo "$body" | grep -q '"id"[[:space:]]*:[[:space:]]*"dep-' \
+            || { echo "::error::Render did not accept the deploy"; exit 1; }
+          echo "queued for commit ${GITHUB_SHA}"
