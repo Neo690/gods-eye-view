@@ -50,6 +50,35 @@ uninstalled before it can be installed. A build signed by the CI key does not
 replace an APK signed by a local debug key — the first switch needs one
 uninstall, then updates are seamless.
 
+## Land every CI build on a plugged-in phone
+
+Downloading from the phone is fine once; while iterating, the phone is on USB
+and the build is already published. `npm run apk:install` installs the newest
+successful `Android APK` run on the connected device, and `npm run apk:watch`
+keeps doing it — one install per new build, silent when the phone already has
+it:
+
+```bash
+npm run apk:install      # once
+npm run apk:watch        # every 2 minutes until Ctrl-C
+```
+
+It reads the runs API for the current branch, downloads the rolling release
+asset and installs it with `adb install -r`. Because that asset carries the CI
+key, the phone takes it as an update of the app it already runs — settings and
+presets survive. A locally built debug APK cannot do that, which is why this
+installs the published artifact rather than `dist/`.
+
+Options: `--branch=<name>` (default: the current branch), `--serial=<device>`
+when several phones are plugged in, `--interval=<seconds>`, `--force`,
+`--dry-run`, `--adb=<path>` (also `$ADB`, then `$ANDROID_HOME/platform-tools`).
+The last installed commit is remembered in `.gev-apk-install.json`, which is
+git-ignored; delete it to reinstall the same build.
+
+Unauthenticated GitHub API calls are limited to 60 an hour, so the default
+interval is two minutes. Export `GITHUB_TOKEN` to poll faster, or when the repository is
+private.
+
 ## What the shell provides
 
 - `INTERNET` for tiles, fonts and feeds.

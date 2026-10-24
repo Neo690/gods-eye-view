@@ -29,9 +29,11 @@ export function assertNode24AllocationRuntime(version = process.versions.node) {
  * `npm test`, so a directory missing from this list is a suite that never runs
  * there. `unitTestRunner.test.mjs` asserts the list covers every `*.test.mjs`
  * outside dependencies, build output and dot-directories, so adding a tree
- * without adding it here fails.
+ * without adding it here fails. `scripts/` is here for the tooling that ships
+ * with the repository (the APK installer): a helper that decides what to
+ * install on someone's phone is worth the same coverage as app code.
  */
-export const UNIT_TEST_ROOTS = Object.freeze(['src', 'server']);
+export const UNIT_TEST_ROOTS = Object.freeze(['src', 'server', 'scripts']);
 
 /** Discover repository unit tests in stable path order. */
 export function discoverUnitTestFiles(root = process.cwd()) {

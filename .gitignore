@@ -29,6 +29,9 @@ pinokio/.installed
 # Transient: a release interrupted mid-assembly (npm run changelog recovers it)
 changelog.d/.assembling/
 
+# Which CI build `npm run apk:install` last put on the local phone.
+.gev-apk-install.json
+
 # Android shell build output and the bundled web copy
 android/.gradle/
 android/build/
