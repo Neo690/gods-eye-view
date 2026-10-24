@@ -160,6 +160,13 @@
 }
 
 /* Corner blocks */
+/* Groups the two telemetry corners without touching their desktop anchors:
+   the wrapper generates no box, so the corners stay positioned against the
+   HUD itself. A phone turns it into the centred column (mobile-compact.css). */
+.hud-bottom-center {
+  display: contents;
+}
+
 .hud-corner {
   position: absolute;
   display: flex;

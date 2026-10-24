@@ -39,6 +39,7 @@ import {
 } from './hudLayouts.js';
 import { formatNumber, msg, t } from './i18n/index.js';
 import { localizeLayerName } from './ui/layerPanel.js';
+import { createHudWindowDrag } from './ui/hudWindowDrag.js';
 
 /** Color palettes keyed by shader mode; applied as CSS custom properties. */
 const HUD_COLORS = {
@@ -249,6 +250,9 @@ export class IntelHUD {
     this._passNum = 100 + Math.floor(Math.random() * 200);
 
     this._buildDOM();
+    // The three readouts can be pulled around by finger on a phone; the module
+    // owns the offset, the clamp and the memory of it (ui/hudWindowDrag.js).
+    this._windowDrag = createHudWindowDrag({ document });
     this.viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
     this._startTimers();
   }
@@ -293,21 +297,27 @@ export class IntelHUD {
         <div class="hud-bracket">┐</div>
       </div>
 
-      <div class="hud-corner hud-bottom-left">
-        <div class="hud-bracket">└</div>
-        <div class="hud-content">
-          <div id="hud-mgrs">MGRS: ---</div>
-          <div id="hud-latlon">--°--'--"N ---°--'--"W</div>
+      <!-- The two telemetry windows. The wrapper generates no box on a
+           desktop, so they keep their corner anchors; a phone stacks them on
+           the classification window's centre line instead (see
+           mobile-compact.css). -->
+      <div class="hud-bottom-center">
+        <div class="hud-corner hud-bottom-left">
+          <div class="hud-bracket">└</div>
+          <div class="hud-content">
+            <div id="hud-mgrs">MGRS: ---</div>
+            <div id="hud-latlon">--°--'--"N ---°--'--"W</div>
+          </div>
         </div>
-      </div>
 
-      <div class="hud-corner hud-bottom-right">
-        <div class="hud-content" style="text-align:right">
-          <div id="hud-gsd">GSD: --m  NIIRS: --</div>
-          <div id="hud-alt">ALT: --m   SUN: --° EL</div>
-          <div id="hud-ais-vessel" class="hud-ais-vessel">${t('AIS: --')}</div>
+        <div class="hud-corner hud-bottom-right">
+          <div class="hud-content" style="text-align:right">
+            <div id="hud-gsd">GSD: --m  NIIRS: --</div>
+            <div id="hud-alt">ALT: --m   SUN: --° EL</div>
+            <div id="hud-ais-vessel" class="hud-ais-vessel">${t('AIS: --')}</div>
+          </div>
+          <div class="hud-bracket">┘</div>
         </div>
-        <div class="hud-bracket">┘</div>
       </div>
 
       <div class="hud-edge hud-left-edge">
@@ -1039,6 +1049,8 @@ export class IntelHUD {
 
   /** Tear down all running intervals. Call when discarding the HUD instance. */
   destroy() {
+    this._windowDrag?.destroy();
+    this._windowDrag = null;
     clearInterval(this._updateInterval);
     clearInterval(this._recBlinkInterval);
     clearInterval(this._timestampInterval);

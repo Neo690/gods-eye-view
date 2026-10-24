@@ -8,6 +8,18 @@ import {
   collapsePanelOnEscape,
   createHoverDisclosure,
 } from './panelDisclosure.js';
+import {
+  createMobilePanelTabs,
+  MOBILE_PANEL_TAB_MEDIA,
+} from './mobilePanelTabs.js';
+import {
+  createPanelSwipeDismiss,
+  PANEL_SWIPE_MEDIA,
+} from './panelSwipeDismiss.js';
+import {
+  createPanelScrollIndicators,
+  PANEL_SCROLL_MEDIA,
+} from './panelScrollIndicator.js';
 const SHARE_PANEL_STATE_SPECS = Object.freeze([
   { id: 'control-panel', pinnable: true },
   { id: 'location-bar', pinnable: true },
@@ -145,7 +157,57 @@ export class PanelChrome {
     });
     this._initCommandDockPins();
     this._initCommandDockTrayMetrics();
+    this._initMobilePanelTabs();
     this._maybeNotifyLayoutReset();
+  }
+
+  /**
+   * One strip owns the six rail windows on a phone (see mobilePanelTabs.js):
+   * the rails keep the panels, the strip keeps the way in, and only one is
+   * open at a time. Built here because collapse state is owned here — a tab
+   * press goes through the same `setPanelCollapsed` as a chip press, so
+   * persistence, share links and the Cockpit rail stay in step.
+   */
+  _initMobilePanelTabs() {
+    this._mobilePanelTabs?.destroy();
+    this._mobilePanelTabs = createMobilePanelTabs({
+      document: document,
+      setPanelCollapsed: (panelId, collapsed, options) =>
+        this.setPanelCollapsed(panelId, collapsed, options),
+      isMobile: () => !!window.matchMedia?.(MOBILE_PANEL_TAB_MEDIA).matches,
+    });
+    this._initMobilePanelSwipe();
+  }
+
+  /**
+   * A sheet also closes the way a bottom sheet does: drag its header down and
+   * let go (panelSwipeDismiss.js). A close goes through the same
+   * `setPanelCollapsed` as the collapse button, so persistence, share links and
+   * the tab list stay in step with the gesture.
+   */
+  _initMobilePanelSwipe() {
+    this._mobilePanelSwipe?.destroy();
+    this._mobilePanelSwipe = createPanelSwipeDismiss({
+      document: document,
+      setPanelCollapsed: (panelId, collapsed, options) =>
+        this.setPanelCollapsed(panelId, collapsed, options),
+      isMobile: () => !!window.matchMedia?.(PANEL_SWIPE_MEDIA).matches,
+    });
+    this._initMobilePanelScrollbars();
+  }
+
+  /**
+   * Android draws overlay scrollbars and ignores the stylesheet's
+   * `::-webkit-scrollbar` bar, so an open sheet gets a drawn one
+   * (panelScrollIndicator.js): Data layers is two screens tall and looked like
+   * a panel that simply ended halfway down.
+   */
+  _initMobilePanelScrollbars() {
+    this._mobilePanelScrollbars?.destroy();
+    this._mobilePanelScrollbars = createPanelScrollIndicators({
+      document: document,
+      isMobile: () => !!window.matchMedia?.(PANEL_SCROLL_MEDIA).matches,
+    });
   }
 
   _collapsePanelOnEscape(event, panelId) {
@@ -651,6 +713,12 @@ export class PanelChrome {
     this._disposed = true;
     this._lifetime.destroy();
     this._panelLayout.destroy();
+    this._mobilePanelTabs?.destroy();
+    this._mobilePanelTabs = null;
+    this._mobilePanelSwipe?.destroy();
+    this._mobilePanelSwipe = null;
+    this._mobilePanelScrollbars?.destroy();
+    this._mobilePanelScrollbars = null;
     for (const control of this._panelDisclosureControls || [])
       control.destroy();
     this._panelDisclosureControls = [];
