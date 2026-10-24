@@ -109,9 +109,13 @@ change is needed:
 
 1. Deploy this repository's server somewhere always-on. The `Dockerfile` is the
    whole app (Vite serves the client and the `/api` middleware), so any
-   container or Node host works — Render, Fly.io, Koyeb, a VPS. Give it the
-   environment it needs (`GEV_ALLOWED_HOSTS` for the public hostname, plus the
-   optional provider keys) and note the HTTPS URL it answers on.
+   container or Node host works — Render, Fly.io, Koyeb, a VPS. On a 512 MB
+   instance use `Dockerfile.preview` instead: it builds the client once at
+   image time and serves it with `vite preview`, which still runs every `/api`
+   middleware, where the dev server's dependency pre-bundling needs twice that
+   memory. Give it the environment it needs (`GEV_ALLOWED_HOSTS` for the public
+   hostname, plus the optional provider keys) and note the HTTPS URL it answers
+   on. `render.yaml` describes that service for Render's Blueprint flow.
 2. Set the URL as a repository variable:
    `gh variable set GEV_API_BASE --body https://your-host` — or Settings →
    Secrets and variables → Actions → Variables.
