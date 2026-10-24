@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 import {
   APK_APPLICATION_ID,
+  installLatest,
   installedVersion,
   installFailureReason,
   newestRun,
@@ -89,6 +93,48 @@ test('a build already on the phone is not installed again', () => {
     true,
     '--force reinstalls the same build',
   );
+});
+
+test('--force is carried into the install decision', async () => {
+  // The flag used to be parsed and then dropped on the way to shouldInstall,
+  // so `--force` reported "already installed" and the phone kept the old build.
+  const statePath = path.join(mkdtempSync(path.join(tmpdir(), 'gev-install-')), 'state.json');
+  writeFileSync(statePath, JSON.stringify({ sha: 'abc1234def' }));
+  const runs = {
+    workflow_runs: [
+      {
+        id: 7,
+        head_sha: 'abc1234def',
+        run_number: 9,
+        html_url: 'https://github.com/o/r/actions/runs/7',
+        created_at: '2026-10-24T13:38:04Z',
+      },
+    ],
+  };
+  const attempt = async (force) => {
+    const lines = [];
+    const result = await installLatest({
+      repo: 'o/r',
+      branch: 'android-shell',
+      serial: 'SERIAL',
+      dryRun: true,
+      force,
+      statePath,
+      fetchImpl: async () => new Response(JSON.stringify(runs), { status: 200 }),
+      log: (line) => lines.push(line),
+    });
+    return { result, lines };
+  };
+
+  const quiet = await attempt(false);
+  assert.equal(quiet.result.installed, false);
+  assert.match(quiet.result.reason, /already installed/);
+  assert.deepEqual(quiet.lines, [], 'a build already on the phone is not announced again');
+
+  const forced = await attempt(true);
+  assert.match(forced.result.reason, /dry run/);
+  assert.match(forced.lines[0], /^installing build abc1234d/);
+  assert.match(forced.lines.at(-1), /^would run: adb -s SERIAL install -r /);
 });
 
 test('one connected device is chosen; several are refused', () => {

@@ -219,6 +219,7 @@ function runCommand(command, args, { cwd = ROOT } = {}) {
  * @param {string} input.adb
  * @param {string} input.branch
  * @param {boolean} [input.dryRun]
+ * @param {boolean} [input.force] Reinstall a build the state already records.
  */
 export async function installLatest({
   repo,
@@ -226,6 +227,7 @@ export async function installLatest({
   serial,
   adb = 'adb',
   dryRun = false,
+  force = false,
   statePath = path.join(ROOT, STATE_FILE),
   fetchImpl = globalThis.fetch,
   log = console.log,
@@ -244,7 +246,7 @@ export async function installLatest({
     return { installed: false, reason: `GitHub answered ${response.status}` };
   const run = newestRun(await response.json());
   const state = readState(statePath);
-  const verdict = shouldInstall({ run, state });
+  const verdict = shouldInstall({ run, state, force });
   if (!verdict.install) return { installed: false, reason: verdict.reason };
   log(`installing ${verdict.reason}`);
 
@@ -390,6 +392,9 @@ async function main(argv) {
       serial: picked.serial,
       adb,
       dryRun: Boolean(options['dry-run']),
+      // Without this the flag parses and is then dropped, so `--force` would
+      // report "already installed" forever — which is what it used to do.
+      force: Boolean(options.force),
     });
     console.log(result.installed ? `ok: ${result.reason}` : result.reason);
     return result;
