@@ -22,14 +22,21 @@ jobs:
     timeout-minutes: 45
     env:
       PUPPETEER_SKIP_DOWNLOAD: '1'
+    steps:
       # A fresh version code per run keeps Android on the "update" path instead
       # of treating the new download as the version it already has. The offset
       # keeps the code above the ones handed out by earlier local builds (the
       # last of those was 30): an APK whose code is lower than the one already
       # on the device is refused outright, and `run_number` restarted at 1.
-      GEV_VERSION_CODE: ${{ github.run_number + 1000 }}
-      GEV_VERSION_NAME: 1.0.${{ github.run_number + 1000 }}
-    steps:
+      # The arithmetic lives in the shell because a workflow file rejects `+`
+      # inside an `env` expression ("Unexpected symbol: '+'" at validation).
+      - name: Compute the version
+        run: |
+          set -euo pipefail
+          CODE=$(( 1000 + ${{ github.run_number }} ))
+          echo "GEV_VERSION_CODE=$CODE" >> "$GITHUB_ENV"
+          echo "GEV_VERSION_NAME=1.0.$CODE" >> "$GITHUB_ENV"
+
       - name: Check out source
         uses: actions/checkout@v4
         with:
