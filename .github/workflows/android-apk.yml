@@ -6,6 +6,23 @@ name: Android APK
 on:
   push:
     branches: [android-shell, main]
+    # Only what the APK is made of: the web bundle's sources, the shell that
+    # wraps it, and the dependency manifest. A change to CI, docs or a
+    # workflow re-publishes nothing — the release is an artifact of the app,
+    # not of the repository's bookkeeping. Use `workflow_dispatch` to force a
+    # build after touching this file.
+    paths:
+      - 'android/**'
+      - 'src/**'
+      - 'public/**'
+      - 'build/**'
+      - 'server/**'
+      - 'config/**'
+      - 'index.html'
+      - 'style.css'
+      - 'vite.config.js'
+      - 'package.json'
+      - 'package-lock.json'
   workflow_dispatch:
 
 permissions:
