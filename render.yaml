@@ -29,3 +29,10 @@ services:
         sync: false
       - key: AISSTREAM_API_KEY
         sync: false
+      # Account-scoped: only the uRADMonitor units this account owns or was
+      # granted. Unset, the radiation snapshot skips the network and the four
+      # keyless feeds still draw.
+      - key: URADMONITOR_USER_ID
+        sync: false
+      - key: URADMONITOR_USER_HASH
+        sync: false
