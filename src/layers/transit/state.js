@@ -56,6 +56,9 @@ export function createState({ services, storage = readDefaultStorage() }) {
 
   /** @type {(() => void)|null} */
   state._preRenderRemove = null;
+  /** `camera.moveEnd` arrival hook, so a flight's final view is inspected. */
+  /** @type {(() => void)|null} */
+  state._arrivalRemove = null;
   state._renderHeld = false;
   /** @type {Cesium.ScreenSpaceEventHandler|null} */
   state._clickHandler = null;

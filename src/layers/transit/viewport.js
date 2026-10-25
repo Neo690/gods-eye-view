@@ -119,12 +119,27 @@ export function createViewport({ state, services, parts }) {
     governorRequestRender('transit-proximity');
   }
 
-  function onCameraChanged() {
+  /**
+   * React to a camera change.
+   *
+   * `camera.changed` fires on a percentage of the view moving, so a flight can
+   * end without a final delivery: the last event arrives while the camera is
+   * still high, the proximity check clears every feed, and no later event
+   * re-resolves them — the layer then sits on "no feed here yet" over a covered
+   * city until someone re-picks it. `moveEnd` passes `{ immediate: true }` so
+   * the view the camera actually parked on is inspected once.
+   */
+  function onCameraChanged(options = {}) {
     // The bounds update immediately; the feed proximity check stays debounced.
     // A person dragging the globe should not wait a third of a second for the
     // vehicles under the cursor to start moving again.
     refreshViewBounds();
     clearTimeout(state._cameraDebounceTimer);
+    if (options?.immediate) {
+      state._cameraDebounceTimer = null;
+      runProximityCheck();
+      return;
+    }
     state._cameraDebounceTimer = setTimeout(() => {
       state._cameraDebounceTimer = null;
       runProximityCheck();

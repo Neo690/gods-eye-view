@@ -4123,3 +4123,34 @@ test('the line pill follows the glyph and never appears under a sensor preset', 
   parts.ingestion.removeVehicle(tram.key);
   assert.equal(tram.lineBadge, null);
 });
+
+test('a camera arrival inspects the final view without waiting for the debounce', async (t) => {
+  const app = harness(t);
+  app.viewer.camera.moveEnd = new Cesium.Event();
+  app.layer.enable(app.viewer);
+  const state = app.state();
+  assert.equal(
+    typeof state._arrivalRemove,
+    'function',
+    'enabling watches the camera arriving, not only the percentage it moved',
+  );
+  const parts = app.layer._transitPartsForTest();
+  parts.viewport.onCameraChanged();
+  assert.ok(state._cameraDebounceTimer, 'a moving camera is debounced');
+  app.viewer.camera.moveEnd.raiseEvent();
+  assert.equal(
+    state._cameraDebounceTimer,
+    null,
+    'the parked view is checked on arrival instead of a third of a second later',
+  );
+  parts.viewport.onCameraChanged();
+  app.layer.disable(app.viewer);
+  const pending = state._cameraDebounceTimer;
+  const afterDisable = app.viewer.camera.moveEnd.raiseEvent();
+  assert.equal(afterDisable, undefined);
+  assert.equal(
+    state._cameraDebounceTimer,
+    pending,
+    'disabling detaches the arrival hook',
+  );
+});

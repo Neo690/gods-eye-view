@@ -189,6 +189,14 @@ export function createLifecycle({ state, services, parts }) {
         borrowCameraSensitivity(viewer);
         state._cameraChangedAttached = true;
       }
+      if (!state._arrivalRemove && viewer.camera.moveEnd?.addEventListener) {
+        // Always inspect the final view, even when the last flight step is
+        // below `camera.changed`'s movement threshold — otherwise a long flight
+        // lands on a covered city with every feed already cleared.
+        state._arrivalRemove = viewer.camera.moveEnd.addEventListener(() =>
+          parts.viewport.onCameraChanged({ immediate: true }),
+        );
+      }
       if (!state._preRenderRemove) {
         state._preRenderRemove = viewer.scene.preRender.addEventListener(
           parts.rendering.onPreRender,
@@ -227,6 +235,10 @@ export function createLifecycle({ state, services, parts }) {
         );
         returnCameraSensitivity(viewer);
         state._cameraChangedAttached = false;
+      }
+      if (state._arrivalRemove) {
+        state._arrivalRemove();
+        state._arrivalRemove = null;
       }
       if (state._preRenderRemove) {
         state._preRenderRemove();
