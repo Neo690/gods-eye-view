@@ -30,11 +30,62 @@ export const OVERLAP_THRESHOLD = 0.6;
 
 export const MAX_DOTS = 6000;
 
+/**
+ * @const {number} Dot ceiling on a phone layout.
+ *
+ * A phone WebView rasterises the same dots into a much smaller GPU budget, and
+ * the street fleet is the one workload whose per-frame cost scales with the
+ * count. 1200 dots still read as flowing traffic at street level while leaving
+ * the driver room to keep the app alive.
+ */
+
+export const PHONE_MAX_DOTS = 1200;
+
+/**
+ * @const {number} Height stations a single surface pass may sample.
+ *
+ * Every station costs a synchronous mesh read, so it is the most expensive part
+ * of a street-level load on a phone. Uncapped passes spend their whole slice
+ * budget on sampling.
+ */
+
+export const SURFACE_STATION_BUDGET = 1000;
+
+/** @const {number} Station budget for a single surface pass on a phone layout. */
+
+export const PHONE_SURFACE_STATION_BUDGET = 200;
+
+/** @const {string} The phone breakpoint the shell's compact layout already uses. */
+
+export const PHONE_LAYOUT_MEDIA = '(max-width: 720px)';
+
+/**
+ * Work the current viewport may spend on the street fleet.
+ *
+ * A phone renders a smaller fleet and samples fewer stations than a desktop
+ * console. The values are read once when the layer is built, so the two sides of
+ * the app can never disagree about the budget mid-session.
+ * @param {object} [view] - A window-like object exposing `matchMedia`.
+ * @returns {{maxDots: number, surfaceStations: number}}
+ */
+export function trafficWorkBudget(view = globalThis) {
+  const phone = Boolean(view?.matchMedia?.(PHONE_LAYOUT_MEDIA)?.matches);
+  return phone
+    ? {
+        maxDots: PHONE_MAX_DOTS,
+        surfaceStations: PHONE_SURFACE_STATION_BUDGET,
+      }
+    : {
+        maxDots: MAX_DOTS,
+        surfaceStations: SURFACE_STATION_BUDGET,
+      };
+}
+
 /** Keep a dense street view while bounding both dot and surface work at city scale. */
-export function roadDotBudget(altitude) {
+export function roadDotBudget(altitude, ceiling = MAX_DOTS) {
   return Math.max(
     400,
-    Math.round(MAX_DOTS * Math.pow(1000 / Math.max(1000, altitude), 2)),
+    Math.round(ceiling * Math.pow(1000 / Math.max(1000, altitude), 2)),
   );
 }
 
