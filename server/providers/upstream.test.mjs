@@ -259,7 +259,56 @@ test('the floor lookup is pinned by origin and path, not by its points query', (
   );
   assert.equal(
     UPSTREAM_EXTRA_ROUTES.length,
-    1,
-    'one extra route, deliberately',
+    3,
+    'the pinned routes, deliberately — never a wildcard',
   );
+});
+
+test('the OpenFreeMap routes are the versioned tile path, and nothing else there', () => {
+  const allowed = allowedUpstreamUrls();
+  const tile = (version, z, x, y) =>
+    relayTarget(
+      `https://tiles.openfreemap.org/planet/${version}/${z}/${x}/${y}.pbf`,
+      allowed,
+    );
+  assert.ok(
+    tile('20261018_080001_pt', 14, 8387, 13455),
+    'a published planet tile is relayed',
+  );
+  assert.ok(
+    relayTarget('https://tiles.openfreemap.org/planet', allowed),
+    'and the TileJSON that names the version in use',
+  );
+  for (const raw of [
+    // The version is published afresh per build, so the shape is pinned rather
+    // than the value: anything that is not a tile is still refused.
+    'https://tiles.openfreemap.org/planet/20261018_080001_pt/14/8387/13455.json',
+    'https://tiles.openfreemap.org/planet/20261018_080001_pt/14/8387/13455.pbf/x',
+    'https://tiles.openfreemap.org/planet/20261018_080001_pt/14/8387/-1.pbf',
+    'https://tiles.openfreemap.org/planet/20261018_080001_pt/../secrets.pbf',
+    'https://tiles.openfreemap.org/styles/positron',
+    'http://tiles.openfreemap.org/planet/20261018_080001_pt/14/8387/13455.pbf',
+    'https://tiles.example.com/planet/20261018_080001_pt/14/8387/13455.pbf',
+  ])
+    assert.equal(relayTarget(raw, allowed), null, raw);
+});
+
+test('a tile read is relayed byte for byte, with the upstream type', async () => {
+  const tileBytes = Buffer.from([0x1a, 0x02, 0x0a, 0x00]);
+  const seen = [];
+  const p = plugin({
+    fetchImpl: async (url) => {
+      seen.push(url);
+      return response(tileBytes, { type: 'application/x-protobuf' });
+    },
+  });
+  const target =
+    'https://tiles.openfreemap.org/planet/20261018_080001_pt/14/8387/13455.pbf';
+  const answer = await call(p, {
+    url: `/?url=${encodeURIComponent(target)}`,
+  });
+  assert.equal(answer.status, 200);
+  assert.equal(seen[0], target);
+  assert.equal(answer.headers['Content-Type'], 'application/x-protobuf');
+  assert.deepEqual(Buffer.from(answer.bytes), tileBytes);
 });

@@ -14,8 +14,8 @@ import { makeCostRateLimiter, clientKey } from './common/rate-limit.js';
  *
  * It is a deliberately narrow door, not an open proxy:
  *  - only GET, and only the exact URLs this build's transit registry publishes
- *    (plus the one floor lookup below), so a request cannot name a host the
- *    catalogue never cleared (no SSRF);
+ *    (plus the pinned floor and OpenFreeMap tile routes below), so a request
+ *    cannot name a host the catalogue never cleared (no SSRF);
  *  - https only, no credentials, no non-standard port, no fragment;
  *  - no redirects followed — an allow-listed URL cannot bounce the relay
  *    somewhere else;
@@ -27,18 +27,40 @@ import { makeCostRateLimiter, clientKey } from './common/rate-limit.js';
  */
 
 /**
- * The one non-registry upstream the shell needs for transit to draw at all.
+ * Upstreams the shell needs that the transit registry does not name.
  *
  * A transit vehicle is not shown until a ground floor resolves — a sprite
  * parked at sea level under a hill is worse than no sprite — and the page asks
  * for those floors through this same relay. The footprint is a single host and
  * path whose only variable is the `points` query, so the route is pinned by
  * origin and path rather than by exact URL.
+ *
+ * Street geometry is the second: the traffic and mapped-installation layers
+ * read OpenFreeMap vector tiles, and in the shell that read is cross-origin.
+ * On the phone it did not fail fast — it hung past the road pass deadline — so
+ * the bytes are fetched here instead, from a datacentre that reaches
+ * OpenFreeMap normally.
  */
 const EXTRA_ROUTES = Object.freeze([
   Object.freeze({
     origin: 'https://terrain.reearth.land',
     pathname: '/heights.json',
+  }),
+  /** The TileJSON document: it names the tile version currently published. */
+  Object.freeze({
+    origin: 'https://tiles.openfreemap.org',
+    pathname: '/planet',
+  }),
+  /**
+   * A planet tile. OpenFreeMap versions its path per build
+   * (`/planet/20261018_080001_pt/{z}/{x}/{y}.pbf`), so this route cannot be an
+   * exact URL: it is one host and the tile shape alone — a version segment,
+   * three integer coordinates and the `.pbf` suffix. Nothing else under that
+   * host is reachable.
+   */
+  Object.freeze({
+    origin: 'https://tiles.openfreemap.org',
+    pattern: /^\/planet\/[0-9A-Za-z_]+\/\d{1,5}\/\d{1,5}\/\d{1,5}\.pbf$/,
   }),
 ]);
 
@@ -95,9 +117,13 @@ export function relayTarget(raw, allowed = ALLOWED) {
   if (url.hash) return null;
   if (allowed.has(url.href)) return url.href;
   // A pinned origin+path is still a cleared upstream: only the query, which
-  // names points rather than a destination, is free.
+  // names points or a tile rather than a destination, is free.
   const route = EXTRA_ROUTES.some(
-    (entry) => entry.origin === url.origin && entry.pathname === url.pathname,
+    (entry) =>
+      entry.origin === url.origin &&
+      (entry.pattern
+        ? entry.pattern.test(url.pathname)
+        : entry.pathname === url.pathname),
   );
   return route ? url.href : null;
 }
