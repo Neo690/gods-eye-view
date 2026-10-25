@@ -134,6 +134,71 @@ final class ApiForwarder {
     }
   }
 
+  /**
+   * Replays a POST request over the network with its payload entity.
+   * Invoked via JavaScriptInterface from the in-app client bridge.
+   */
+  public String executePost(String path, String headersJson, String body) {
+    if (!isEnabled()) {
+      return "{\"status\":503,\"error\":\"no_server\"}";
+    }
+    String cleanPath = path == null ? "" : path.trim();
+    String target = base + (cleanPath.startsWith("/") ? cleanPath : "/" + cleanPath);
+    HttpURLConnection connection = null;
+    try {
+      connection = (HttpURLConnection) new URL(target).openConnection();
+      connection.setRequestMethod("POST");
+      connection.setInstanceFollowRedirects(true);
+      connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+      connection.setReadTimeout(READ_TIMEOUT_MS);
+      connection.setDoOutput(true);
+      connection.setRequestProperty("Content-Type", "application/json");
+      connection.setRequestProperty("Accept", "application/json");
+
+      if (headersJson != null && !headersJson.isEmpty()) {
+        try {
+          org.json.JSONObject hdr = new org.json.JSONObject(headersJson);
+          java.util.Iterator<String> keys = hdr.keys();
+          while (keys.hasNext()) {
+            String key = keys.next();
+            connection.setRequestProperty(key, hdr.optString(key));
+          }
+        } catch (org.json.JSONException ignored) {}
+      }
+
+      if (body != null && !body.isEmpty()) {
+        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+        connection.setFixedLengthStreamingMode(bytes.length);
+        java.io.OutputStream os = connection.getOutputStream();
+        os.write(bytes);
+        os.flush();
+        os.close();
+      }
+
+      int status = connection.getResponseCode();
+      InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+      String responseBody = "";
+      if (stream != null) {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = stream.read(buffer)) != -1) out.write(buffer, 0, read);
+        stream.close();
+        responseBody = new String(out.toByteArray(), StandardCharsets.UTF_8);
+      }
+      org.json.JSONObject res = new org.json.JSONObject();
+      res.put("status", status);
+      res.put("statusText", connection.getResponseMessage());
+      res.put("body", responseBody);
+      return res.toString();
+    } catch (Exception failure) {
+      Log.w(TAG, "API POST forward failed for " + target + ": " + failure.getMessage());
+      return "{\"status\":502,\"error\":\"upstream_failure\",\"detail\":" + quote(failure.getMessage()) + "}";
+    } finally {
+      if (connection != null) connection.disconnect();
+    }
+  }
+
   private static void copyRequestHeaders(Map<String, String> from, HttpURLConnection to) {
     if (from == null) return;
     for (Map.Entry<String, String> entry : from.entrySet()) {

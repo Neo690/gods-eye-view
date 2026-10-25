@@ -54,6 +54,8 @@ final class LiveApi {
   private static final long TRACK_TTL_MS = 60_000L;
   private static final long LAUNCHES_TTL_MS = 15 * 60_000L;
   private static final int TOMTOM_DAILY_BUDGET = 6000;
+  private static final String TOMTOM_KEY = "zDNAGgmUTtoeAEksaJypzb00x8V9s607";
+  private static final long TOMTOM_TILE_TTL_MS = 120_000L;
 
   /**
    * The in-page adapters run the project's own normalisers over a body they
@@ -67,11 +69,20 @@ final class LiveApi {
   // WFIGS serves its perimeter pages as GeoJSON; a peak-season page is a few MB.
   private static final int UPSTREAM_MAX_BYTES = 16 * 1024 * 1024;
   private static final String[] UPSTREAM_HOSTS = {
+    "api.windy.com",
+    "tiles.windy.com",
+    "api.tomtom.com",
     "api.adsb.lol",
     "services3.arcgis.com",
     // NHC cyclone status and its published forecast GIS layers.
     "www.nhc.noaa.gov",
     "mapservices.weather.noaa.gov",
+    // NASA FIRMS active fire open global CSV feeds.
+    "firms.modaps.eosdis.nasa.gov",
+    // NOAA nowCOAST observations (WMS radar, satellite clouds, lightning).
+    "nowcoast.noaa.gov",
+    // NOAA GFS bucket on AWS S3.
+    "noaa-gfs-bdp-pds.s3.amazonaws.com",
     // Radio Browser mirrors; the page rotates through them.
     "de1.api.radio-browser.info",
     "de2.api.radio-browser.info",
@@ -93,6 +104,14 @@ final class LiveApi {
     "www.myridebarrie.ca",
     "rtu.york.ca",
     "opendata.burlington.ca",
+    // French transit networks (src/data/transitFeeds.js).
+    "proxy.transport.data.gouv.fr",
+    "ara-api.enroute.mobi",
+    "gtfsproxy.e-tam.fr",
+    "api.mrn.cityway.fr",
+    "data.filbleu.fr",
+    "opendata.transports-lia.fr",
+    "app.pysae.com",
     // GBFS station documents: the bikeshare proxy's allowlist
     // (src/data/gbfsSource.js) and the cities in its registry.
     "gbfs.lyft.com",
@@ -110,6 +129,12 @@ final class LiveApi {
     "api.entur.io",
     // Re:Earth point heights: the terrain the vehicles and floors stand on.
     "terrain.reearth.land",
+    // Radiation networks (BfS, Health Canada, Safecast, Radmon, NOAA SWPC).
+    "www.imis.bfs.de",
+    "maps-cartes.services.geo.ca",
+    "api.safecast.org",
+    "radmon.org",
+    "services.swpc.noaa.gov",
   };
 
   private static final int CONNECT_TIMEOUT_MS = 8000;
@@ -194,12 +219,13 @@ final class LiveApi {
         return tomtomStatus();
       }
       if (path.startsWith("/api/tomtom/flow/")) {
-        return json(
-          503,
-          "Service Unavailable",
-          "{\"error\":\"no_key\"}",
-          headers("Cache-Control", "no-store")
-        );
+        return tomtomFlow(path);
+      }
+      if (path.startsWith("/api/weather/tile")) {
+        return weatherTile(params);
+      }
+      if (path.startsWith("/api/weather/image")) {
+        return weatherImage(params);
       }
     } catch (IOException failure) {
       Log.w(TAG, "Live API " + path + " failed: " + failure.getMessage());
@@ -551,7 +577,7 @@ private static WebResourceResponse enrichment(String tail) throws IOException {
   private static WebResourceResponse tomtomStatus() {
     JSONObject out = new JSONObject();
     try {
-      out.put("hasKey", false);
+      out.put("hasKey", TOMTOM_KEY != null && !TOMTOM_KEY.isEmpty());
       out.put("dailyCount", 0);
       out.put("budget", TOMTOM_DAILY_BUDGET);
       out.put("date", isoUtc(System.currentTimeMillis()).substring(0, 10));
@@ -559,6 +585,226 @@ private static WebResourceResponse enrichment(String tail) throws IOException {
       // Never thrown for these primitive keys.
     }
     return json(200, "OK", out.toString(), headers());
+  }
+
+  private static WebResourceResponse tomtomFlow(String path) {
+    if (TOMTOM_KEY == null || TOMTOM_KEY.isEmpty()) {
+      return json(
+        503,
+        "Service Unavailable",
+        "{\"error\":\"no_key\"}",
+        headers("Cache-Control", "no-store")
+      );
+    }
+    String sub = path.substring("/api/tomtom/flow/".length());
+    String cacheKey = "tt:flow:" + sub;
+    Cached entry = cache.get(cacheKey);
+    if (entry != null && entry.ageMs() < TOMTOM_TILE_TTL_MS) {
+      return bytes(200, "OK", "application/x-protobuf", "binary", entry.body, headers("x-tomtom-cache", "HIT"));
+    }
+    String upstreamUrl = "https://api.tomtom.com/traffic/map/4/tile/flow/relative/" + sub + "?key=" + TOMTOM_KEY;
+    try {
+      byte[] body = get(upstreamUrl);
+      if (body != null && body.length > 0) {
+        entry = new Cached(body);
+        remember(cacheKey, entry);
+        return bytes(200, "OK", "application/x-protobuf", "binary", body, headers("x-tomtom-cache", "MISS"));
+      }
+    } catch (IOException e) {
+      Log.w(TAG, "TomTom flow tile failed for " + sub + ": " + e.getMessage());
+    }
+    return json(502, "Bad Gateway", "{\"error\":\"upstream\"}", headers());
+  }
+
+  /* ── NOAA nowCOAST Weather Radar, Clouds and Lightning Tiles ─────────── */
+
+  private static final byte[] BLANK_PNG_256 = android.util.Base64.decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABFUlEQVR4nO3BMQEAAADCoPVP7WsIoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeAMBPAABPO1TCQAAAABJRU5ErkJggg==",
+    android.util.Base64.DEFAULT
+  );
+
+  private static final Map<String, WeatherSpec> WEATHER_SPECS = new HashMap<>();
+  static {
+    WEATHER_SPECS.put("radar", new WeatherSpec(
+      "weather_radar",
+      "conus_base_reflectivity_mosaic",
+      "weather_radar_base_reflectivity",
+      "-130,20,-60,55",
+      -130.0, 20.0, -60.0, 55.0,
+      4096, 2048
+    ));
+    WEATHER_SPECS.put("clouds", new WeatherSpec(
+      "satellite",
+      "global_longwave_imagery_mosaic",
+      "reflectance",
+      "-180,-90,180,90",
+      -180.0, -90.0, 180.0, 90.0,
+      2048, 1024
+    ));
+    WEATHER_SPECS.put("clouds-regional", new WeatherSpec(
+      "satellite",
+      "goes_longwave_imagery",
+      "goes-lir",
+      "-180,-90,180,90",
+      -180.0, -90.0, 180.0, 90.0,
+      4096, 2048
+    ));
+    WEATHER_SPECS.put("lightning", new WeatherSpec(
+      "lightning_detection",
+      "ldn_lightning_strike_density",
+      "lightning_density",
+      "-180,-25,0,80",
+      -180.0, -25.0, 0.0, 80.0,
+      4096, 2048
+    ));
+  }
+
+  private static class WeatherSpec {
+    final String service;
+    final String layer;
+    final String style;
+    final String defaultBbox;
+    final double minLon;
+    final double minLat;
+    final double maxLon;
+    final double maxLat;
+    final int defaultWidth;
+    final int defaultHeight;
+
+    WeatherSpec(
+      String service,
+      String layer,
+      String style,
+      String defaultBbox,
+      double minLon,
+      double minLat,
+      double maxLon,
+      double maxLat,
+      int defaultWidth,
+      int defaultHeight
+    ) {
+      this.service = service;
+      this.layer = layer;
+      this.style = style;
+      this.defaultBbox = defaultBbox;
+      this.minLon = minLon;
+      this.minLat = minLat;
+      this.maxLon = maxLon;
+      this.maxLat = maxLat;
+      this.defaultWidth = defaultWidth;
+      this.defaultHeight = defaultHeight;
+    }
+  }
+
+  private static WebResourceResponse weatherTile(Map<String, String> params) {
+    String product = params.get("product");
+    if (product == null || product.isEmpty()) product = "radar";
+    WeatherSpec spec = WEATHER_SPECS.get(product);
+    if (spec == null) spec = WEATHER_SPECS.get("radar");
+
+    String time = params.get("time");
+    if (time == null || time.isEmpty()) time = "latest";
+
+    int z = 0, x = 0, y = 0;
+    try {
+      if (params.containsKey("z")) z = Integer.parseInt(params.get("z"));
+      if (params.containsKey("x")) x = Integer.parseInt(params.get("x"));
+      if (params.containsKey("y")) y = Integer.parseInt(params.get("y"));
+    } catch (NumberFormatException ignored) {}
+
+    double span = 180.0 / Math.pow(2, z);
+    double west = -180.0 + x * span;
+    double south = 90.0 - (y + 1) * span;
+    double east = -180.0 + (x + 1) * span;
+    double north = 90.0 - y * span;
+
+    // If tile does not intersect product coverage, return transparent tile
+    if (east < spec.minLon || west > spec.maxLon || north < spec.minLat || south > spec.maxLat) {
+      return bytes(200, "OK", "image/png", null, BLANK_PNG_256, headers("Cache-Control", "public, max-age=86400, immutable"));
+    }
+
+    String bbox = west + "," + south + "," + east + "," + north;
+    String cacheKey = "wtile:" + product + ":" + time + ":" + z + ":" + x + ":" + y;
+    Cached entry = cache.get(cacheKey);
+    if (entry != null && entry.ageMs() < 86400_000L) {
+      return bytes(200, "OK", "image/png", null, entry.body, headers("Cache-Control", "public, max-age=86400, immutable"));
+    }
+
+    try {
+      String encodedTime = URLEncoder.encode(time, "UTF-8");
+      String wmsUrl = "https://nowcoast.noaa.gov/geoserver/observations/" + spec.service +
+        "/ows?service=WMS&version=1.1.1&request=GetMap&layers=" + spec.layer +
+        "&styles=" + spec.style +
+        "&srs=EPSG:4326&bbox=" + bbox +
+        "&width=256&height=256&format=image/png&transparent=true&time=" + encodedTime;
+      byte[] body = get(wmsUrl);
+      if (body != null && body.length >= 8 &&
+          body[0] == (byte) 0x89 && body[1] == (byte) 0x50 && body[2] == (byte) 0x4E && body[3] == (byte) 0x47) {
+        entry = new Cached(body);
+        remember(cacheKey, entry);
+        return bytes(200, "OK", "image/png", null, body, headers("Cache-Control", "public, max-age=86400, immutable"));
+      }
+    } catch (Exception e) {
+      Log.w(TAG, "Weather tile fetch failed for " + product + ": " + e.getMessage());
+    }
+
+    return bytes(200, "OK", "image/png", null, BLANK_PNG_256, headers("Cache-Control", "public, max-age=300"));
+  }
+
+  private static WebResourceResponse weatherImage(Map<String, String> params) {
+    String product = params.get("product");
+    if (product == null || product.isEmpty()) product = "radar";
+    WeatherSpec spec = WEATHER_SPECS.get(product);
+    if (spec == null) spec = WEATHER_SPECS.get("radar");
+
+    String time = params.get("time");
+    if (time == null || time.isEmpty()) time = "latest";
+
+    String bbox = params.get("bbox");
+    if (bbox == null || bbox.isEmpty()) bbox = spec.defaultBbox;
+
+    int width = spec.defaultWidth;
+    int height = spec.defaultHeight;
+    String sizeStr = params.get("size");
+    if (sizeStr != null && sizeStr.contains("x")) {
+      String[] parts = sizeStr.split("x");
+      try {
+        width = Integer.parseInt(parts[0]);
+        height = Integer.parseInt(parts[1]);
+      } catch (NumberFormatException ignored) {}
+    } else {
+      try {
+        if (params.containsKey("width")) width = Integer.parseInt(params.get("width"));
+        if (params.containsKey("height")) height = Integer.parseInt(params.get("height"));
+      } catch (NumberFormatException ignored) {}
+    }
+
+    String cacheKey = "wimg:" + product + ":" + time + ":" + bbox + ":" + width + "x" + height;
+    Cached entry = cache.get(cacheKey);
+    if (entry != null && entry.ageMs() < 86400_000L) {
+      return bytes(200, "OK", "image/png", null, entry.body, headers("Cache-Control", "public, max-age=86400, immutable"));
+    }
+
+    try {
+      String encodedTime = URLEncoder.encode(time, "UTF-8");
+      String wmsUrl = "https://nowcoast.noaa.gov/geoserver/observations/" + spec.service +
+        "/ows?service=WMS&version=1.1.1&request=GetMap&layers=" + spec.layer +
+        "&styles=" + spec.style +
+        "&srs=EPSG:4326&bbox=" + bbox +
+        "&width=" + width + "&height=" + height +
+        "&format=image/png&transparent=true&time=" + encodedTime;
+      byte[] body = get(wmsUrl);
+      if (body != null && body.length >= 8 &&
+          body[0] == (byte) 0x89 && body[1] == (byte) 0x50 && body[2] == (byte) 0x4E && body[3] == (byte) 0x47) {
+        entry = new Cached(body);
+        remember(cacheKey, entry);
+        return bytes(200, "OK", "image/png", null, body, headers("Cache-Control", "public, max-age=86400, immutable"));
+      }
+    } catch (Exception e) {
+      Log.w(TAG, "Weather image fetch failed for " + product + ": " + e.getMessage());
+    }
+
+    return bytes(200, "OK", "image/png", null, BLANK_PNG_256, headers("Cache-Control", "public, max-age=300"));
   }
 
   /* ── Bounded read-through for the in-page adapters ───────────────────── */
@@ -623,6 +869,8 @@ private static WebResourceResponse enrichment(String tail) throws IOException {
 
   private static boolean upstreamHostAllowed(String host) {
     if (host == null) return false;
+    String lower = host.toLowerCase(Locale.ROOT);
+    if (lower.endsWith(".publicbikesystem.net")) return true;
     for (String allowed : UPSTREAM_HOSTS) {
       if (allowed.equalsIgnoreCase(host)) return true;
     }
@@ -652,7 +900,7 @@ private static WebResourceResponse enrichment(String tail) throws IOException {
         connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
         connection.setReadTimeout(READ_TIMEOUT_MS);
         connection.setRequestProperty("User-Agent", USER_AGENT);
-        connection.setRequestProperty("Accept", "application/json");
+        connection.setRequestProperty("Accept", "*/*");
         connection.setRequestProperty("Accept-Encoding", "identity");
         int status = connection.getResponseCode();
         if (status >= 300 && status < 400) {

@@ -119,3 +119,24 @@ test('recent incidents read as relative time, older ones as a clock time', () =>
   assert.equal(incidentTimeText(null, NOW), '');
   assert.doesNotMatch(incidentTimeText(NOW - 6 * 60 * 60_000, NOW), /ago/);
 });
+
+test('dismissAll clears all active incidents and marks them dismissed', () => {
+  const feed = new IncidentFeed({ now: () => NOW });
+  feed.update([incident('a'), incident('b')], NOW);
+  assert.equal(feed.size, 2);
+  feed.dismissAll(NOW);
+  assert.equal(feed.size, 0);
+  assert.deepEqual(feed.items(), []);
+  assert.equal(feed.isDismissed('a'), true);
+  assert.equal(feed.isDismissed('b'), true);
+});
+
+test('purge button labels are translated in French', () => {
+  setLocale('fr');
+  try {
+    assert.equal(t('Purge'), 'Purger');
+    assert.equal(t('Purge all alerts'), 'Purger toutes les alertes');
+  } finally {
+    setLocale('en');
+  }
+});

@@ -3032,6 +3032,8 @@
   "Critical": "Критично",
   "Warning": "Предупреждение",
   "Dismiss alert": "Скрыть оповещение",
+  "Purge": "Очистить",
+  "Purge all alerts": "Очистить все оповещения",
   "{count} new alerts": "Новых оповещений: {count}",
   "Stop following your position": "Прекратить отслеживание вашего местоположения",
   "Centre on my position": "Центрировать на моём местоположении",

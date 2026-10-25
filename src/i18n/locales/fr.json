@@ -2965,6 +2965,8 @@
   "Critical": "Critique",
   "Warning": "Avertissement",
   "Dismiss alert": "Masquer l'alerte",
+  "Purge": "Purger",
+  "Purge all alerts": "Purger toutes les alertes",
   "{count} new alerts": "{count} nouvelles alertes",
   "Stop following your position": "Arrêter le suivi de votre position",
   "Centre on my position": "Centrer sur ma position",
@@ -2990,5 +2992,9 @@
   "Storm": "Tempête",
   "Radiation networks": "Réseaux de rayonnement",
   "Stations: {count}": "Stations : {count}",
-  "Needs an API key": "Clé API requise"
+  "Needs an API key": "Clé API requise",
+  "Local weather (Windy)": "Météo locale (Windy)",
+  "Local weather forecast": "Prévision météo locale",
+  "Enable to load": "Activer pour charger",
+  "GFS point forecast for the map centre. Refreshed automatically every 5 minutes or when the camera moves more than 5 km. Source: Windy.com / NOAA GFS.": "Prévision ponctuelle GFS pour le centre de la carte. Actualisée automatiquement toutes les 5 minutes ou quand la caméra se déplace de plus de 5 km. Source : Windy.com / NOAA GFS."
 }

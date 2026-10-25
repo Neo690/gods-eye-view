@@ -103,8 +103,17 @@ export function installTrackpadPinchZoom(
   };
 }
 
+function isMobileContext() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const isMobileUa = /android|iphone|ipad|ipod|mobile/i.test(ua);
+  const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 800;
+  return isMobileUa || isNarrow;
+}
+
 /** Cesium.Viewer options of the standard globe viewer. */
 export function applicationViewerOptions(creditContainer) {
+  const mobile = isMobileContext();
   return {
     timeline: false,
     animation: false,
@@ -122,7 +131,7 @@ export function applicationViewerOptions(creditContainer) {
     // which would also stop CesiumWidget from creating the Sun and Moon.
     skyBox: new StarrySky(),
     creditContainer,
-    msaaSamples: 4,
+    msaaSamples: mobile ? 1 : 4,
     contextOptions: { webgl: { preserveDrawingBuffer: true } },
   };
 }
@@ -137,6 +146,10 @@ export function createApplicationViewer({ container, creditContainer }) {
   );
   try {
     viewer.targetFrameRate = 60;
+    if (isMobileContext()) {
+      viewer.resolutionScale = Math.min(window.devicePixelRatio || 1, 1.25);
+      viewer.scene.globe.maximumScreenSpaceError = 2.0;
+    }
     // Before any tile builds a draw command: Cesium's per-vertex model
     // atmosphere fails to LINK on Apple's Metal backend and kills the
     // render loop. See app/atmosphereCompat.js.

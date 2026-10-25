@@ -98,6 +98,14 @@ export const KEY_SETUP_KEYS = Object.freeze([
     tier: 'free',
   }),
   Object.freeze({
+    id: 'windy',
+    title: 'WINDY', // i18n-ignore: provider product name
+    unlocks: msg('Live weather telemetry and GFS forecasts in tactical HUD'),
+    getUrl: 'https://api.windy.com/keys',
+    envVars: Object.freeze(['WINDY_API_KEY']),
+    tier: 'free',
+  }),
+  Object.freeze({
     id: 'cesium-ion',
     title: 'CESIUM ION', // i18n-ignore: provider product name
     unlocks: msg('Bing imagery map stacks + world terrain'),

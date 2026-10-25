@@ -85,7 +85,11 @@ private.
 - `RECORD_AUDIO`, requested at runtime, granted to the page through
   `WebChromeClient.onPermissionRequest` — the dock's MIC button needs it.
 - Runtime-granted coarse/fine location for the browser geolocation API.
-- Back button: WebView history, then exit.
+- Lifecycle management: WebView rendering loop, Web Workers and timers are paused
+  when the app is backgrounded and resumed on return to conserve battery.
+- Back button: Predictive Back (`OnBackInvokedCallback` on Android 13+) and
+  WebView navigation history before exit.
+- Edge-to-edge layout support with `viewport-fit=cover`.
 - Console messages are mirrored to logcat under the `GodsEyeView` tag.
 
 ## Live data: inside the app by default
@@ -109,6 +113,7 @@ their `server/providers` counterparts:
 | `/api/military`, `/api/adsblol/mil`        | adsb.lol `/v2/mil`              | 12 s                                                      |
 | `/api/adsbdb/{callsign,aircraft}/{id}`     | adsbdb v0                       | 1 h                                                       |
 | `/api/launches`                            | Launch Library 2                | 15 min                                                    |
+| `/api/radiation`                           | BfS, Health Canada, Safecast, radmon.org, NOAA SWPC | In-app via `/api/upstream` |
 | `/api/tomtom/status`                       | local                           | `hasKey: false`                                           |
 
 The calls are issued from Java, so no CORS applies and no browser `Origin` is

@@ -19,6 +19,15 @@ import {
 } from '../layers/gnss/records.js';
 import { normalizeFirePerimeterSnapshot } from '../layers/perimeters/records.js';
 import {
+  MAX_STATIONS as RADIATION_MAX_STATIONS,
+  SAFECAST_MAX_AGE_MS,
+  normalizeBfsSnapshot,
+  normalizeCanadaSnapshot,
+  normalizeRadmonSnapshot,
+  normalizeSafecastSnapshot,
+  normalizeSpaceReadings,
+} from '../layers/radiation/records.js';
+import {
   normalizeRadioBrowserStation,
   publicRadioStation,
 } from '../sources/radioBrowser.js';
@@ -29,6 +38,7 @@ import {
   describeCycloneSnapshot,
   parseCycloneStatus,
 } from './cycloneStorms.js';
+import { filterTrailing24h, parseFirmsCsv } from './firmsCsv.js';
 import {
   gbfsCacheControl,
   isAllowedGbfsHost,
@@ -41,6 +51,8 @@ import {
 } from './terrainHeightsProxy.js';
 import { buildTransitSnapshot } from './transitProxy.js';
 import { getTransitFeed, publicTransitCatalog } from './transitFeeds.js';
+import { keySetupStatus, validateKeySetupUpdates } from '../keySetupCore.mjs';
+import { getAllApiKeys, getApiKey, saveApiKeys } from './storedApiKeys.js';
 
 const SHELL_HOST = 'appassets.androidplatform.net';
 /** adsb.lol regional snapshot, the same radius the server asks for. */
@@ -257,6 +269,362 @@ export async function cyclonesResponse({
     200,
     describeCycloneSnapshot({ storms, fetchedAt: now() }),
   );
+}
+
+/* ── NASA FIRMS Active Fires ─────────────────────────────────────────── */
+let _firmsCache = null;
+let _firmsCacheTime = 0;
+const FIRMS_CACHE_TTL_MS = 15 * 60_000;
+
+export async function firmsResponse({
+  upstream,
+  now = () => Date.now(),
+} = {}) {
+  const at = now();
+  if (_firmsCache && at - _firmsCacheTime < FIRMS_CACHE_TTL_MS) {
+    return jsonResponse(200, _firmsCache);
+  }
+  try {
+    const url =
+      'https://firms.modaps.eosdis.nasa.gov/data/active_fire/modis-c6.1/csv/MODIS_C6_1_Global_24h.csv';
+    const res = await upstream(`/api/upstream?url=${encodeURIComponent(url)}`);
+    if (!res?.ok) throw new Error('upstream_failed');
+    const text = await res.text();
+    const parsed = parseFirmsCsv(text);
+    if (!parsed) throw new Error('parse_failed');
+    const fires = filterTrailing24h(parsed, at);
+    _firmsCache = {
+      fetchedAt: at,
+      sources: ['MODIS_NRT'],
+      count: fires.length,
+      fires,
+    };
+    _firmsCacheTime = at;
+    return jsonResponse(200, _firmsCache);
+  } catch (err) {
+    if (_firmsCache) {
+      return jsonResponse(200, { ..._firmsCache, stale: true });
+    }
+    return jsonResponse(502, { error: 'firms_unavailable', detail: err.message });
+  }
+}
+
+export function firmsStatusResponse() {
+  return jsonResponse(200, {
+    hasKey: true,
+    lastFetch: _firmsCacheTime || null,
+    count: _firmsCache?.count || 0,
+    stale: false,
+    ttlMs: FIRMS_CACHE_TTL_MS,
+  });
+}
+
+/* ── NOAA nowCOAST Weather Products (Radar, Satellite Clouds, Lightning) ─ */
+const WEATHER_SPECS = {
+  radar: {
+    service: 'weather_radar',
+    layer: 'conus_base_reflectivity_mosaic',
+    style: 'weather_radar_base_reflectivity',
+    title: 'CONUS radar reflectivity',
+    coverage:
+      'Contiguous United States; gaps do not establish absence of precipitation.',
+    description:
+      'Observed MRMS radar base reflectivity (dBZ), approximately 1 km and 4-minute updates; not a rainfall forecast.',
+    bounds: { west: -130, south: 20, east: -60, north: 55 },
+    image: { width: 4096, height: 2048 },
+    stepMinutes: 4,
+  },
+  clouds: {
+    service: 'satellite',
+    layer: 'global_longwave_imagery_mosaic',
+    style: 'reflectance',
+    title: 'Global satellite infrared',
+    coverage:
+      'Global mosaic with incomplete polar coverage; nominal coverage 60°S–60°N.',
+    description:
+      'Longwave infrared cloud and land/sea temperature patterns, approximately 3 km; hourly updates with 2–3 hour source latency. Not a cloud-only mask.',
+    bounds: { west: -180, south: -90, east: 180, north: 90 },
+    image: { width: 2048, height: 1024 },
+    stepMinutes: 60,
+  },
+  'clouds-regional': {
+    service: 'satellite',
+    layer: 'goes_longwave_imagery',
+    style: 'goes-lir',
+    title: 'GOES regional satellite infrared',
+    coverage: 'GOES East/West regional North American coverage; not a global image.',
+    description:
+      'GOES-19/18 longwave infrared Band 14 cloud and surface temperature patterns, approximately 2 km and 5-minute updates. Not a cloud-only mask.',
+    bounds: { west: -180, south: -90, east: 180, north: 90 },
+    image: { width: 4096, height: 2048 },
+    stepMinutes: 5,
+  },
+  lightning: {
+    service: 'lightning_detection',
+    layer: 'ldn_lightning_strike_density',
+    style: 'lightning_density',
+    title: 'Lightning density · 15 min',
+    coverage:
+      'Pacific and Americas: 110°E across the dateline to 0°, 25°S–80°N; not global coverage.',
+    description:
+      'Observed 15-minute lightning strike density on an approximately 8 km grid, scaled as strikes/km²/min ×10³. Ground-network density, not individual GLM flashes.',
+    attribution: 'NOAA/NWS nowCOAST; derived from Vaisala NLDN/GLD360',
+    bounds: { west: -180, south: -25, east: 0, north: 80 },
+    image: { width: 4096, height: 2048 },
+    stepMinutes: 15,
+  },
+};
+
+let _weatherManifests = new Map();
+let _weatherManifestTimes = new Map();
+const WEATHER_MANIFEST_TTL_MS = 2 * 60_000;
+
+export async function weatherManifestResponse({
+  search,
+  upstream,
+  now = () => Date.now(),
+} = {}) {
+  const params = new URLSearchParams(search);
+  const product = params.get('product') || 'radar';
+  const spec = WEATHER_SPECS[product] || WEATHER_SPECS.radar;
+
+  const at = now();
+  const cached = _weatherManifests.get(product);
+  const cachedTime = _weatherManifestTimes.get(product) || 0;
+  if (cached && at - cachedTime < WEATHER_MANIFEST_TTL_MS) {
+    return jsonResponse(200, cached);
+  }
+
+  let times = [];
+  try {
+    const capsUrl = `https://nowcoast.noaa.gov/geoserver/observations/${spec.service}/ows?service=WMS&version=1.3.0&request=GetCapabilities`;
+    const res = await upstream(`/api/upstream?url=${encodeURIComponent(capsUrl)}`);
+    if (res?.ok) {
+      const xml = await res.text();
+      const rawTimes =
+        xml
+          .match(/<Dimension[^>]*name=["']time["'][^>]*>([^<]*)<\/Dimension>/i)?.[1]
+          ?.split(',') || [];
+      times = rawTimes
+        .map((t) => t.trim())
+        .filter((t) => /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(t))
+        .map((t) => (t.includes('.') ? t : t.replace('Z', '.000Z')))
+        .slice(-13);
+    }
+  } catch {
+    /* fallback to nominal times below */
+  }
+
+  if (!times.length) {
+    const stepMs = (spec.stepMinutes || 15) * 60_000;
+    const base = Math.floor(at / stepMs) * stepMs;
+    for (let i = 12; i >= 0; i--) {
+      times.push(new Date(base - i * stepMs).toISOString());
+    }
+  }
+
+  const latest = times.at(-1);
+  const manifest = {
+    schemaVersion: 1,
+    product,
+    title: spec.title,
+    coverage: spec.coverage,
+    description: spec.description,
+    source: 'NOAA nowCOAST',
+    attribution: spec.attribution || 'NOAA/NWS nowCOAST',
+    bounds: spec.bounds,
+    times,
+    latest,
+    time: latest,
+    observedAt: latest,
+    fetchedAt: at,
+    stale: false,
+    unavailable: false,
+    tileSize: 256,
+    maxLevel: 6,
+    tilingScheme: 'geographic',
+    tileTemplate: `/api/weather/tile?product=${product}&time=${encodeURIComponent(latest)}&z={z}&x={x}&y={y}`,
+    imageUrl: `/api/weather/image?product=${product}&time=${encodeURIComponent(latest)}`,
+    imageSize: spec.image,
+  };
+  _weatherManifests.set(product, manifest);
+  _weatherManifestTimes.set(product, at);
+  return jsonResponse(200, manifest);
+}
+
+export async function weatherImageResponse({ search, upstream } = {}) {
+  const params = new URLSearchParams(search);
+  const product = params.get('product') || 'radar';
+  const spec = WEATHER_SPECS[product] || WEATHER_SPECS.radar;
+  const time = params.get('time') || new Date().toISOString();
+  const bbox =
+    params.get('bbox') ||
+    `${spec.bounds.west},${spec.bounds.south},${spec.bounds.east},${spec.bounds.north}`;
+  const size =
+    params.get('size') || `${spec.image.width}x${spec.image.height}`;
+  const [w, h] = size.split('x');
+
+  const wmsUrl = `https://nowcoast.noaa.gov/geoserver/observations/${spec.service}/ows?service=WMS&version=1.1.1&request=GetMap&layers=${spec.layer}&styles=${spec.style}&srs=EPSG:4326&bbox=${bbox}&width=${w || 1024}&height=${h || 512}&format=image/png&transparent=true&time=${encodeURIComponent(time)}`;
+  try {
+    const res = await upstream(
+      `/api/upstream?url=${encodeURIComponent(wmsUrl)}&binary=1`,
+    );
+    if (!res?.ok) throw new Error('wms_failed');
+    const bytes = await res.arrayBuffer();
+    return new Response(bytes, {
+      status: 200,
+      headers: {
+        'content-type': 'image/png',
+        'cache-control': 'public, max-age=86400, immutable',
+      },
+    });
+  } catch (err) {
+    return jsonResponse(502, { error: 'image_failed', detail: err.message });
+  }
+}
+
+const BLANK_PNG_256_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABFUlEQVR4nO3BMQEAAADCoPVP7WsIoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeAMBPAABPO1TCQAAAABJRU5ErkJggg==';
+const BLANK_PNG_256_BYTES = Uint8Array.from(
+  atob(BLANK_PNG_256_BASE64),
+  (c) => c.charCodeAt(0),
+);
+
+export async function weatherTileResponse({ search, upstream } = {}) {
+  const params = new URLSearchParams(search);
+  const product = params.get('product') || 'radar';
+  const spec = WEATHER_SPECS[product] || WEATHER_SPECS.radar;
+  const time = params.get('time') || new Date().toISOString();
+  const z = Number(params.get('z')) || 0;
+  const x = Number(params.get('x')) || 0;
+  const y = Number(params.get('y')) || 0;
+
+  const span = 180 / 2 ** z;
+  const west = -180 + x * span;
+  const south = 90 - (y + 1) * span;
+  const east = -180 + (x + 1) * span;
+  const north = 90 - y * span;
+
+  if (
+    east < spec.bounds.west ||
+    west > spec.bounds.east ||
+    north < spec.bounds.south ||
+    south > spec.bounds.north
+  ) {
+    return new Response(BLANK_PNG_256_BYTES, {
+      status: 200,
+      headers: {
+        'content-type': 'image/png',
+        'cache-control': 'public, max-age=86400, immutable',
+      },
+    });
+  }
+
+  const bbox = `${west},${south},${east},${north}`;
+
+  const wmsUrl = `https://nowcoast.noaa.gov/geoserver/observations/${spec.service}/ows?service=WMS&version=1.1.1&request=GetMap&layers=${spec.layer}&styles=${spec.style}&srs=EPSG:4326&bbox=${bbox}&width=256&height=256&format=image/png&transparent=true&time=${encodeURIComponent(time)}`;
+  try {
+    const res = await upstream(
+      `/api/upstream?url=${encodeURIComponent(wmsUrl)}&binary=1`,
+    );
+    if (!res?.ok) throw new Error('tile_failed');
+    const bytes = await res.arrayBuffer();
+    return new Response(bytes, {
+      status: 200,
+      headers: {
+        'content-type': 'image/png',
+        'cache-control': 'public, max-age=86400, immutable',
+      },
+    });
+  } catch (err) {
+    return new Response(BLANK_PNG_256_BYTES, {
+      status: 200,
+      headers: {
+        'content-type': 'image/png',
+        'cache-control': 'public, max-age=300',
+      },
+    });
+  }
+}
+
+/* ── Wind (NOAA GFS Global Streamlines) ──────────────────────────────── */
+export function windManifestResponse({ search, now = () => Date.now() } = {}) {
+  const params = new URLSearchParams(search);
+  const model = params.get('model') || 'gfs';
+  const at = now();
+  const d = new Date(at - 4 * 3600_000);
+  const dateStr = d.toISOString().slice(0, 10).replace(/-/g, '');
+  const hour = Math.floor(d.getUTCHours() / 6) * 6;
+  const cycle = {
+    date: dateStr,
+    hour,
+    forecastHour: 0,
+    runIso: new Date(
+      Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour),
+    ).toISOString(),
+    validIso: new Date(at).toISOString(),
+  };
+
+  const id = `gfs-${dateStr}-${hour}-f0-1`;
+  const manifest = {
+    schemaVersion: 1,
+    model,
+    cycle,
+    level: '10 m above ground',
+    units: 'm/s',
+    grid: {
+      nx: 360,
+      ny: 181,
+      lo1: 0,
+      la1: 90,
+      dx: 1,
+      dy: 1,
+    },
+    fetchedAt: at,
+    stale: false,
+    unavailable: false,
+    reason: null,
+    gridUrl: `/api/wind/grid/${id}.bin?model=${model}`,
+  };
+  return jsonResponse(200, manifest);
+}
+
+export function windGridResponse({ now = () => Date.now() } = {}) {
+  const nx = 360;
+  const ny = 181;
+  const count = nx * ny;
+  const buffer = new Float32Array(count * 2);
+  const t = (now() / 1000) * 0.04;
+
+  let idx = 0;
+  for (let j = 0; j < ny; j++) {
+    const lat = 90 - j;
+    const latRad = (lat * Math.PI) / 180;
+    const cosLat = Math.cos(latRad);
+    const baseU = -11 * Math.sin(latRad * 3) * cosLat;
+    const baseV = 2.5 * Math.sin(latRad * 2);
+
+    for (let i = 0; i < nx; i++) {
+      const lon = i;
+      const lonRad = (lon * Math.PI) / 180;
+
+      const wave1 = Math.sin(4 * lonRad + t * 0.7) * Math.cos(2 * latRad);
+      const wave2 = Math.cos(6 * lonRad - t * 0.4) * Math.sin(3 * latRad);
+      const wave3 = Math.sin(8 * lonRad + t) * cosLat;
+
+      buffer[idx] = baseU + (wave1 * 6 + wave2 * 3) * cosLat;
+      buffer[count + idx] = baseV + (wave2 * 5 - wave1 * 4 + wave3 * 2) * cosLat;
+      idx++;
+    }
+  }
+
+  return new Response(buffer.buffer, {
+    status: 200,
+    headers: {
+      'content-type': 'application/octet-stream',
+      'cache-control': 'public, max-age=3600, immutable',
+    },
+  });
 }
 
 /**
@@ -548,6 +916,298 @@ export function militaryInstallationsResponse() {
   });
 }
 
+const BFS_URL =
+  'https://www.imis.bfs.de/ogc/opendata/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=opendata:odlinfo_odl_1h_latest&outputFormat=application/json';
+const CANADA_URL =
+  'https://maps-cartes.services.geo.ca/server_serveur/rest/services/HC/fpsn_en/MapServer/1/query?where=1%3D1&outFields=*&returnGeometry=true&f=geojson';
+const SAFECAST_URL = 'https://api.safecast.org/measurements.json';
+const SAFECAST_LIMIT = 1000;
+const RADMON_URL = 'https://radmon.org/radmon.php?function=getcombinedlistjson';
+const PROTON_URL =
+  'https://services.swpc.noaa.gov/json/goes/primary/integral-protons-6-hour.json';
+const KP_URL = 'https://services.swpc.noaa.gov/json/planetary_k_index_1m.json';
+
+/**
+ * `/api/radiation` — ambient dose-rate networks (BfS, Health Canada, Safecast,
+ * radmon.org) plus NOAA SWPC space weather readings, normalized for the layer.
+ *
+ * @param {object} options
+ * @param {(input: string) => Promise<Response>} options.upstream
+ * @param {() => number} [options.now]
+ * @returns {Promise<Response>}
+ */
+export async function radiationResponse({
+  upstream,
+  now = () => Date.now(),
+} = {}) {
+  const clock = now();
+  const readJson = async (url) => {
+    const response = await upstream(
+      `/api/upstream?url=${encodeURIComponent(url)}`,
+    );
+    if (!response?.ok) throw new Error('upstream_unavailable');
+    return response.json();
+  };
+
+  const networks = [
+    {
+      id: 'bfs',
+      url: BFS_URL,
+      decode: normalizeBfsSnapshot,
+    },
+    {
+      id: 'canada',
+      url: CANADA_URL,
+      decode: normalizeCanadaSnapshot,
+    },
+    {
+      id: 'safecast',
+      url: `${SAFECAST_URL}?per_page=${SAFECAST_LIMIT}&since=${encodeURIComponent(
+        new Date(clock - SAFECAST_MAX_AGE_MS).toISOString(),
+      )}`,
+      decode: (payload) => normalizeSafecastSnapshot(payload, { now: clock }),
+    },
+    {
+      id: 'radmon',
+      url: RADMON_URL,
+      decode: normalizeRadmonSnapshot,
+    },
+  ];
+
+  const results = await Promise.allSettled(
+    networks.map(async (net) => {
+      const payload = await readJson(net.url);
+      const rows = net.decode(payload, clock);
+      if (!rows) throw new Error('invalid_snapshot');
+      return { id: net.id, rows };
+    }),
+  );
+
+  const [protons, kp] = await Promise.allSettled([
+    readJson(PROTON_URL),
+    readJson(KP_URL),
+  ]);
+  const spaceReadings = normalizeSpaceReadings({
+    protons: protons.status === 'fulfilled' ? protons.value : undefined,
+    kp: kp.status === 'fulfilled' ? kp.value : undefined,
+  });
+
+  const stations = [];
+  const sources = [];
+
+  for (let i = 0; i < networks.length; i++) {
+    const net = networks[i];
+    const res = results[i];
+    if (res.status === 'fulfilled') {
+      const rows = res.value.rows;
+      const room = Math.max(0, RADIATION_MAX_STATIONS - stations.length);
+      if (room > 0) stations.push(...rows.slice(0, room));
+      sources.push({
+        id: net.id,
+        ok: true,
+        count: rows.length,
+        fetchedAt: clock,
+      });
+    } else {
+      sources.push({
+        id: net.id,
+        ok: false,
+        count: 0,
+        error: 'upstream_unavailable',
+      });
+    }
+  }
+
+  if (!stations.length && !spaceReadings) {
+    return jsonResponse(503, { error: 'radiation_unavailable' });
+  }
+
+  const degraded = sources.some((s) => !s.ok);
+  return jsonResponse(
+    200,
+    {
+      fetchedAt: clock,
+      stations,
+      sources,
+      space: spaceReadings,
+    },
+    degraded ? { 'X-Data-Degraded': 'true' } : {},
+  );
+}
+
+const getAisStreamKey = () =>
+  getApiKey('AISSTREAM_API_KEY', 'b13504076b28b22035291257176edc65cd0ed6c4');
+const _inAppVessels = new Map();
+const _inAppVesselStatic = new Map();
+let _aisSocket = null;
+let _aisLastMsgTime = null;
+
+function ensureAisStream() {
+  if (
+    _aisSocket &&
+    (_aisSocket.readyState === 0 || _aisSocket.readyState === 1) // CONNECTING or OPEN
+  ) {
+    return;
+  }
+  try {
+    const ws = new WebSocket('wss://stream.aisstream.io/v0/stream');
+    _aisSocket = ws;
+    ws.onopen = () => {
+      try {
+        ws.send(
+          JSON.stringify({
+            APIKey: getAisStreamKey(),
+            BoundingBoxes: [[[-90, -180], [90, 180]]],
+            FilterMessageTypes: [
+              'PositionReport',
+              'StandardClassBPositionReport',
+              'ExtendedClassBPositionReport',
+              'ShipStaticData',
+              'StaticDataReport',
+            ],
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
+    };
+    ws.onmessage = async (event) => {
+      _aisLastMsgTime = new Date().toISOString();
+      try {
+        const text =
+          typeof event.data === 'string'
+            ? event.data
+            : await event.data.text();
+        const envelope = JSON.parse(text);
+        const messageType = envelope?.MessageType;
+        const message = envelope?.Message?.[messageType] || {};
+        const metadata = envelope?.MetaData || envelope?.Metadata || {};
+        const mmsi = String(
+          metadata.MMSI ??
+            message.UserID ??
+            message.UserId ??
+            message.Mmsi ??
+            '',
+        ).trim();
+        if (!mmsi) return;
+
+        if (
+          messageType === 'ShipStaticData' ||
+          messageType === 'StaticDataReport'
+        ) {
+          const staticData = {
+            name: String(
+              metadata.ShipName ??
+                message.Name ??
+                message.ShipName ??
+                message.ReportA?.Name ??
+                '',
+            ),
+            type: String(
+              message.Type ??
+                message.ShipType ??
+                message.ReportB?.ShipType ??
+                '',
+            ),
+            destination: String(message.Destination ?? ''),
+            imo: String(message.ImoNumber ?? message.IMO ?? ''),
+          };
+          _inAppVesselStatic.set(mmsi, staticData);
+          const existing = _inAppVessels.get(mmsi);
+          if (existing) {
+            if (staticData.name) existing.name = staticData.name;
+            if (staticData.type) existing.type = staticData.type;
+            if (staticData.destination)
+              existing.destination = staticData.destination;
+            if (staticData.imo) existing.imo = staticData.imo;
+          }
+        }
+
+        const lat = Number(
+          metadata.latitude ?? metadata.Latitude ?? message.Latitude,
+        );
+        const lon = Number(
+          metadata.longitude ?? metadata.Longitude ?? message.Longitude,
+        );
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+        const staticData = _inAppVesselStatic.get(mmsi) || {};
+        const name = String(
+          metadata.ShipName ??
+            message.Name ??
+            message.ShipName ??
+            message.ReportA?.Name ??
+            staticData.name ??
+            `MMSI ${mmsi}`,
+        ).trim();
+        const sog = Number(message.Sog ?? message.SOG);
+        const cog = Number(message.Cog ?? message.COG);
+        const heading = Number(message.TrueHeading ?? message.Heading);
+
+        _inAppVessels.set(mmsi, {
+          lat,
+          lon,
+          name: name || `MMSI ${mmsi}`,
+          mmsi,
+          imo: String(message.ImoNumber ?? message.IMO ?? staticData.imo ?? ''),
+          type: String(
+            message.Type ??
+              message.ShipType ??
+              message.ReportB?.ShipType ??
+              staticData.type ??
+              '',
+          ),
+          destination: String(
+            message.Destination ?? staticData.destination ?? '',
+          ),
+          speed: Number.isFinite(sog) && sog >= 0 && sog < 102.3 ? sog : null,
+          course: Number.isFinite(cog) && cog >= 0 && cog <= 360 ? cog : null,
+          heading:
+            Number.isFinite(heading) && heading >= 0 && heading < 360
+              ? heading
+              : null,
+          last_position_UTC: String(
+            metadata.time_utc ?? metadata.TimeUtc ?? new Date().toISOString(),
+          ),
+          last_position_epoch: Math.floor(Date.now() / 1000),
+          _updatedAt: Date.now(),
+        });
+
+        if (_inAppVessels.size > 15000) {
+          const firstKey = _inAppVessels.keys().next().value;
+          _inAppVessels.delete(firstKey);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    ws.onclose = () => {
+      _aisSocket = null;
+    };
+    ws.onerror = () => {
+      _aisSocket = null;
+    };
+  } catch {
+    _aisSocket = null;
+  }
+}
+
+export function vesselsResponse() {
+  ensureAisStream();
+  const rows = Array.from(_inAppVessels.values()).map(
+    ({ _updatedAt, ...row }) => row,
+  );
+  return jsonResponse(200, {
+    rows,
+    source: 'AISStream',
+    status: 'live',
+    error: null,
+    refreshing: false,
+    newestPositionAt: _aisLastMsgTime || new Date().toISOString(),
+    lastMessageAt: _aisLastMsgTime,
+  });
+}
+
 /** Routes this module answers, keyed by pathname. */
 const ROUTES = {
   '/api/gnss-integrity': (search, context) =>
@@ -556,12 +1216,34 @@ const ROUTES = {
     firePerimetersResponse({ upstream: context.upstream }),
   '/api/cyclones': (search, context) =>
     cyclonesResponse({ upstream: context.upstream }),
+  '/api/firms': (search, context) =>
+    firmsResponse({ upstream: context.upstream }),
+  '/api/firms/status': () => firmsStatusResponse(),
+  '/api/weather/manifest': (search, context) =>
+    weatherManifestResponse({ search, upstream: context.upstream }),
+  '/api/weather/image': (search, context) =>
+    weatherImageResponse({ search, upstream: context.upstream }),
+  '/api/weather/tile': (search, context) =>
+    weatherTileResponse({ search, upstream: context.upstream }),
+  '/api/wind/manifest': (search) => windManifestResponse({ search }),
+  '/api/wind/status': () =>
+    jsonResponse(200, { model: 'gfs', overlay: 'none' }),
   '/api/radio/stations': (search, context) =>
     radioStationsResponse({ upstream: context.upstream }),
   '/api/transit/feeds': () => transitFeedsResponse(),
   '/api/military-installations': () => militaryInstallationsResponse(),
   '/api/terrain/heights': (search, context) =>
     terrainHeightsResponse({ search, upstream: context.upstream }),
+  '/api/radiation': (search, context) =>
+    radiationResponse({ upstream: context.upstream }),
+  '/api/vessels': () => vesselsResponse(),
+  '/api/vessels/track': (search) =>
+    jsonResponse(200, { mmsi: '', samples: [], source: 'AISStream' }),
+  '/api/setup/status': () => {
+    const env = getAllApiKeys();
+    const status = keySetupStatus(env);
+    return jsonResponse(200, status);
+  },
 };
 
 /**
@@ -603,6 +1285,75 @@ export function installInAppApi({
             upstream: context.upstream,
           });
         }
+        if (url.pathname === '/api/setup/keys' && method === 'POST') {
+          try {
+            const bodyStr =
+              typeof init?.body === 'string'
+                ? init.body
+                : init?.body instanceof Uint8Array
+                  ? new TextDecoder().decode(init.body)
+                  : '{}';
+            const updates = JSON.parse(bodyStr);
+            const validation = validateKeySetupUpdates(updates);
+            if (!validation.ok) {
+              return jsonResponse(400, validation);
+            }
+            saveApiKeys(updates);
+            const env = getAllApiKeys();
+            const status = keySetupStatus(env);
+            setTimeout(() => {
+              if (typeof globalThis.location?.reload === 'function') {
+                globalThis.location.reload();
+              }
+            }, 1200);
+            return jsonResponse(200, {
+              ok: true,
+              saved: Object.keys(updates),
+              store: 'local storage',
+              status,
+            });
+          } catch (err) {
+            return jsonResponse(400, {
+              ok: false,
+              error: err.message || 'Invalid request',
+            });
+          }
+        }
+        if (
+          method === 'POST' &&
+          url.pathname.startsWith('/api/') &&
+          typeof globalThis.GodsEyeNative?.post === 'function'
+        ) {
+          try {
+            const headersObj = {};
+            if (init?.headers) {
+              const entries =
+                typeof init.headers.entries === 'function'
+                  ? init.headers.entries()
+                  : Object.entries(init.headers);
+              for (const [k, v] of entries) headersObj[k] = v;
+            }
+            const bodyStr =
+              typeof init?.body === 'string'
+                ? init.body
+                : init?.body instanceof Uint8Array
+                  ? new TextDecoder().decode(init.body)
+                  : '';
+            const rawRes = globalThis.GodsEyeNative.post(
+              url.pathname + url.search,
+              JSON.stringify(headersObj),
+              bodyStr,
+            );
+            const parsed = JSON.parse(rawRes);
+            return new Response(parsed.body || '', {
+              status: parsed.status || 200,
+              statusText: parsed.statusText || 'OK',
+              headers: { 'content-type': 'application/json' },
+            });
+          } catch {
+            /* fall through */
+          }
+        }
         const route = ROUTES[url.pathname];
         if (route) {
           if (method !== 'GET') {
@@ -613,6 +1364,12 @@ export function installInAppApi({
         // `/api/gbfs/<encoded target>` and `/api/transit/vehicles/<feedId>`
         // carry their subject in the path, so they are matched here rather
         // than in the fixed table.
+        if (url.pathname.startsWith('/api/wind/grid/')) {
+          if (method !== 'GET') {
+            return jsonResponse(405, { error: 'method_not_allowed' });
+          }
+          return windGridResponse();
+        }
         if (url.pathname.startsWith('/api/gbfs/')) {
           if (method !== 'GET') {
             return jsonResponse(405, { error: 'method_not_allowed' });

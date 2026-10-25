@@ -450,9 +450,8 @@ export async function initKeySetup({
       status: keySetupChipLabel(status),
     });
     chip.setAttribute('aria-label', chip.title);
-    // Fully powered is the owner's clean screen: the chip retires. The dialog
-    // stays reachable this session (and via ?setup=1) to swap or verify keys.
-    chip.hidden = status.setCount >= status.total;
+    // Always keep the Provider Settings chip reachable to manage keys
+    chip.hidden = false;
     if (!rowsHost) return;
     rowsHost.textContent = '';
     for (const key of status.keys || [])
@@ -557,6 +556,11 @@ export async function initKeySetup({
         });
       }
       say(t(doneMessageKey, { store: storeLabel() }));
+      if (payload.store === 'local storage') {
+        globalThis.setTimeout?.(() => {
+          globalThis.location?.reload?.();
+        }, 1500);
+      }
     } catch (error) {
       say(
         t('Save failed: {detail}', {

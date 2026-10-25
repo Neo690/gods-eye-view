@@ -665,9 +665,18 @@
     display: none;
   }
 
-  /* Key setup is a desktop/provider chore; it would sit on the credit line. */
+  /* Key setup / Ground Station provider settings on mobile */
   #key-setup-chip {
-    display: none !important;
+    display: inline-flex !important;
+    align-items: center;
+    gap: 4px;
+    height: 30px;
+    min-height: 30px;
+    padding: 0 8px;
+    font-size: 0.58rem;
+    line-height: 1;
+    white-space: nowrap;
+    border-radius: 4px;
   }
 
   /* That leaves the language picker alone in the corner, where its stock

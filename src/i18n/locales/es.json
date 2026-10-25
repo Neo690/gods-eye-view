@@ -2965,6 +2965,8 @@
   "Critical": "Crítico",
   "Warning": "Advertencia",
   "Dismiss alert": "Descartar alerta",
+  "Purge": "Purgar",
+  "Purge all alerts": "Purgar todas las alertas",
   "{count} new alerts": "{count} alertas nuevas",
   "Stop following your position": "Dejar de seguir tu posición",
   "Centre on my position": "Centrar en mi posición",

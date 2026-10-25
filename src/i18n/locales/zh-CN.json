@@ -2831,6 +2831,8 @@
   "Critical": "严重",
   "Warning": "警告",
   "Dismiss alert": "关闭此警报",
+  "Purge": "清除",
+  "Purge all alerts": "清除所有警报",
   "{count} new alerts": "{count} 条新警报",
   "Stop following your position": "停止跟随您的位置",
   "Centre on my position": "居中到我的位置",

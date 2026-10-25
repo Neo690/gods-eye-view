@@ -5,12 +5,20 @@ import { PbfWriter } from 'pbf';
 import {
   cyclonesResponse,
   firePerimetersResponse,
+  firmsResponse,
+  firmsStatusResponse,
   gbfsResponse,
   militaryInstallationsResponse,
+  radiationResponse,
   radioStationsResponse,
   terrainHeightsResponse,
   transitFeedsResponse,
   transitVehiclesResponse,
+  weatherImageResponse,
+  weatherManifestResponse,
+  weatherTileResponse,
+  windGridResponse,
+  windManifestResponse,
   gnssAnchorFromSearch,
   gnssIntegrityResponse,
   inAndroidShell,
@@ -591,9 +599,63 @@ test('the shim routes the paths that carry their subject', async () => {
       method: 'POST',
     });
     assert.equal(method.status, 405);
+
+    const radiation = await globalThis.fetch('/api/radiation');
+    // The stub upstream answers GTFS bytes, so radiation networks fail to parse,
+    // which results in 503 radiation_unavailable inside the route — proving the path is wired.
+    assert.equal(radiation.status, 503);
   } finally {
     globalThis.fetch = original;
   }
+});
+
+test('radiationResponse aggregates public radiation networks and handles failures gracefully', async () => {
+  const clock = Date.UTC(2026, 9, 25, 8, 0, 0);
+  const bfsData = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [10.5, 50.1] },
+        properties: {
+          kenn: 'bfs-1',
+          name: 'Station 1',
+          value: 0.12,
+          end_measure: '2026-10-25T07:00:00Z',
+        },
+      },
+    ],
+  };
+
+  const response = await radiationResponse({
+    now: () => clock,
+    upstream: async (url) => {
+      const decoded = decodeURIComponent(url);
+      if (decoded.includes('imis.bfs.de')) {
+        return new Response(JSON.stringify(bfsData), { status: 200 });
+      }
+      return new Response('upstream error', { status: 502 });
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('X-Data-Degraded'), 'true');
+  const body = await response.json();
+  assert.equal(body.fetchedAt, clock);
+  assert.equal(body.stations.length, 1);
+  assert.equal(body.stations[0].network, 'bfs');
+  assert.equal(body.sources.length, 4);
+  assert.equal(body.sources.find((s) => s.id === 'bfs').ok, true);
+  assert.equal(body.sources.find((s) => s.id === 'canada').ok, false);
+});
+
+test('radiationResponse returns 503 when all networks and space data fail', async () => {
+  const response = await radiationResponse({
+    upstream: async () => new Response('error', { status: 502 }),
+  });
+  assert.equal(response.status, 503);
+  const body = await response.json();
+  assert.equal(body.error, 'radiation_unavailable');
 });
 
 test('installing outside the shell changes nothing', async () => {
@@ -607,4 +669,78 @@ test('installing outside the shell changes nothing', async () => {
   });
   assert.equal(installed, false);
   assert.equal(called, false);
+});
+
+test('firmsResponse parses open NASA CSV and answers with fire records', async () => {
+  const csv = [
+    'latitude,longitude,brightness,scan,track,acq_date,acq_time,satellite,instrument,confidence,version,bright_t31,frp,daynight',
+    '-14.816,48.861,300.1,1.0,1.0,2026-10-23,1700,A,MODIS,50,6.1NRT,290.0,8.5,D',
+  ].join('\n');
+
+  const res = await firmsResponse({
+    now: () => NOW,
+    upstream: async () => new Response(csv, { status: 200 }),
+  });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.count, 1);
+  assert.equal(data.fires.length, 1);
+  assert.equal(data.fires[0].lat, -14.816);
+});
+
+test('weatherManifestResponse builds valid NOAA nowCOAST manifest', async () => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<WMS_Capabilities version="1.3.0">
+  <Capability>
+    <Layer>
+      <Name>conus_base_reflectivity_mosaic</Name>
+      <Dimension name="time" units="ISO8601">2026-10-23T17:50:00Z,2026-10-23T17:55:00Z</Dimension>
+    </Layer>
+  </Capability>
+</WMS_Capabilities>`;
+
+  const res = await weatherManifestResponse({
+    search: '?product=radar',
+    now: () => NOW,
+    upstream: async () => new Response(xml, { status: 200 }),
+  });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.product, 'radar');
+  assert.equal(data.schemaVersion, 1);
+  assert.equal(data.latest, '2026-10-23T17:55:00.000Z');
+});
+
+test('windManifestResponse and windGridResponse answer with valid GFS grid', async () => {
+  const mRes = windManifestResponse({ search: '?model=gfs', now: () => NOW });
+  assert.equal(mRes.status, 200);
+  const manifest = await mRes.json();
+  assert.equal(manifest.model, 'gfs');
+  assert.equal(manifest.grid.nx, 360);
+  assert.equal(manifest.grid.ny, 181);
+
+  const gRes = windGridResponse({ now: () => NOW });
+  assert.equal(gRes.status, 200);
+  const bytes = await gRes.arrayBuffer();
+  assert.equal(bytes.byteLength, 360 * 181 * 2 * 4);
+});
+
+test('weatherTileResponse answers with PNG for within bounds and transparent PNG for out of bounds', async () => {
+  // Out of bounds tile for radar (e.g. z=2, x=0, y=0 covers west=-180 to -135, radar starts at -130)
+  const oobRes = await weatherTileResponse({
+    search: '?product=radar&time=2026-10-23T17:55:00.000Z&z=2&x=0&y=0',
+  });
+  assert.equal(oobRes.status, 200);
+  assert.equal(oobRes.headers.get('content-type'), 'image/png');
+  const oobBytes = await oobRes.arrayBuffer();
+  assert.equal(oobBytes.byteLength, 334);
+
+  // In-bounds tile for radar
+  const fakePng = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const inRes = await weatherTileResponse({
+    search: '?product=radar&time=2026-10-23T17:55:00.000Z&z=2&x=1&y=1',
+    upstream: async () => new Response(fakePng, { status: 200 }),
+  });
+  assert.equal(inRes.status, 200);
+  assert.equal(inRes.headers.get('content-type'), 'image/png');
 });

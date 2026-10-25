@@ -315,6 +315,7 @@ export class IntelHUD {
             <div id="hud-gsd">GSD: --m  NIIRS: --</div>
             <div id="hud-alt">ALT: --m   SUN: --° EL</div>
             <div id="hud-ais-vessel" class="hud-ais-vessel">${t('AIS: --')}</div>
+            <div id="hud-windy" class="hud-windy" style="display:none"></div>
           </div>
           <div class="hud-bracket">┘</div>
         </div>
@@ -851,7 +852,11 @@ export class IntelHUD {
       });
       const data = response.data;
       if (revision !== this._summaryRevision) return;
-      if (isHudSummaryUnconfigured(response.status, data)) {
+      if (
+        response.status === 501 ||
+        response.status === 503 ||
+        isHudSummaryUnconfigured(response.status, data)
+      ) {
         this._setSummaryText(fallbackText, animate);
         return;
       }
@@ -1045,6 +1050,30 @@ export class IntelHUD {
       });
     }
     this._markSummaryDirty();
+  }
+
+  /**
+   * Update the Windy weather mini-readout in the bottom-right HUD corner.
+   * Call with `null` to hide the element (e.g. when the layer is disabled).
+   * @param {object|null} data - Weather data from {@link createWindyWeatherLayer}.
+   */
+  setWindyWeather(data) {
+    const el = document.getElementById('hud-windy');
+    if (!el) return;
+    if (!data) {
+      el.style.display = 'none';
+      el.textContent = '';
+      return;
+    }
+    const tempStr = data.tempC !== null && data.tempC !== undefined
+      ? `${data.tempC > 0 ? '+' : ''}${data.tempC}°C`
+      : null;
+    const windStr = data.windKmh !== null && data.windKmh !== undefined
+      ? `${data.windKmh} km/h`
+      : null;
+    const parts = [tempStr, windStr].filter(Boolean);
+    el.textContent = parts.length ? `\uD83C\uDF21 ${parts.join(' \xB7 ')}` : '';
+    el.style.display = parts.length ? '' : 'none';
   }
 
   /** Tear down all running intervals. Call when discarding the HUD instance. */

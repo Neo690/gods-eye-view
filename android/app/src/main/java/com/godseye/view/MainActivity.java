@@ -10,6 +10,7 @@ import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.GeolocationPermissions;
+import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -80,6 +81,7 @@ public class MainActivity extends Activity {
     settings.setJavaScriptEnabled(true);
     settings.setDomStorageEnabled(true);
     settings.setDatabaseEnabled(true);
+    settings.setGeolocationEnabled(true);
     settings.setMediaPlaybackRequiresUserGesture(false);
     settings.setAllowFileAccess(false);
     settings.setAllowContentAccess(false);
@@ -97,6 +99,7 @@ public class MainActivity extends Activity {
 
     webView.setWebViewClient(new AssetClient());
     webView.setWebChromeClient(new ChromeClient());
+    webView.addJavascriptInterface(new NativeBridge(), "GodsEyeNative");
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
       WebView.setWebContentsDebuggingEnabled(true);
@@ -106,6 +109,37 @@ public class MainActivity extends Activity {
       webView.loadUrl(START_URL);
     } else {
       webView.restoreState(savedInstanceState);
+    }
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+        android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+        () -> {
+          if (webView != null && webView.canGoBack()) {
+            webView.goBack();
+          } else {
+            finish();
+          }
+        }
+      );
+    }
+  }
+
+  @Override
+  protected void onPause() {
+    super.onPause();
+    if (webView != null) {
+      webView.onPause();
+      webView.pauseTimers();
+    }
+  }
+
+  @Override
+  protected void onResume() {
+    super.onResume();
+    if (webView != null) {
+      webView.onResume();
+      webView.resumeTimers();
     }
   }
 
@@ -348,6 +382,17 @@ public class MainActivity extends Activity {
     public boolean onConsoleMessage(android.webkit.ConsoleMessage message) {
       Log.d(TAG, message.message() + " @" + message.lineNumber());
       return true;
+    }
+  }
+
+  /** Exposes native relay capabilities to the in-app Web client. */
+  public final class NativeBridge {
+    @JavascriptInterface
+    public String post(String path, String headersJson, String body) {
+      if (apiForwarder != null && apiForwarder.isEnabled()) {
+        return apiForwarder.executePost(path, headersJson, body);
+      }
+      return "{\"status\":503,\"error\":\"no_server\"}";
     }
   }
 }

@@ -107,6 +107,20 @@ export class IncidentFeed {
     }
   }
 
+  /**
+   * Hide all active incidents until they clear (and `DISMISS_TTL_MS` has passed).
+   * @param {number} [at]
+   */
+  dismissAll(at = this._now()) {
+    for (const id of this._entries.keys()) {
+      this._dismissed.set(id, at);
+    }
+    while (this._dismissed.size > MAX_DISMISSALS) {
+      const oldest = this._dismissed.keys().next().value;
+      this._dismissed.delete(oldest);
+    }
+  }
+
   /** @param {string} id */
   isDismissed(id) {
     return this._dismissed.has(id);
@@ -262,10 +276,23 @@ function buildMarkup(doc, ids) {
   popup.setAttribute('role', 'dialog');
   popup.setAttribute('aria-labelledby', ids.heading);
   popup.hidden = true;
+
+  const header = doc.createElement('div');
+  header.className = 'alert-center-header';
   const heading = doc.createElement('div');
   heading.className = 'alert-center-heading';
   heading.id = ids.heading;
   heading.textContent = t('Alerts');
+
+  const purge = doc.createElement('button');
+  purge.type = 'button';
+  purge.className = 'alert-center-purge';
+  purge.setAttribute('aria-label', t('Purge all alerts'));
+  purge.title = t('Purge all alerts');
+  purge.textContent = t('Purge');
+  purge.hidden = true;
+  header.append(heading, purge);
+
   const note = doc.createElement('p');
   note.className = 'alert-center-note';
   note.textContent = t('Only the layers you have turned on are watched.');
@@ -274,9 +301,9 @@ function buildMarkup(doc, ids) {
   const empty = doc.createElement('p');
   empty.className = 'alert-center-empty';
   empty.textContent = t('No active incident.');
-  popup.append(heading, note, list, empty);
+  popup.append(header, note, list, empty);
   wrap.append(button, popup);
-  return { wrap, button, badge, popup, list, empty };
+  return { wrap, button, badge, popup, list, empty, purge };
 }
 
 /**
@@ -382,6 +409,7 @@ export function mountAlertCenter({
       'has-critical',
       items.some((item) => item.severity === INCIDENT_SEVERITY.critical),
     );
+    ui.purge.hidden = count === 0;
     if (!open) return;
     ui.list.textContent = '';
     for (const incident of items) ui.list.append(renderRow(incident));
@@ -405,6 +433,11 @@ export function mountAlertCenter({
   };
 
   const onButtonClick = () => setOpen(!open);
+  const onPurgeClick = () => {
+    feed.dismissAll(now());
+    writeDismissed(storage, feed.dismissedEntries());
+    render();
+  };
   const onDocumentPointer = (event) => {
     if (!open) return;
     if (ui.wrap.contains(event.target)) return;
@@ -418,6 +451,7 @@ export function mountAlertCenter({
   };
 
   ui.button.addEventListener('click', onButtonClick);
+  ui.purge.addEventListener('click', onPurgeClick);
   doc.addEventListener('pointerdown', onDocumentPointer, true);
   doc.addEventListener('keydown', onDocumentKey, true);
 
@@ -463,6 +497,7 @@ export function mountAlertCenter({
     if (scanTimer) globalThis.clearInterval?.(scanTimer);
     firstTimer = scanTimer = null;
     ui.button.removeEventListener('click', onButtonClick);
+    ui.purge.removeEventListener('click', onPurgeClick);
     doc.removeEventListener('pointerdown', onDocumentPointer, true);
     doc.removeEventListener('keydown', onDocumentKey, true);
     ui.wrap.closest?.('#top-center-actions')?.classList?.remove('alerts-open');
