@@ -357,3 +357,84 @@ test('the Weather readout receives enabled air-quality alongside weather layers'
     ],
   );
 });
+test('a row can carry a switch list for its networks beside its own list', async () => {
+  const { LayerPanel } = await import('./layerPanel.js');
+  const { railFixture } = await import('./railTestFixture.mjs');
+  const f = railFixture();
+  const previousDocument = globalThis.document;
+  globalThis.document = f.document;
+  const toggles = [];
+  const layers = [
+    {
+      id: 'radiation',
+      name: 'Radiation',
+      icon: '*',
+      source: 'Source',
+      enabled: true,
+      showInTogglePanel: true,
+      stats: {},
+    },
+  ];
+  const panel = new LayerPanel({
+    getLayers: () => layers,
+    isEnabled: () => true,
+    setEnabled() {},
+    setLayerParams() {},
+    hasRowControls: () => true,
+    subscribeRowControls() {},
+    getRowControls: () => ({
+      networks: {
+        ordered: false,
+        ariaLabel: 'Radiation networks',
+        items: [
+          {
+            id: 'bfs',
+            text: 'BfS ODL · 1566',
+            checked: true,
+            onClick: () => toggles.push(['bfs', false]),
+          },
+          {
+            id: 'uradmonitor',
+            text: 'uRADMonitor',
+            checked: false,
+            onClick: () => toggles.push(['uradmonitor', true]),
+          },
+        ],
+      },
+      list: {
+        ordered: false,
+        ariaLabel: 'Highest radiation readings in view',
+        items: [{ id: 'reading-1', text: '0.31 µSv/h' }],
+      },
+    }),
+  });
+  try {
+    panel.mount(f.container);
+    const row = f.find((node) => node.dataset?.layerId === 'radiation');
+    const networks = row.querySelector('.data-networks');
+    const readings = row.querySelector('.data-row-list--sequence');
+    assert.ok(networks, 'the switch list has its own container');
+    assert.ok(readings, 'the readings list is still its own container');
+    assert.notEqual(networks, readings);
+    assert.ok(
+      networks.classList.contains('switches'),
+      'a list of booleans draws switches',
+    );
+    const off = f.find(
+      (node) =>
+        node.tagName === 'BUTTON' && node.dataset?.listItemId === 'uradmonitor',
+      networks,
+    );
+    assert.equal(off.getAttribute('aria-checked'), 'false');
+    off.click();
+    assert.deepEqual(toggles, [['uradmonitor', true]]);
+    const on = f.find(
+      (node) => node.tagName === 'BUTTON' && node.dataset?.listItemId === 'bfs',
+      networks,
+    );
+    assert.equal(on.getAttribute('aria-checked'), 'true');
+  } finally {
+    panel.destroy();
+    globalThis.document = previousDocument;
+  }
+});

@@ -2853,5 +2853,8 @@
   "Natural background": "天然本底",
   "Elevated": "偏高",
   "Quiet": "平静",
-  "Storm": "风暴"
+  "Storm": "风暴",
+  "Radiation networks": "辐射网络",
+  "Stations: {count}": "站点: {count}",
+  "Needs an API key": "需要 API 密钥"
 }

@@ -3188,5 +3188,8 @@
   "Natural background": "الخلفية الطبيعية",
   "Elevated": "مرتفع",
   "Quiet": "هادئ",
-  "Storm": "عاصفة"
+  "Storm": "عاصفة",
+  "Radiation networks": "شبكات الإشعاع",
+  "Stations: {count}": "المحطات: {count}",
+  "Needs an API key": "مفتاح API مطلوب"
 }

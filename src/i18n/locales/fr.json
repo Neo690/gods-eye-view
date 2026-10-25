@@ -2987,5 +2987,8 @@
   "Natural background": "Bruit de fond naturel",
   "Elevated": "Élevé",
   "Quiet": "Calme",
-  "Storm": "Tempête"
+  "Storm": "Tempête",
+  "Radiation networks": "Réseaux de rayonnement",
+  "Stations: {count}": "Stations : {count}",
+  "Needs an API key": "Clé API requise"
 }

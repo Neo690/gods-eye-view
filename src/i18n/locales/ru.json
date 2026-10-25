@@ -3054,5 +3054,8 @@
   "Natural background": "Естественный фон",
   "Elevated": "Повышенный",
   "Quiet": "Спокойно",
-  "Storm": "Буря"
+  "Storm": "Буря",
+  "Radiation networks": "Сети радиации",
+  "Stations: {count}": "Станций: {count}",
+  "Needs an API key": "Требуется ключ API"
 }

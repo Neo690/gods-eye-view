@@ -9,7 +9,16 @@ import {
   formatDose,
   readingsInView,
 } from './records.js';
+import {
+  radiationNetworkList,
+  readDefaultStorage,
+  readHiddenNetworks,
+  setNetworkVisible,
+  visibleStations,
+  writeHiddenNetworks,
+} from './networks.js';
 export * from './records.js';
+export * from './networks.js';
 export { createRadiationSource } from './source.js';
 
 /** Station markers are readings, not extents. */
@@ -35,6 +44,12 @@ export function createRadiationLayer({ source } = {}) {
   let _viewer = null;
   let _request = null;
   let _dataSource = null;
+  /** Every station the last snapshot carried, before the row's switches. */
+  let _allStations = [];
+  /** The networks still drawn: what the row's switches leave on. */
+  let _hidden = new Set();
+  /** Per-network answer for the last snapshot, for the switches' counts. */
+  let _sources = [];
   let _stations = [];
   let _space = null;
   let _count = 0;
@@ -115,6 +130,9 @@ export function createRadiationLayer({ source } = {}) {
       _dataSource = new Cesium.CustomDataSource('radiation');
       _dataSource.show = false;
       viewer.dataSources.add(_dataSource);
+      _allStations = [];
+      _hidden = readHiddenNetworks(readDefaultStorage());
+      _sources = [];
       _stations = [];
       _space = null;
       _count = 0;
@@ -151,7 +169,9 @@ export function createRadiationLayer({ source } = {}) {
         const snapshot = await source.getSnapshot({ signal: request.signal });
         if (request.signal.aborted || _request !== request || !_enabled)
           return false;
-        _stations = snapshot.stations;
+        _allStations = snapshot.stations;
+        _sources = snapshot.sources || [];
+        _stations = visibleStations(_allStations, _hidden);
         _space = snapshot.space;
         render();
         _count = _stations.length;
@@ -198,6 +218,18 @@ export function createRadiationLayer({ source } = {}) {
         })),
         info: spaceLine() || undefined,
         infoTitle: _lastError ? translateFeedError(_lastError) : undefined,
+        networks: radiationNetworkList({
+          hidden: _hidden,
+          sources: _sources,
+          onToggle: (networkId, visible) => {
+            _hidden = setNetworkVisible(_hidden, networkId, visible);
+            writeHiddenNetworks(readDefaultStorage(), _hidden);
+            _stations = visibleStations(_allStations, _hidden);
+            _count = _stations.length;
+            render();
+            notify();
+          },
+        }),
         list: {
           ordered: false,
           ariaLabel: t('Highest radiation readings in view'),
@@ -249,6 +281,9 @@ export function createRadiationLayer({ source } = {}) {
       _request = null;
       _viewer = null;
       _enabled = false;
+      _allStations = [];
+      _hidden = new Set();
+      _sources = [];
       _stations = [];
       _space = null;
       rowControlsListener = null;

@@ -2987,5 +2987,8 @@
   "Natural background": "Fondo natural",
   "Elevated": "Elevado",
   "Quiet": "Tranquilo",
-  "Storm": "Tormenta"
+  "Storm": "Tormenta",
+  "Radiation networks": "Redes de radiación",
+  "Stations: {count}": "Estaciones: {count}",
+  "Needs an API key": "Requiere una clave API"
 }
