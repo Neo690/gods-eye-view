@@ -78,12 +78,26 @@ jobs:
           # token is public by design and scoped by the assets it may read.
           # Empty keeps the keyless Esri imagery fallback.
           CESIUM_ION_TOKEN: ${{ vars.CESIUM_ION_TOKEN }}
+          # The only other credential the browser itself needs. The Maps key is
+          # restricted by package name and signing certificate on the Google
+          # side, so inlining it is safe by the same rule as the ion token.
+          # Empty leaves the Google 3D basemap unavailable.
+          GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_API_KEY }}
         run: |
           if [ -n "$CESIUM_ION_TOKEN" ]; then
             echo "Cesium ion token: configured"
           else
             echo "Cesium ion token: none (the globe stays on keyless Esri imagery)"
           fi
+          if [ -n "$GOOGLE_MAPS_API_KEY" ]; then
+            echo "Google Maps key: configured"
+          else
+            echo "Google Maps key: none (the Google 3D basemap stays unavailable)"
+          fi
+          # Every other credential (OpenAI, Gemini, AISStream, FIRMS, TomTom,
+          # Windy, OpenSky, Mapillary, Launch Library) is server-only: the
+          # client asks /api/* and the data server holds the key. None of them
+          # may be inlined here — this bundle ships inside a public APK.
           npm run build
 
       - name: Bundle the build into the Android assets
