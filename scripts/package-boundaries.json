@@ -2639,7 +2639,11 @@
       "src/i18n/locales/ar.json",
       "src/data/incidentScan.js",
       "src/ui/alertCenter.js",
-      "src/ui/mapViewControls.js"
+      "src/ui/mapViewControls.js",
+      "src/layers/radiation/index.js",
+      "src/layers/radiation/source.js",
+      "src/layers/radiation/records.js",
+      "src/app/layers/radiation.js"
     ],
     "external": [
       "hls.js",
@@ -3210,7 +3214,11 @@
       "src/ui/layerNames.js",
       "src/layers/streetLevel/providers/mapillary/policy.js",
       "src/i18n/locales/fr.json",
-      "src/i18n/locales/ar.json"
+      "src/i18n/locales/ar.json",
+      "src/layers/radiation/index.js",
+      "src/layers/radiation/source.js",
+      "src/layers/radiation/records.js",
+      "src/app/layers/radiation.js"
     ],
     "external": [
       "hls.js",
@@ -3663,7 +3671,9 @@
       "src/layers/submarineCables/bundledSource.js",
       "src/layers/gnss/source.js",
       "src/layers/airQuality/model.js",
-      "src/layers/airQuality/source.js"
+      "src/layers/airQuality/source.js",
+      "src/layers/radiation/source.js",
+      "src/layers/radiation/records.js"
     ],
     "external": []
   },

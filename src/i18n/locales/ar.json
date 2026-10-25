@@ -3177,5 +3177,16 @@
   "Map windows": "نوافذ الخريطة",
   "Transit networks": "شبكات النقل",
   "Shown": "ظاهر",
-  "Hidden": "مخفي"
+  "Hidden": "مخفي",
+  "Radiation": "الإشعاع",
+  "Space radiation": "الإشعاع الفضائي",
+  "protons ≥10 MeV {flux} pfu": "بروتونات ≥10 MeV {flux} pfu",
+  "Kp {kp}": "مؤشر Kp {kp}",
+  "Radiation source unavailable": "مصدر الإشعاع غير متاح",
+  "Highest radiation readings in view": "أعلى قراءات الإشعاع في العرض",
+  "Background": "الخلفية",
+  "Natural background": "الخلفية الطبيعية",
+  "Elevated": "مرتفع",
+  "Quiet": "هادئ",
+  "Storm": "عاصفة"
 }

@@ -3043,5 +3043,16 @@
   "Map windows": "Окна карты",
   "Transit networks": "Сети транспорта",
   "Shown": "Показано",
-  "Hidden": "Скрыто"
+  "Hidden": "Скрыто",
+  "Radiation": "Радиация",
+  "Space radiation": "Космическая радиация",
+  "protons ≥10 MeV {flux} pfu": "протоны ≥10 МэВ {flux} pfu",
+  "Kp {kp}": "Kp-индекс {kp}",
+  "Radiation source unavailable": "Источник радиации недоступен",
+  "Highest radiation readings in view": "Наибольшие показатели радиации в поле зрения",
+  "Background": "Фон",
+  "Natural background": "Естественный фон",
+  "Elevated": "Повышенный",
+  "Quiet": "Спокойно",
+  "Storm": "Буря"
 }

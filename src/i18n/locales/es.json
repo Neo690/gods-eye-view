@@ -2976,5 +2976,16 @@
   "Map windows": "Ventanas del mapa",
   "Transit networks": "Redes de transporte",
   "Shown": "Visible",
-  "Hidden": "Oculto"
+  "Hidden": "Oculto",
+  "Radiation": "Radiación",
+  "Space radiation": "Radiación espacial",
+  "protons ≥10 MeV {flux} pfu": "protones ≥10 MeV {flux} pfu",
+  "Kp {kp}": "Índice Kp {kp}",
+  "Radiation source unavailable": "Fuente de radiación no disponible",
+  "Highest radiation readings in view": "Lecturas de radiación más altas en pantalla",
+  "Background": "Fondo",
+  "Natural background": "Fondo natural",
+  "Elevated": "Elevado",
+  "Quiet": "Tranquilo",
+  "Storm": "Tormenta"
 }

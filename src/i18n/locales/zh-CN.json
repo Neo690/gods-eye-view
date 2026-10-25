@@ -2842,5 +2842,16 @@
   "Map windows": "地图窗口",
   "Transit networks": "交通网络",
   "Shown": "已显示",
-  "Hidden": "已隐藏"
+  "Hidden": "已隐藏",
+  "Radiation": "辐射",
+  "Space radiation": "空间辐射",
+  "protons ≥10 MeV {flux} pfu": "质子 ≥10 MeV {flux} pfu",
+  "Kp {kp}": "Kp 指数 {kp}",
+  "Radiation source unavailable": "辐射数据源不可用",
+  "Highest radiation readings in view": "视野内最高辐射读数",
+  "Background": "本底",
+  "Natural background": "天然本底",
+  "Elevated": "偏高",
+  "Quiet": "平静",
+  "Storm": "风暴"
 }

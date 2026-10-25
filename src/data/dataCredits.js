@@ -405,6 +405,23 @@ export const DATA_CREDITS = [
     html: 'Observed weather: <a href="https://nowcoast.noaa.gov/" target="_blank" rel="noopener">NOAA nowCOAST</a> · NWS/OAR MRMS radar; NESDIS GOES and global satellite partners. <a href="https://oceanservice.noaa.gov/disclaimer.html" target="_blank" rel="noopener">Source disclaimer</a>.',
   },
   {
+    key: 'radiation-networks',
+    html:
+      'Ambient dose rate: <a href="https://odlinfo.bfs.de/ODL/EN/service/data-interface/data-interface.html" target="_blank" rel="noopener">BfS ODL</a> ' +
+      '(Bundesamt für Strahlenschutz, Germany) · ' +
+      '<a href="https://open.canada.ca/data/en/dataset/f0d1c3a9-cf78-4b07-af55-9e8d4303449e" target="_blank" rel="noopener">Health Canada FPSN</a> ' +
+      '(Open Government Licence – Canada) · <a href="https://safecast.org/data/" target="_blank" rel="noopener">Safecast</a> ' +
+      '(CC0; counts converted to an approximate dose rate) · ' +
+      '<a href="https://radmon.org/" target="_blank" rel="noopener">radmon.org</a> ' +
+      "(volunteer Geiger stations, counts scaled by each owner's published factor) · " +
+      '<a href="https://www.uradmonitor.com/" target="_blank" rel="noopener">uRADMonitor</a> ' +
+      '(CC BY 4.0; only the units of one account, omitted when its keys are unset). A reading is a station measurement, not a personal dose or an emergency warning.',
+  },
+  {
+    key: 'radiation-space',
+    html: 'Space radiation: <a href="https://www.swpc.noaa.gov/" target="_blank" rel="noopener">NOAA SWPC</a> · GOES integral proton flux (≥10 MeV) and the planetary K index. Space-weather conditions, not a health forecast.',
+  },
+  {
     key: 'weather-cyclones',
     html: 'Cyclone advisories: <a href="https://www.nhc.noaa.gov/" target="_blank" rel="noopener">NOAA/NWS NHC / CPHC</a> · Atlantic and eastern/central North Pacific. Forecast center uncertainty, not storm size.',
   },
