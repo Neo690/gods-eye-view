@@ -2,10 +2,14 @@ package com.godseye.view;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Message;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -92,6 +96,11 @@ public class MainActivity extends Activity {
     settings.setUseWideViewPort(true);
     settings.setCacheMode(WebSettings.LOAD_DEFAULT);
     settings.setJavaScriptCanOpenWindowsAutomatically(false);
+    // Every provider "get a key" link is target="_blank", which the WebView
+    // only delivers to onWindowCreate when multiple windows are enabled. The
+    // shell shows no second window: ChromeClient hands those URLs to the
+    // browser instead of dropping them.
+    settings.setSupportMultipleWindows(true);
     settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       settings.setSafeBrowsingEnabled(false);
@@ -288,7 +297,40 @@ public class MainActivity extends Activity {
       if (request == null || request.getUrl() == null) return false;
       // Everything the console loads is same-origin or a normal https fetch;
       // only a genuinely external link is handed to the system browser.
-      return !ASSET_HOST.equals(request.getUrl().getHost());
+      Uri target = request.getUrl();
+      if (ASSET_HOST.equals(target.getHost())) return false;
+      openExternally(target);
+      return true;
+    }
+  }
+
+  /** A popup target: same-origin stays in the console, the rest is external. */
+  private void routeWindow(Uri target) {
+    if (ASSET_HOST.equals(target.getHost())) {
+      if (webView != null) webView.loadUrl(target.toString());
+      return;
+    }
+    openExternally(target);
+  }
+
+  /**
+   * Hands an external URL to whatever app owns it (browser, Play Store, mail).
+   *
+   * <p>Claiming the navigation in {@link AssetClient#shouldOverrideUrlLoading}
+   * without starting the target app is what made every "get a key" link look
+   * dead: the shell answered "handled" and then did nothing.
+   */
+  private void openExternally(Uri target) {
+    String scheme = target.getScheme() == null ? "" : target.getScheme().toLowerCase(Locale.ROOT);
+    if (!"http".equals(scheme) && !"https".equals(scheme) &&
+      !"mailto".equals(scheme) && !"tel".equals(scheme)) {
+      Log.w(TAG, "Refusing to open " + target);
+      return;
+    }
+    try {
+      startActivity(new Intent(Intent.ACTION_VIEW, target));
+    } catch (ActivityNotFoundException | SecurityException noApp) {
+      Log.w(TAG, "No app can open " + target);
     }
   }
 
@@ -376,6 +418,46 @@ public class MainActivity extends Activity {
       pendingLocationCallback = callback;
       pendingLocationOrigin = origin;
       ensureLocation();
+    }
+
+    /**
+     * A target="_blank" link. Without this the WebView silently drops the
+     * popup, which is why the provider links did nothing when tapped.
+     */
+    @Override
+    public boolean onCreateWindow(
+      WebView view,
+      boolean isDialog,
+      boolean isUserGesture,
+      Message resultMsg
+    ) {
+      if (resultMsg == null || !(resultMsg.obj instanceof WebView.WebViewTransport)) {
+        return false;
+      }
+      // The URL of a popup only reaches a client, so resolve it in a throwaway
+      // WebView and destroy that as soon as the destination is known.
+      final WebView probe = new WebView(MainActivity.this);
+      probe.setWebViewClient(
+        new WebViewClient() {
+          @Override
+          public boolean shouldOverrideUrlLoading(WebView ignored, WebResourceRequest request) {
+            if (request == null || request.getUrl() == null) return true;
+            routeWindow(request.getUrl());
+            probe.destroy();
+            return true;
+          }
+
+          @Override
+          public boolean shouldOverrideUrlLoading(WebView ignored, String url) {
+            if (url != null) routeWindow(Uri.parse(url));
+            probe.destroy();
+            return true;
+          }
+        }
+      );
+      ((WebView.WebViewTransport) resultMsg.obj).setWebView(probe);
+      resultMsg.sendToTarget();
+      return true;
     }
 
     @Override
