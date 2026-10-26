@@ -97,8 +97,16 @@ jobs:
           if (-not $exe) { throw 'no packaged executable was produced' }
           # A free port: the runner may already have something on the default.
           $env:GEV_DESKTOP_PORT = '8791'
-          & $exe.FullName --verify
-          if ($LASTEXITCODE -ne 0) { throw "the packaged app did not answer /api/setup/status (exit $LASTEXITCODE)" }
+          # `Start-Process -Wait -PassThru` rather than `& $exe`: the app is a
+          # GUI-subsystem executable, so `&` returns at once and leaves
+          # $LASTEXITCODE unset — a check against that empty value fails on
+          # every run, whatever the app answered.
+          $app = Start-Process -FilePath $exe.FullName -ArgumentList '--verify' -Wait -PassThru
+          # The shell writes why it failed into the profile it ran under.
+          $log = Join-Path $env:APPDATA "Gods Eye View/logs/main.log"
+          if (Test-Path $log) { Get-Content $log -Tail 20 }
+          if ($app.ExitCode -ne 0) { throw "the packaged app did not answer /api/setup/status (exit $($app.ExitCode))" }
+          'the packaged app answered /api/setup/status'
 
       - name: Publish the installer to the rolling release
         shell: pwsh
