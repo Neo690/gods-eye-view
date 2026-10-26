@@ -1,0 +1,18 @@
+{
+  "appId": "app.netlify.godseyeview",
+  "appName": "God's Eye View",
+  "webDir": "dist",
+  "server": {
+    "url": "https://velvety-tapioca-c49d50.netlify.app",
+    "cleartext": false,
+    "allowNavigation": ["velvety-tapioca-c49d50.netlify.app"]
+  },
+  "backgroundColor": "#0a0a0f",
+  "android": {
+    "backgroundColor": "#0a0a0f"
+  },
+  "ios": {
+    "backgroundColor": "#0a0a0f",
+    "contentInset": "never"
+  }
+}
