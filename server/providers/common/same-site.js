@@ -60,10 +60,14 @@ export function sameSiteGated(handler) {
 /**
  * Proxy header values arrive client-controlled; read one only when it is a
  * single scheme token, never a comma-separated chain.
+ *
+ * Shared with the Gemini token route (`server/providers/gemini/request.js`),
+ * which needs the same scheme an `Origin` is compared against on a hosted
+ * instance, where TLS ends at the platform's relay.
  * @param {import('node:http').IncomingMessage} req
  * @returns {'http:'|'https:'}
  */
-function forwardedProtocol(req) {
+export function forwardedProtocol(req) {
   if (req.socket?.encrypted) return 'https:';
   const proto = String(req.headers?.['x-forwarded-proto'] || '')
     .trim()

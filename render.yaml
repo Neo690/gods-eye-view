@@ -29,6 +29,25 @@ services:
         sync: false
       - key: AISSTREAM_API_KEY
         sync: false
+      # Active fires (/api/firms). Unset, the route answers {"error":"no_key"}
+      # and the phone's fire layer stays empty. Server-side only: the app never
+      # sees this key.
+      - key: FIRMS_MAP_KEY
+        sync: false
+      # Gemini Live voice. /api/gemini/token mints the short-lived credential the
+      # app attaches to the Live socket, so the voice session needs this on the
+      # server even when the phone has its own key in Provider Settings.
+      - key: GEMINI_API_KEY
+        sync: false
+      # OpenSky OAuth for flights and military traffic. `auto` uses the client
+      # pair when present, then Basic, then anonymous access, so a missing pair
+      # degrades to the rate-limited public feed instead of an empty layer.
+      - key: OPENSKY_AUTH_MODE
+        value: auto
+      - key: OPENSKY_CLIENT_ID
+        sync: false
+      - key: OPENSKY_CLIENT_SECRET
+        sync: false
       # Account-scoped: only the uRADMonitor units this account owns or was
       # granted. Unset, the radiation snapshot skips the network and the four
       # keyless feeds still draw.

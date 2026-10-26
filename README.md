@@ -588,6 +588,45 @@ OAuth pair, and identifies selected Basic or auto mode without guessing which
 credentials runtime will accept. Basic and credentials-file modes remain
 advanced `dev-fresh.sh` configuration.
 
+### 📱 The keys the Android data server needs (Render)
+
+The phone hands the provider routes that need credentials server-side to a
+hosted copy of this server (`GEV_API_BASE`), so those keys belong to **that**
+service's environment — not to the APK, and not to the phone's Provider
+Settings, which can only light up what the app itself calls. The blueprint
+([render.yaml](render.yaml)) declares the names with `sync: false`; the values
+are pasted in **Render → your service → Environment** and never committed. A
+service that already exists keeps its own environment — the blueprint does not
+push later edits into it — so add each name of the tables below by hand once.
+
+| Variable | What it turns on in the phone |
+| --- | --- |
+| `FIRMS_MAP_KEY` | 🔥 Active fires. Unset, `/api/firms` answers `{"error":"no_key"}` and the layer draws nothing. |
+| `GEMINI_API_KEY` | 🎙️ Gemini Live voice — `/api/gemini/token` mints the ephemeral credential the session attaches. |
+| `OPENSKY_CLIENT_ID` + `OPENSKY_CLIENT_SECRET` | ✈️ Your own flight-polling allowance. Without a pair the shared quota answers `429 OpenSky rate limited` and the layer empties. |
+| `OPENSKY_AUTH_MODE` | `auto` (set in the blueprint): OAuth if the pair exists, then Basic, then anonymous — a missing key degrades instead of failing. |
+
+Already declared there and worth confirming against your `.env`:
+`OPENAI_API_KEY`, `AISSTREAM_API_KEY`, `TOMTOM_API_KEY`,
+`GOOGLE_MAPS_SERVER_API_KEY`, `URADMONITOR_USER_ID`,
+`URADMONITOR_USER_HASH`. Saving a variable restarts the service; a free
+instance also sleeps after 15 minutes idle, so the first request after a pause
+spends about a minute waking up.
+
+Two routes answer outside a browser, so they are the quick check after saving:
+
+```bash
+curl -s https://<your-service>.onrender.com/api/firms | head -c 120   # not {"error":"no_key"}
+curl -s -o /dev/null -w '%{http_code}\n' https://<your-service>.onrender.com/api/flights  # 200, not 429
+```
+
+Voice is the one to check in the app itself: `/api/gemini/token` takes the same
+two callers as the rest of the server — a same-origin page on the service, and
+the phone's own replay, which carries no `Origin` — so press the microphone and
+watch the Gemini session start, or read the panel's "Gemini access was refused"
+message if the key is still missing. Cross-site requests are still refused
+there, and a host the instance is not published on admits neither caller.
+
 <details>
 <summary>Advanced setup: environment variables and macOS Keychain</summary>
 

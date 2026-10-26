@@ -180,9 +180,17 @@ instead`. That is what keeps the satellites alive on a phone when the host
 cannot reach CelesTrak, which refuses rebroadcast from datacentre addresses.
 A `4xx` is a deliberate answer and is passed through untouched.
 
-### Known limit: POST endpoints
+### POST endpoints
 
 `WebResourceRequest` exposes a request's URL, method and headers but not its
-entity, so only `GET`/`HEAD` can be replayed. The HUD's AI summary and the
-voice tools post a body: with `LiveApi` they answer `405`, through a hosted
-forwarder `501`. Both need the browser build against the server.
+entity, so the interception path replays `GET`/`HEAD` only. The page's own
+`fetch` POSTs do not go that way: the in-app client hands them to the
+`GodsEyeNative.post` bridge (`MainActivity` → `ApiForwarder.executePost`), which
+carries the JSON body to the data server, so the HUD's AI summary and the Gemini
+voice token work against a hosted instance. Without one there is no server to
+post to: with `LiveApi` those routes answer `405`.
+
+Both need the data server itself configured, not the phone: `/api/gemini/token`
+mints the voice credential only on a host the service is published on (see
+`GEV_ALLOWED_HOSTS`) and only with `GEMINI_API_KEY` in its environment, and the
+AI summary spends the server's `OPENAI_API_KEY` the same way.

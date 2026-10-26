@@ -315,7 +315,6 @@ test('other methods, missing/cross origins, hostile hosts and cross-site metadat
     assert.equal(response.headers.get('allow'), 'POST');
   }
   for (const headers of [
-    { Origin: '' },
     { Origin: 'null' },
     { Origin: 'https://attacker.example' },
     { Origin: `${f.origin}/path` },
@@ -329,6 +328,71 @@ test('other methods, missing/cross origins, hostile hosts and cross-site metadat
   }
   assert.equal(f.calls.length, 0);
   assert.equal((await f.send()).status, 200);
+  // An empty Origin is not a browser shape — a browser sends its own origin or
+  // the opaque `null`, both refused above — so the shared gate reads the empty
+  // header as absent, which is how the shell's replay arrives.
+  assert.equal((await f.sendRaw({ headers: { Origin: '' } })).status, 200);
+});
+
+test('a published host admits the shell replay and its own origin, and nothing else', async (t) => {
+  const f = await fixture(t, { resolveAllowedHosts: () => 'globe.example' });
+  const relay = {
+    Host: 'globe.example',
+    'X-Forwarded-For': '203.0.113.9',
+    'X-Forwarded-Proto': 'https',
+  };
+  const raw = ({ headers, ...rest }) =>
+    new Promise((resolve, reject) => {
+      const req = http.request(
+        f.origin,
+        {
+          method: 'POST',
+          ...rest,
+          headers: { 'Content-Type': 'application/json', ...headers },
+        },
+        (res) => {
+          const chunks = [];
+          res.on('data', (chunk) => chunks.push(chunk));
+          res.on('end', () =>
+            resolve(
+              new Response(Buffer.concat(chunks), {
+                status: res.statusCode,
+                headers: res.headers,
+              }),
+            ),
+          );
+          res.on('error', reject);
+        },
+      );
+      req.on('error', reject);
+      req.end('{}');
+    });
+  // The Android shell replays /api/* from Java: no Origin, no Sec-Fetch-Site.
+  assert.equal((await raw({ headers: relay })).status, 200);
+  // The hosted app's own page: its Origin is compared against the scheme the
+  // relay terminated, so this instance can voice too.
+  assert.equal(
+    (
+      await raw({
+        headers: {
+          ...relay,
+          Origin: 'https://globe.example',
+          'Sec-Fetch-Site': 'same-origin',
+        },
+      })
+    ).status,
+    200,
+  );
+  // Every cross-site shape is still refused, and publishing one host does not
+  // publish another.
+  for (const headers of [
+    { ...relay, Origin: 'https://attacker.example' },
+    { ...relay, Origin: 'null' },
+    { ...relay, Origin: 'https://globe.example', 'Sec-Fetch-Site': 'cross-site' },
+    { ...relay, Host: 'other.example' },
+  ])
+    assert.equal((await raw({ headers })).status, 403);
+  assert.equal(f.calls.length, 2);
 });
 
 test('same-origin local and explicitly bound hosts work without trusting forwarded authority', async (t) => {
