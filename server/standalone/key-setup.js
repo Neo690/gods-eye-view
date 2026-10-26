@@ -54,21 +54,24 @@ const DEV_FRESH_EXTERNAL_KEYS_AT_BOOT = new Set(
 );
 
 /**
- * In-app key setup ("POWER UP" panel) — dev-server only.
+ * In-app key setup ("POWER UP" panel) — served by the dev AND preview servers.
  *
  * GET  /api/setup/status → which keys are configured, as presence plus a
  *   source classification. Never a value or suffix. The panel renders itself entirely from
  *   this payload, so the key registry stays in one place (src/keySetupCore.mjs).
  * POST /api/setup/keys → validate {ENV_VAR: value} pairs and upsert them into
- *   the repo-root .env (created if absent), set process.env live, then restart
- *   the dev server so the client-exposed defines re-inject and the page
- *   reloads itself. Pasting a key in the app IS the whole setup — no
- *   hand-edited env files.
+ *   the repo-root .env (created if absent), then set process.env live. A dev
+ *   server follows that with a restart, so the client-exposed defines
+ *   re-inject and the page reloads itself. Pasting a key in the app IS the
+ *   whole setup — no hand-edited env files.
  *
  * Loopback-only on purpose: with HOST=0.0.0.0 the app can be shared on a LAN,
  * and a guest must be able to neither write the host's .env nor probe which
- * keys exist. Prod builds never register this middleware (apply: 'serve'), so
- * the panel's status fetch fails and the client removes the whole surface.
+ * keys exist. Both servers register this middleware — the packaged desktop app
+ * runs `vite preview`, where the panel has to work too — and the ADMISSION gate
+ * below is what refuses every request that did not come from this machine's own
+ * browser. A visitor who cannot reach the endpoints fails the panel's status
+ * fetch, and the client removes the whole surface.
  */
 function keySetupEndpoint({ sourceRoot = defaultSourceRoot } = {}) {
   const respond = (res, statusCode, payload) => {
@@ -237,128 +240,147 @@ function keySetupEndpoint({ sourceRoot = defaultSourceRoot } = {}) {
       throw error;
     }
   };
-  return {
-    name: 'gev-key-setup',
-    // serve AND not preview: `vite preview` resolves with command 'serve' too,
-    // so a bare apply:'serve' would still configure under preview. The endpoints
-    // only install via configureServer (never configurePreviewServer), so they
-    // are absent from preview today — but pinning apply here makes that a
-    // guarantee rather than an accident of which hook a future edit uses.
-    apply: (_config, { command, isPreview }) =>
-      command === 'serve' && !isPreview,
-    configureServer(server) {
-      server.middlewares.use('/api/setup/status', (req, res) => {
-        if (req.method !== 'GET')
-          return respond(res, 405, {
-            error: 'Method not allowed',
-            code: 'method',
-          });
-        const admission = admit(req);
-        if (!admission.ok)
-          return respond(res, admission.status, refusal(admission));
-        respond(res, 200, providerStatus());
-      });
-      server.middlewares.use('/api/setup/keys', (req, res) => {
-        if (req.method !== 'POST')
-          return respond(res, 405, {
-            error: 'Method not allowed',
-            code: 'method',
-          });
-        const admission = admit(req);
-        if (!admission.ok)
-          return respond(res, admission.status, refusal(admission));
-        let body = '';
-        let overflowed = false;
-        req.on('data', (chunk) => {
-          body += chunk;
-          if (body.length > 8192) {
-            overflowed = true;
-            req.destroy();
-          }
+  // Both servers, one contract: whichever one is answering, these routes exist
+  // and every request is admitted — or refused — by the same gate. The one
+  // honest difference is `canRestart`: a dev server restarts itself to
+  // re-inject the client-exposed defines, and a preview server (the packaged
+  // desktop app runs one) cannot, so it says so rather than promising a reload
+  // that never comes.
+  const install = (server) => {
+    const canRestart = typeof server.restart === 'function';
+    server.middlewares.use('/api/setup/status', (req, res) => {
+      if (req.method !== 'GET')
+        return respond(res, 405, {
+          error: 'Method not allowed',
+          code: 'method',
         });
-        req.on('end', () => {
-          if (overflowed)
-            return respond(res, 413, {
-              error: 'Request too large',
-              code: 'too-large',
-            });
-          let parsed;
-          try {
-            parsed = JSON.parse(body || '{}');
-          } catch {
-            return respond(res, 400, {
-              error: 'Invalid JSON',
-              code: 'invalid-json',
-            });
-          }
-          const verdict = validateKeySetupUpdates(parsed);
-          if (!verdict.ok) return respond(res, 400, refusal(verdict));
-          // Neither a replace NOR a removal may touch an externally-supplied
-          // credential (shell env, Keychain, another workflow). This backs the
-          // UI's read-only "configured externally" state with a real contract —
-          // and it must guard replace too, not just remove: a clickjacked or
-          // scripted same-origin POST could otherwise overwrite the live value.
-          const inStore = storeValues();
-          for (const name of Object.keys(verdict.updates)) {
-            if (isExternallyManaged(name, inStore)) {
-              return respond(res, 409, {
-                error: `${name} is configured outside Provider Settings and can only be changed where it was set`,
-                code: 'external',
-                params: { name },
-              });
-            }
-          }
-          try {
-            persistStore(upsertDotenvValues(readStore(), verdict.updates));
-          } catch (error) {
-            // The hardening failure carries its own honest, path-free message —
-            // "saved world-readable" must never be reported as a generic write
-            // error. Everything else returns a fixed message (a raw filesystem
-            // error can carry an absolute path; that stays in the server log).
-            if (
-              error?.code === 'GEV_HARDEN_FAILED' ||
-              error?.code === 'GEV_STORE_UNREADABLE'
-            ) {
-              return respond(res, 500, {
-                error: `The key was not saved: ${error.message}`,
-                code:
-                  error.code === 'GEV_HARDEN_FAILED'
-                    ? 'harden-failed'
-                    : 'store-unreadable',
-              });
-            }
-            return respond(res, 500, {
-              error: `Could not write the ${storeName()} store`,
-              code: 'write-failed',
-              params: { store: storeName() },
-            });
-          }
-          // Live for the server-side proxies immediately; the restart below is
-          // what re-injects the client-exposed defines (Google, Cesium ion).
-          // Removal sets '' rather than deleting: an empty value stays falsy
-          // through loadEnv after restart, matching the Pinokio launcher's own
-          // blank-field semantics.
-          for (const [name, value] of Object.entries(verdict.updates)) {
-            process.env[name] = value === null ? '' : value;
-          }
-          respond(res, 200, {
-            ok: true,
-            saved: Object.keys(verdict.updates),
-            status: providerStatus(),
-            restarting: true,
+      const admission = admit(req);
+      if (!admission.ok)
+        return respond(res, admission.status, refusal(admission));
+      respond(res, 200, providerStatus());
+    });
+    server.middlewares.use('/api/setup/keys', (req, res) => {
+      if (req.method !== 'POST')
+        return respond(res, 405, {
+          error: 'Method not allowed',
+          code: 'method',
+        });
+      const admission = admit(req);
+      if (!admission.ok)
+        return respond(res, admission.status, refusal(admission));
+      let body = '';
+      let overflowed = false;
+      req.on('data', (chunk) => {
+        body += chunk;
+        if (body.length > 8192) {
+          overflowed = true;
+          req.destroy();
+        }
+      });
+      req.on('end', () => {
+        if (overflowed)
+          return respond(res, 413, {
+            error: 'Request too large',
+            code: 'too-large',
           });
+        let parsed;
+        try {
+          parsed = JSON.parse(body || '{}');
+        } catch {
+          return respond(res, 400, {
+            error: 'Invalid JSON',
+            code: 'invalid-json',
+          });
+        }
+        const verdict = validateKeySetupUpdates(parsed);
+        if (!verdict.ok) return respond(res, 400, refusal(verdict));
+        // Neither a replace NOR a removal may touch an externally-supplied
+        // credential (shell env, Keychain, another workflow). This backs the
+        // UI's read-only "configured externally" state with a real contract —
+        // and it must guard replace too, not just remove: a clickjacked or
+        // scripted same-origin POST could otherwise overwrite the live value.
+        const inStore = storeValues();
+        for (const name of Object.keys(verdict.updates)) {
+          if (isExternallyManaged(name, inStore)) {
+            return respond(res, 409, {
+              error: `${name} is configured outside Provider Settings and can only be changed where it was set`,
+              code: 'external',
+              params: { name },
+            });
+          }
+        }
+        try {
+          persistStore(upsertDotenvValues(readStore(), verdict.updates));
+        } catch (error) {
+          // The hardening failure carries its own honest, path-free message —
+          // "saved world-readable" must never be reported as a generic write
+          // error. Everything else returns a fixed message (a raw filesystem
+          // error can carry an absolute path; that stays in the server log).
+          if (
+            error?.code === 'GEV_HARDEN_FAILED' ||
+            error?.code === 'GEV_STORE_UNREADABLE'
+          ) {
+            return respond(res, 500, {
+              error: `The key was not saved: ${error.message}`,
+              code:
+                error.code === 'GEV_HARDEN_FAILED'
+                  ? 'harden-failed'
+                  : 'store-unreadable',
+            });
+          }
+          return respond(res, 500, {
+            error: `Could not write the ${storeName()} store`,
+            code: 'write-failed',
+            params: { store: storeName() },
+          });
+        }
+        // Live for the server-side proxies immediately: they read the
+        // environment per request. Only the client-exposed defines (Google
+        // Maps, Cesium ion, Mapillary) are baked into the built bundle, which
+        // is exactly what a dev restart re-injects and what no preview server
+        // can re-do without a rebuild — so `restarting` reports whether one
+        // is actually coming, and the panel says what that means.
+        // Removal sets '' rather than deleting: an empty value stays falsy
+        // through loadEnv after restart, matching the Pinokio launcher's own
+        // blank-field semantics.
+        for (const [name, value] of Object.entries(verdict.updates)) {
+          process.env[name] = value === null ? '' : value;
+        }
+        respond(res, 200, {
+          ok: true,
+          saved: Object.keys(verdict.updates),
+          status: providerStatus(),
+          restarting: canRestart,
+        });
+        if (canRestart) {
           // One deliberate restart, after the response has flushed. Vite's own
           // .env watcher may fire too; a second queued restart is harmless.
+          // Routed through a resolved promise so a synchronous throw out of
+          // restart() is reported, never an uncaught exception.
           setTimeout(() => {
-            server.restart().catch((error) => {
-              console.warn(
-                '[KeySetup] Dev-server restart failed:',
-                error?.message || error,
-              );
-            });
+            Promise.resolve()
+              .then(() => server.restart())
+              .catch((error) => {
+                console.warn(
+                  '[KeySetup] Dev-server restart failed:',
+                  error?.message || error,
+                );
+              });
           }, 250);
-        });
+        }
       });
+    });
+  };
+  return {
+    name: 'gev-key-setup',
+    // `vite preview` resolves with command 'serve' too, so this admits both
+    // servers and still keeps the plugin out of `vite build`.
+    apply: (_config, { command }) => command === 'serve',
+    configureServer(server) {
+      install(server);
+    },
+    configurePreviewServer(server) {
+      install(server);
     },
   };
 }

@@ -401,6 +401,8 @@
   "Saving…": "正在保存…",
   "Save failed: {detail}": "保存失败：{detail}",
   "Paste at least one key first.": "请先粘贴至少一个密钥。",
+  "Applied to {store}. Active now.": "已应用到 {store}。立即生效。",
+  "Applied to {store}. Active now; a rebuild is needed for {keys}.": "已应用到 {store}。立即生效；{keys} 需要重新构建应用。",
   "Saved to {store}. Restarting — this page reloads itself.": "已保存到 {store}。正在重启——本页面将自动重新加载。",
   "Cloud voice will use OPENAI_API_KEY on the next session.": "云语音将在下次会话使用 OPENAI_API_KEY。",
   "Checking local ChatGPT OAuth sign-in…": "正在检查本机 ChatGPT OAuth 登录…",

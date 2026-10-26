@@ -782,6 +782,8 @@
   "Save failed ({status}).": "Error al guardar ({status}).",
   "Save failed: {detail}": "Error al guardar: {detail}",
   "Paste at least one key first.": "Pega al menos una clave primero.",
+  "Applied to {store}. Active now.": "Aplicado en {store}. Ya está activo.",
+  "Applied to {store}. Active now; a rebuild is needed for {keys}.": "Aplicado en {store}. Ya está activo; hace falta recompilar para {keys}.",
   "Saved to {store}. Restarting — this page reloads itself.": "Guardado en {store}. Reiniciando — esta página se recarga sola.",
   "Removed from {store}. Restarting — this page reloads itself.": "Eliminado de {store}. Reiniciando — esta página se recarga sola.",
   "your app configuration": "tu configuración de la app",

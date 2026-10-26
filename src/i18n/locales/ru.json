@@ -69,6 +69,8 @@
   "Save failed ({status}).": "Не удалось сохранить ({status}).",
   "Save failed: {detail}": "Не удалось сохранить: {detail}",
   "Paste at least one key first.": "Сначала вставьте хотя бы один ключ.",
+  "Applied to {store}. Active now.": "Применено: {store}. Действует сразу.",
+  "Applied to {store}. Active now; a rebuild is needed for {keys}.": "Применено: {store}. Действует сразу; для {keys} нужна пересборка.",
   "Saved to {store}. Restarting — this page reloads itself.": "Сохранено: {store}. Перезапуск — страница перезагрузится сама.",
   "Remove this key from your saved configuration?": "Удалить этот ключ из сохранённой конфигурации?",
   "Removed from {store}. Restarting — this page reloads itself.": "Удалено: {store}. Перезапуск — страница перезагрузится сама.",

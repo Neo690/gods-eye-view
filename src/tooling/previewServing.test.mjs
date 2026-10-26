@@ -1,31 +1,30 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { writeFile, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { build, createServer, preview } from 'vite';
 import { localProviderPlugins } from '../../server/providers/local.js';
 import { apiNotFoundPlugin } from '../../server/standalone/api-not-found.js';
 import { makeFixtureRoot } from './fixtureRoot.mjs';
 
-test('data providers have both hooks; credential editing stays development-only', () => {
+test('every provider has both hooks; credential editing serves both servers and never a build', () => {
   const plugins = localProviderPlugins();
   assert.ok(plugins.some(({ name }) => name === 'fire-perimeters'));
   assert.ok(plugins.some(({ name }) => name === 'gnss-integrity'));
   for (const plugin of plugins) {
-    if (plugin.name === 'gev-key-setup') {
-      assert.equal(plugin.configurePreviewServer, undefined);
-      assert.equal(
-        plugin.apply({}, { command: 'serve', isPreview: true }),
-        false,
-      );
-      assert.equal(
-        plugin.apply({}, { command: 'serve', isPreview: false }),
-        true,
-      );
-      continue;
-    }
     assert.equal(typeof plugin.configureServer, 'function', plugin.name);
     assert.equal(typeof plugin.configurePreviewServer, 'function', plugin.name);
+    if (plugin.name !== 'gev-key-setup') continue;
+    // The packaged desktop app runs `vite preview`, so Provider Settings works
+    // there too; what keeps every other caller out is the admission gate below,
+    // not which hook installed the routes.
+    assert.equal(plugin.apply({}, { command: 'serve', isPreview: true }), true);
+    assert.equal(
+      plugin.apply({}, { command: 'serve', isPreview: false }),
+      true,
+    );
+    assert.equal(plugin.apply({}, { command: 'build' }), false);
   }
 });
 
@@ -116,7 +115,7 @@ test('real dev and built-preview servers serve provider JSON and terminate unkno
         ['/api/mapillary/status', 200],
         ['/api/mapillary/tiles/coverage/14/1/2', 503],
         ['/api/radio/unknown', 404],
-        ['/api/setup/status', isPreview ? 404 : 200],
+        ['/api/setup/status', 200],
         ['/api/setup/update', 404],
         ['/api/does-not-exist', 404],
         ['/api', 404],
@@ -139,25 +138,36 @@ test('real dev and built-preview servers serve provider JSON and terminate unkno
           assert.deepEqual(body, { configured: false }, route);
         if (route.startsWith('/api/mapillary/tiles'))
           assert.deepEqual(body, { error: 'no_key', keyRequired: true }, route);
-        if (
-          route === '/api/does-not-exist' ||
-          (isPreview && route.startsWith('/api/setup'))
-        ) {
+        if (route === '/api/does-not-exist') {
           assert.deepEqual(body, { error: 'Unknown API route' });
           assert.equal(response.headers.get('cache-control'), 'no-store');
+        }
+        if (route === '/api/setup/status') {
+          assert.ok(Array.isArray(body.keys) && body.keys.length, route);
+          assert.equal(typeof body.setCount, 'number', route);
         }
       }
       const tle = await fetch(origin + '/api/celestrak/invalid!');
       assert.equal(tle.status, 400);
       assert.equal(await tle.text(), 'invalid group');
       if (isPreview) {
-        const write = await fetch(origin + '/api/setup/keys', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ GOOGLE_MAPS_API_KEY: 'must-not-save' }),
-        });
-        assert.equal(write.status, 404);
-        assert.deepEqual(await write.json(), { error: 'Unknown API route' });
+        // The preview server serves Provider Settings now, because the packaged
+        // desktop app runs one. Its admission gate is the boundary: a POST with
+        // no Origin, and one carrying proxy headers, are both refused, and
+        // neither can write the store.
+        for (const [code, headers] of [
+          ['origin-required', {}],
+          ['proxied', { Origin: origin, 'X-Forwarded-For': '203.0.113.7' }],
+        ]) {
+          const write = await fetch(origin + '/api/setup/keys', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...headers },
+            body: JSON.stringify({ GOOGLE_MAPS_API_KEY: 'must-not-save' }),
+          });
+          assert.equal(write.status, 403, `preview setup/keys ${code}`);
+          assert.equal((await write.json()).code, code);
+        }
+        assert.equal(existsSync(path.join(root, '.env')), false);
       }
       for (const route of ['/', '/application-route', '/apiary']) {
         const response = await fetch(origin + route);

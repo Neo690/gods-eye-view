@@ -215,6 +215,28 @@ export function stripKeylessBasemapFromHash(hash) {
   }
 }
 
+/**
+ * Which of the values just sent belong to a browser-side key: the ones the
+ * BUILT bundle carries, so only a rebuild picks them up. Read from the server's
+ * own registry (the status payload's `clientExposed`, src/keySetupCore.mjs) so
+ * no second list of names can drift from it. Pure, exported for tests.
+ * @param {{keys?: Array<{title?: string, clientExposed?: boolean, envVars?: string[]}>}|null} status
+ * @param {Record<string, unknown>} updates The {ENV_VAR: value} map that was sent.
+ * @returns {string[]} Titles of the affected rows, in status order.
+ */
+export function clientExposedKeyTitles(status, updates) {
+  const names = new Set(Object.keys(updates || {}));
+  if (!names.size) return [];
+  return (status?.keys || [])
+    .filter(
+      (key) =>
+        key?.clientExposed &&
+        (key.envVars || []).some((name) => names.has(name)),
+    )
+    .map((key) => key.title)
+    .filter(Boolean);
+}
+
 const TIER_DOTS = Object.freeze({ metered: '🔴', paid: '🔴', free: '🟡' });
 
 function updateCloudVoiceAuthControl(auth, busy = false) {
@@ -555,7 +577,24 @@ export async function initKeySetup({
           signal: lifetime.signal,
         });
       }
-      say(t(doneMessageKey, { store: storeLabel() }));
+      // A server that cannot restart itself says so (server/standalone/
+      // key-setup.js): its data sources read the key immediately, while any
+      // browser-side key it reports was baked into the bundle we are running
+      // and waits for a rebuild. Say which is which instead of promising a
+      // reload that will not come.
+      const baked = clientExposedKeyTitles(payload.status, updates);
+      if (payload.restarting === false) {
+        say(
+          baked.length
+            ? t(
+                'Applied to {store}. Active now; a rebuild is needed for {keys}.',
+                { store: storeLabel(), keys: baked.join(', ') },
+              )
+            : t('Applied to {store}. Active now.', { store: storeLabel() }),
+        );
+      } else {
+        say(t(doneMessageKey, { store: storeLabel() }));
+      }
       if (payload.store === 'local storage') {
         globalThis.setTimeout?.(() => {
           globalThis.location?.reload?.();

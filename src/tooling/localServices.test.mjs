@@ -665,13 +665,19 @@ test('debug logging resolves each supplied application directory independently',
   }
 });
 
-test('key setup writes only the supplied application root, retains request guards and stays absent from preview', async (t) => {
+test('key setup writes only the supplied application root, keeps its request guards on both servers, and reports a restart only where one can happen', async (t) => {
   const first = root(t),
     untouched = root(t);
   env(t, 'OPENAI_API_KEY', undefined);
   const plugin = keySetupEndpoint({ sourceRoot: first });
-  assert.equal(plugin.apply({}, { command: 'serve', isPreview: true }), false);
-  assert.equal(plugin.configurePreviewServer, undefined);
+  // Both servers carry the routes — the packaged desktop app runs `vite
+  // preview` — while a build never does.
+  assert.equal(plugin.apply({}, { command: 'serve', isPreview: false }), true);
+  assert.equal(plugin.apply({}, { command: 'serve', isPreview: true }), true);
+  assert.equal(plugin.apply({}, { command: 'build' }), false);
+  const setupRoutes = ['/api/setup/keys', '/api/setup/status'];
+  assert.deepEqual([...install(plugin).keys()].sort(), setupRoutes);
+  assert.deepEqual([...install(plugin, true).keys()].sort(), setupRoutes);
   const routes = install(plugin);
   const handler = routes.get('/api/setup/keys');
   const body = JSON.stringify({
@@ -690,6 +696,8 @@ test('key setup writes only the supplied application root, retains request guard
   assert.equal(existsSync(path.join(first, '.env')), false);
   const saved = await request(handler, { method: 'POST', body });
   assert.equal(saved.status, 200);
+  // A dev server reloads the page itself, so the panel may promise that.
+  assert.equal(saved.json().restarting, true);
   assert.match(
     readFileSync(path.join(first, '.env'), 'utf8'),
     /OPENAI_API_KEY=sk-fixture-only-not-a-real-key/,
@@ -698,6 +706,27 @@ test('key setup writes only the supplied application root, retains request guard
     assert.equal(statSync(path.join(first, '.env')).mode & 0o777, 0o600);
   assert.equal(saved.body.includes('sk-fixture-only-not-a-real-key'), false);
   assert.equal(existsSync(path.join(untouched, '.env')), false);
+  // A preview server has no restart to offer. The same guards stay in force and
+  // the write still lands, so the panel can say what applies when instead of
+  // promising a reload that will never come.
+  const previewRoutes = new Map();
+  plugin.configurePreviewServer({
+    middlewares: { use: (route, handler) => previewRoutes.set(route, handler) },
+  });
+  const previewHandler = previewRoutes.get('/api/setup/keys');
+  assert.equal(
+    (
+      await request(previewHandler, {
+        method: 'POST',
+        body,
+        origin: 'https://example.com',
+      })
+    ).status,
+    403,
+  );
+  const previewSaved = await request(previewHandler, { method: 'POST', body });
+  assert.equal(previewSaved.status, 200);
+  assert.equal(previewSaved.json().restarting, false);
 });
 
 test('Realtime service configuration selects compatible endpoint/model without forwarding request model IDs or keys', async () => {

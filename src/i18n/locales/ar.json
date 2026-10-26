@@ -421,6 +421,8 @@
   "Saving…": "جارٍ الحفظ…",
   "Save failed: {detail}": "فشل الحفظ: {detail}",
   "Paste at least one key first.": "الصق مفتاحاً واحداً على الأقل أولاً.",
+  "Applied to {store}. Active now.": "طُبِّق على {store}. يعمل الآن.",
+  "Applied to {store}. Active now; a rebuild is needed for {keys}.": "طُبِّق على {store}. يعمل الآن؛ يلزم إعادة البناء لـ {keys}.",
   "Saved to {store}. Restarting — this page reloads itself.": "حُفظ في {store}. إعادة التشغيل — تعيد هذه الصفحة تحميل نفسها.",
   "Cloud voice will use OPENAI_API_KEY on the next session.": "سيستخدم الصوت السحابي OPENAI_API_KEY في الجلسة التالية.",
   "Checking local ChatGPT OAuth sign-in…": "جارٍ فحص تسجيل دخول OAuth المحلي لـ ChatGPT…",

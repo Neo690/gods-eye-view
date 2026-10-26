@@ -409,6 +409,8 @@
   "Saving…": "Enregistrement…",
   "Save failed: {detail}": "Échec de l'enregistrement : {detail}",
   "Paste at least one key first.": "Collez d'abord au moins une clé.",
+  "Applied to {store}. Active now.": "Appliqué à {store}. Actif immédiatement.",
+  "Applied to {store}. Active now; a rebuild is needed for {keys}.": "Appliqué à {store}. Actif immédiatement ; une reconstruction est nécessaire pour {keys}.",
   "Saved to {store}. Restarting — this page reloads itself.": "Enregistré dans {store}. Redémarrage — cette page se recharge.",
   "Cloud voice will use OPENAI_API_KEY on the next session.": "La voix cloud utilisera OPENAI_API_KEY à la prochaine session.",
   "Checking local ChatGPT OAuth sign-in…": "Vérification de la connexion OAuth ChatGPT locale…",
