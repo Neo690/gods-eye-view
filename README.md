@@ -599,11 +599,11 @@ are pasted in **Render → your service → Environment** and never committed. A
 service that already exists keeps its own environment — the blueprint does not
 push later edits into it — so add each name of the tables below by hand once.
 
-| Variable | What it turns on in the phone |
+| Variable | What it turns on in the server, and what that changes on the phone |
 | --- | --- |
-| `FIRMS_MAP_KEY` | 🔥 Active fires. Unset, `/api/firms` answers `{"error":"no_key"}` and the layer draws nothing. |
-| `GEMINI_API_KEY` | 🎙️ Gemini Live voice — `/api/gemini/token` mints the ephemeral credential the session attaches. |
-| `OPENSKY_CLIENT_ID` + `OPENSKY_CLIENT_SECRET` | ✈️ Your own flight-polling allowance. Without a pair the shared quota answers `429 OpenSky rate limited` and the layer empties. |
+| `GEMINI_API_KEY` | 🎙️ Gemini Live voice — `/api/gemini/token` mints the ephemeral credential the session attaches, and only the server holds the permanent key, so the phone's voice needs it here. Unset, the app answers "Add a Gemini API key in Provider Settings" whatever the phone has stored. |
+| `FIRMS_MAP_KEY` | 🔥 Active fires for everything reading **the server** — a browser at the service URL, the desktop app. Unset, `/api/firms` answers `{"error":"no_key"}`. The phone's own fire layer reads the keyless NASA feed through the shell and draws either way. |
+| `OPENSKY_CLIENT_ID` + `OPENSKY_CLIENT_SECRET` | ✈️ Your own flight-polling allowance for the server. Without a pair the shared quota answers `429 OpenSky rate limited`; the phone then reads ADS-B from its own address instead of going empty. |
 | `OPENSKY_AUTH_MODE` | `auto` (set in the blueprint): OAuth if the pair exists, then Basic, then anonymous — a missing key degrades instead of failing. |
 
 Already declared there and worth confirming against your `.env`:
