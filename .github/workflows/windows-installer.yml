@@ -121,8 +121,15 @@ jobs:
           $notes = "Built from $env:GITHUB_SHA ($env:GEV_DESKTOP_VERSION) on $env:GITHUB_REF_NAME."
           gh release view desktop-latest 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create desktop-latest --title "God's Eye View — Windows" --notes $notes --latest
+            gh release create desktop-latest --title "God's Eye View — Windows" --notes $notes
           }
           gh release upload desktop-latest gods-eye-view-windows-setup.exe --clobber
-          gh release edit desktop-latest --notes $notes --latest
-          "Download: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/releases/latest/download/gods-eye-view-windows-setup.exe"
+          gh release edit desktop-latest --notes $notes
+
+          # Only one release per repository can be "the latest", and the Android
+          # download link is built on being it (android/README.md, and the URL
+          # the APK workflow prints): a new Windows release is deliberately kept
+          # out of that slot so getting the APK on the phone keeps working. The
+          # installer has its own stable URL, printed below.
+          gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/releases/tags/desktop-latest" -f make_latest=false | Out-Null
+          "Download: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/releases/download/desktop-latest/gods-eye-view-windows-setup.exe"

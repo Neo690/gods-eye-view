@@ -224,7 +224,10 @@ the container.
 One installer that starts the app's own local server inside the installed
 copy, so a Windows machine needs no Node and no terminal after the download.
 
-1. Download `gods-eye-view-windows-setup.exe` from this project's releases.
+1. Download
+   [`gods-eye-view-windows-setup.exe`](https://github.com/Neo690/gods-eye-view/releases/download/desktop-latest/gods-eye-view-windows-setup.exe).
+   The Windows release carries its own tag, so the Android download link keeps
+   working: only one release per repository can be "the latest".
 2. Run it. It installs for the current user only — no administrator prompt —
    and creates Start menu and desktop shortcuts.
 3. Start **God's Eye View**. The window is the same app as the browser paths,
