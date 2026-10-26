@@ -2,10 +2,12 @@ import {
   knownKeySetupEnvVars,
   admitKeySetupRequest,
   isKeySetupExternallyManaged,
+  keySetupKeyUrl,
   keySetupStatus,
   validateKeySetupUpdates,
   upsertDotenvValues,
 } from '../../src/keySetupCore.mjs';
+import { openUrlInBrowser } from './open-external.mjs';
 import { defaultSourceRoot } from '../providers/common/source-root.js';
 import path from 'node:path';
 import { readEnvironmentSource as readPinokioEnvironmentSource } from '../../scripts/pinokio-environment.mjs';
@@ -64,6 +66,11 @@ const DEV_FRESH_EXTERNAL_KEYS_AT_BOOT = new Set(
  *   server follows that with a restart, so the client-exposed defines
  *   re-inject and the page reloads itself. Pasting a key in the app IS the
  *   whole setup — no hand-edited env files.
+ * POST /api/setup/open-key → open one provider's sign-up page in the user's
+ *   OWN browser. Inside the packaged desktop shell a `target="_blank"` link
+ *   opens a second in-app window instead, where the user cannot reach the
+ *   provider session that holds their key. Only a URL the registry itself
+ *   spells (keySetupKeyUrl) may be opened.
  *
  * Loopback-only on purpose: with HOST=0.0.0.0 the app can be shared on a LAN,
  * and a guest must be able to neither write the host's .env nor probe which
@@ -73,7 +80,10 @@ const DEV_FRESH_EXTERNAL_KEYS_AT_BOOT = new Set(
  * browser. A visitor who cannot reach the endpoints fails the panel's status
  * fetch, and the client removes the whole surface.
  */
-function keySetupEndpoint({ sourceRoot = defaultSourceRoot } = {}) {
+function keySetupEndpoint({
+  sourceRoot = defaultSourceRoot,
+  openUrl = openUrlInBrowser,
+} = {}) {
   const respond = (res, statusCode, payload) => {
     res.statusCode = statusCode;
     res.setHeader('Content-Type', 'application/json');
@@ -178,7 +188,42 @@ function keySetupEndpoint({ sourceRoot = defaultSourceRoot } = {}) {
           : 'file'
         : null;
     }
-    return { ...status, store: storeName() };
+    // `openKey` tells the panel this server can hand a provider page to the
+    // machine's browser, which is what lets a link open OUTSIDE the window that
+    // loaded it. A shell that owns its own browsing (the phone) leaves it unset
+    // and keeps the plain anchor behaviour.
+    return { ...status, store: storeName(), openKey: true };
+  };
+  // Read a small JSON body, or answer the request itself. Every refusal in
+  // this file carries a `code` the panel turns into one localized sentence
+  // (src/keySetup.js) beside an English `error` for logs and API callers.
+  const readJsonBody = (req, res, onBody) => {
+    let body = '';
+    let overflowed = false;
+    req.on('data', (chunk) => {
+      body += chunk;
+      if (body.length > 8192) {
+        overflowed = true;
+        req.destroy();
+      }
+    });
+    req.on('end', () => {
+      if (overflowed)
+        return respond(res, 413, {
+          error: 'Request too large',
+          code: 'too-large',
+        });
+      let parsed;
+      try {
+        parsed = JSON.parse(body || '{}');
+      } catch {
+        return respond(res, 400, {
+          error: 'Invalid JSON',
+          code: 'invalid-json',
+        });
+      }
+      onBody(parsed);
+    });
   };
   // Atomically replace the store's content: fresh same-dir temp created 0600
   // with the exclusive flag, fsync, rename over the target. Closes the window
@@ -258,6 +303,41 @@ function keySetupEndpoint({ sourceRoot = defaultSourceRoot } = {}) {
       if (!admission.ok)
         return respond(res, admission.status, refusal(admission));
       respond(res, 200, providerStatus());
+    });
+    server.middlewares.use('/api/setup/open-key', (req, res) => {
+      if (req.method !== 'POST')
+        return respond(res, 405, {
+          error: 'Method not allowed',
+          code: 'method',
+        });
+      const admission = admit(req);
+      if (!admission.ok)
+        return respond(res, admission.status, refusal(admission));
+      readJsonBody(req, res, (parsed) => {
+        // The allowlist is the whole point: this endpoint launches a process
+        // on the user's machine, so it may only ever open a page the registry
+        // itself names — never a URL the caller supplied.
+        const url = keySetupKeyUrl(parsed?.url);
+        if (!url)
+          return respond(res, 400, {
+            error: 'That page is not a provider key page',
+            code: 'not-allowlisted',
+          });
+        // Launching is asynchronous: answer once we know whether something
+        // actually started, so a machine with no browser reports honestly
+        // instead of pretending the page opened.
+        Promise.resolve()
+          .then(() => openUrl(url))
+          .catch(() => null)
+          .then((opened) => {
+            if (!opened)
+              return respond(res, 500, {
+                error: 'Could not open a browser on this machine',
+                code: 'open-failed',
+              });
+            respond(res, 200, { ok: true, browser: opened });
+          });
+      });
     });
     server.middlewares.use('/api/setup/keys', (req, res) => {
       if (req.method !== 'POST')

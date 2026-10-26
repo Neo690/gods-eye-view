@@ -350,10 +350,21 @@ export function admitKeySetupRequest({
       code: 'not-local-host',
     };
   }
-  if (
-    method === 'POST' &&
-    (origin === undefined || origin === null || origin === '')
-  ) {
+  // A browser always sends Origin on a cross-origin POST, so requiring the
+  // EXACT local Origin is what stops a foreign page from writing this
+  // machine's keys. Demanding an Origin on every POST as well also refused the
+  // packaged desktop shell, whose Chromium runs with --disable-web-security and
+  // therefore sends neither Origin nor any Sec-Fetch-* header: there the panel
+  // could only ever report "requires an exact local Origin" and no key could be
+  // saved at all. So the Origin is required to be exact WHEN PRESENT, and its
+  // absence is accepted only when nothing claims another site is involved — a
+  // page can neither omit Origin nor forge Sec-Fetch-Site, and the
+  // application/json requirement below is a non-simple content type that a
+  // cross-site caller cannot send without a preflight this server never allows.
+  const fetchSite = String(proxyHeaders?.['sec-fetch-site'] ?? '')
+    .trim()
+    .toLowerCase();
+  if (fetchSite !== '' && fetchSite !== 'same-origin' && fetchSite !== 'none') {
     return {
       ok: false,
       status: 403,
@@ -403,6 +414,22 @@ export function admitKeySetupRequest({
     };
   }
   return { ok: true };
+}
+
+/**
+ * The registry's own page for a key, or null. Provider Settings can ask this
+ * machine to open a key's sign-up page (`/api/setup/open-key`), and this
+ * allowlist is what keeps that opener from becoming a general "open any URL on
+ * this machine" primitive the server would hand to any local caller.
+ * @param {unknown} url
+ * @returns {?string} the registry's exact spelling, or null.
+ */
+export function keySetupKeyUrl(url) {
+  const wanted = String(url ?? '').trim();
+  if (!wanted) return null;
+  return KEY_SETUP_KEYS.some((entry) => entry.getUrl === wanted)
+    ? wanted
+    : null;
 }
 
 /** @returns {Set<string>} every env var the panel is allowed to write. */

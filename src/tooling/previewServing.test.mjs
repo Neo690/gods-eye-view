@@ -152,11 +152,12 @@ test('real dev and built-preview servers serve provider JSON and terminate unkno
       assert.equal(await tle.text(), 'invalid group');
       if (isPreview) {
         // The preview server serves Provider Settings now, because the packaged
-        // desktop app runs one. Its admission gate is the boundary: a POST with
-        // no Origin, and one carrying proxy headers, are both refused, and
-        // neither can write the store.
+        // desktop app runs one. Its admission gate is the boundary, and these
+        // are the shapes a foreign page — or a relay in front of the server —
+        // presents. None of them may reach the store.
         for (const [code, headers] of [
-          ['origin-required', {}],
+          ['origin-required', { 'Sec-Fetch-Site': 'cross-site' }],
+          ['cross-origin', { Origin: 'https://evil.example' }],
           ['proxied', { Origin: origin, 'X-Forwarded-For': '203.0.113.7' }],
         ]) {
           const write = await fetch(origin + '/api/setup/keys', {
@@ -166,8 +167,40 @@ test('real dev and built-preview servers serve provider JSON and terminate unkno
           });
           assert.equal(write.status, 403, `preview setup/keys ${code}`);
           assert.equal((await write.json()).code, code);
+          assert.equal(
+            existsSync(path.join(root, '.env')),
+            false,
+            `preview setup/keys ${code} wrote the store`,
+          );
         }
-        assert.equal(existsSync(path.join(root, '.env')), false);
+        // The packaged shell's Chromium runs with --disable-web-security, so
+        // this is the exact shape its panel sends: no Origin, no Sec-Fetch-*.
+        // The gate must admit it — refusing it is the desktop panel being
+        // unable to save anything at all — and an empty save is then refused a
+        // layer later by the writer, which is the honest probe here: it proves
+        // admission end to end without any store existing to write into. (The
+        // real write for this shape runs against a fixture store in
+        // localServices.test.mjs, where the store path is injected.)
+        const shellWrite = await fetch(origin + '/api/setup/keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        assert.equal(
+          shellWrite.status,
+          400,
+          'the shell-shaped POST is admitted rather than refused',
+        );
+        assert.equal((await shellWrite.json()).code, 'no-keys');
+        // The provider-link opener is registered here too, and refuses every
+        // page the registry does not name.
+        const opener = await fetch(origin + '/api/setup/open-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: 'https://evil.example/' }),
+        });
+        assert.equal(opener.status, 400, 'the opener refuses an unlisted page');
+        assert.equal((await opener.json()).code, 'not-allowlisted');
       }
       for (const route of ['/', '/application-route', '/apiary']) {
         const response = await fetch(origin + route);

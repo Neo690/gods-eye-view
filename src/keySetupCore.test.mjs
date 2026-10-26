@@ -7,6 +7,7 @@ import {
   KEY_SETUP_VALUE_LIMIT,
   commandCompletedSuccessfully,
   isKeySetupExternallyManaged,
+  keySetupKeyUrl,
   keySetupStatus,
   keySetupRequirement,
   keySetupWithAlternatives,
@@ -249,7 +250,20 @@ test('the admission gate refuses every non-local shape, one assertion per refusa
   };
   assert.equal(admitKeySetupRequest(local).ok, true, 'the honest local request is admitted');
   assert.equal(admitKeySetupRequest({ ...local, method: 'GET', contentType: undefined }).ok, true, 'local GET needs no content type');
-  assert.equal(admitKeySetupRequest({ ...local, origin: undefined }).ok, false, 'POST without Origin is refused');
+  // The packaged desktop shell runs Chromium with --disable-web-security, so
+  // its OWN POSTs carry neither Origin nor any Sec-Fetch-* header. Requiring an
+  // Origin on every POST therefore left the desktop panel unable to save
+  // anything at all, reporting only "requires an exact local Origin". A missing
+  // Origin is now accepted while nothing claims another site is involved: a
+  // page can neither omit Origin nor forge Sec-Fetch-Site, and the JSON content
+  // type below is a non-simple type a cross-site caller cannot send without a
+  // preflight this server never allows.
+  assert.equal(admitKeySetupRequest({ ...local, origin: undefined }).ok, true, 'a non-browser local POST (the packaged shell) is admitted');
+  assert.equal(admitKeySetupRequest({ ...local, origin: undefined, proxyHeaders: { 'sec-fetch-site': 'same-origin' } }).ok, true, 'a same-origin fetch may arrive without Origin');
+  assert.equal(admitKeySetupRequest({ ...local, origin: undefined, proxyHeaders: { 'sec-fetch-site': 'none' } }).ok, true, 'a typed local URL may arrive without Origin');
+  assert.equal(admitKeySetupRequest({ ...local, origin: undefined, proxyHeaders: { 'sec-fetch-site': 'cross-site' } }).ok, false, 'a cross-site POST without Origin is still refused');
+  assert.equal(admitKeySetupRequest({ ...local, origin: undefined, proxyHeaders: { 'sec-fetch-site': 'same-site' } }).ok, false, 'a same-site but cross-origin POST is refused');
+  assert.equal(admitKeySetupRequest({ ...local, origin: undefined, contentType: 'text/plain' }).ok, false, 'a simple-request POST is refused whatever its Origin');
   assert.equal(admitKeySetupRequest({ ...local, method: 'GET', origin: undefined, contentType: undefined }).ok, true, 'local GET may omit Origin');
   assert.equal(admitKeySetupRequest({ ...local, remoteAddress: '::ffff:127.0.0.1', hostHeader: '[::1]:4173', origin: 'http://[::1]:4173' }).ok, true, 'IPv6 loopback forms are local');
 
@@ -291,6 +305,24 @@ test('the admission gate refuses every non-local shape, one assertion per refusa
   const noJson = admitKeySetupRequest({ ...local, contentType: 'text/plain' });
   assert.equal(noJson.ok, false, 'non-JSON POST refused');
   assert.equal(noJson.status, 415);
+});
+
+test('only a page the registry itself names may be opened by the local opener', () => {
+  const google = KEY_SETUP_KEYS.find(
+    (key) => key.id === 'google-maps',
+  ).getUrl;
+  assert.equal(keySetupKeyUrl(google), google);
+  assert.equal(keySetupKeyUrl(`  ${google}  `), google, 'surrounding whitespace is forgiven');
+  // Everything below would turn the opener into a general "launch anything on
+  // this machine" primitive, which is exactly what the allowlist prevents.
+  assert.equal(keySetupKeyUrl('https://evil.example/'), null);
+  assert.equal(keySetupKeyUrl(`${google}?x=1`), null, 'a suffixed page is a different page');
+  assert.equal(keySetupKeyUrl('javascript:alert(1)'), null);
+  assert.equal(keySetupKeyUrl('file:///C:/Windows/System32/cmd.exe'), null);
+  assert.equal(keySetupKeyUrl(''), null);
+  assert.equal(keySetupKeyUrl(undefined), null);
+  assert.equal(keySetupKeyUrl(null), null);
+  assert.equal(keySetupKeyUrl(42), null);
 });
 
 test('a null value validates as a removal; an empty string still does not', () => {

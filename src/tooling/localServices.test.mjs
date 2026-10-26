@@ -19,6 +19,7 @@ import {
 } from 'gods-eye-view/server/providers/regional';
 import { openAiRealtimeProxy } from 'gods-eye-view/server/providers/openai';
 import { keySetupEndpoint } from 'gods-eye-view/server/standalone/key-setup';
+import { KEY_SETUP_KEYS } from '../../src/keySetupCore.mjs';
 import { realtimeInstructions } from '../../server/providers/openai/instructions.js';
 import { GEV_REALTIME_TOOLS } from '../../server/providers/openai/tools.js';
 import { createDebugLogHandler } from '../../server/providers/openai/debug-log.js';
@@ -675,7 +676,11 @@ test('key setup writes only the supplied application root, keeps its request gua
   assert.equal(plugin.apply({}, { command: 'serve', isPreview: false }), true);
   assert.equal(plugin.apply({}, { command: 'serve', isPreview: true }), true);
   assert.equal(plugin.apply({}, { command: 'build' }), false);
-  const setupRoutes = ['/api/setup/keys', '/api/setup/status'];
+  const setupRoutes = [
+    '/api/setup/keys',
+    '/api/setup/open-key',
+    '/api/setup/status',
+  ];
   assert.deepEqual([...install(plugin).keys()].sort(), setupRoutes);
   assert.deepEqual([...install(plugin, true).keys()].sort(), setupRoutes);
   const routes = install(plugin);
@@ -706,6 +711,23 @@ test('key setup writes only the supplied application root, keeps its request gua
     assert.equal(statSync(path.join(first, '.env')).mode & 0o777, 0o600);
   assert.equal(saved.body.includes('sk-fixture-only-not-a-real-key'), false);
   assert.equal(existsSync(path.join(untouched, '.env')), false);
+  // The packaged desktop shell's Chromium runs with --disable-web-security, so
+  // its panel's POSTs carry NO Origin at all (and no Sec-Fetch-*). That exact
+  // shape has to save — refusing it left the desktop panel unable to store a
+  // single key — and it has to land in the store this plugin was given, never
+  // in the checkout's own.
+  const shellSaved = await request(handler, {
+    method: 'POST',
+    body: JSON.stringify({ TOMTOM_API_KEY: 'tt-shell-shape' }),
+    origin: undefined,
+  });
+  assert.equal(shellSaved.status, 200, 'an Origin-less POST saves');
+  assert.equal(shellSaved.json().ok, true);
+  assert.match(
+    readFileSync(path.join(first, '.env'), 'utf8'),
+    /TOMTOM_API_KEY=tt-shell-shape/,
+  );
+  assert.equal(existsSync(path.join(untouched, '.env')), false);
   // A preview server has no restart to offer. The same guards stay in force and
   // the write still lands, so the panel can say what applies when instead of
   // promising a reload that will never come.
@@ -727,6 +749,86 @@ test('key setup writes only the supplied application root, keeps its request gua
   const previewSaved = await request(previewHandler, { method: 'POST', body });
   assert.equal(previewSaved.status, 200);
   assert.equal(previewSaved.json().restarting, false);
+});
+
+test('the provider-link opener launches only a registry page, in the machine browser, on both servers', async (t) => {
+  const first = root(t);
+  const launched = [];
+  const plugin = keySetupEndpoint({
+    sourceRoot: first,
+    openUrl: async (url) => {
+      launched.push(url);
+      return 'brave';
+    },
+  });
+  const routes = install(plugin);
+  const handler = routes.get('/api/setup/open-key');
+  assert.equal(typeof handler, 'function', 'the opener route exists');
+  assert.equal(
+    typeof install(plugin, true).get('/api/setup/open-key'),
+    'function',
+  );
+
+  const page = KEY_SETUP_KEYS.find((key) => key.id === 'google-maps').getUrl;
+  const opened = await request(handler, {
+    method: 'POST',
+    body: JSON.stringify({ url: page }),
+  });
+  assert.equal(opened.status, 200);
+  assert.deepEqual(opened.json(), { ok: true, browser: 'brave' });
+  assert.deepEqual(
+    launched,
+    [page],
+    'the registry page reached the browser opener verbatim',
+  );
+
+  // Everything the panel could be talked into by a hostile page is refused, and
+  // nothing at all reaches the machine while the refusals are handed out.
+  for (const url of [
+    'https://evil.example/',
+    `${page}?utm=1`,
+    'javascript:void(0)',
+    'file:///C:/Windows/System32/calc.exe',
+  ]) {
+    const refused = await request(handler, {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    });
+    assert.equal(refused.status, 400, url);
+    assert.equal(refused.json().code, 'not-allowlisted');
+  }
+  assert.deepEqual(launched, [page], 'no refused URL was ever launched');
+
+  // Same guards as a save: the panel is a page, not a licence to skip them.
+  assert.equal(
+    (
+      await request(handler, {
+        method: 'POST',
+        body: JSON.stringify({ url: page }),
+        origin: 'https://evil.example',
+      })
+    ).status,
+    403,
+  );
+  assert.equal((await request(handler, { method: 'GET' })).status, 405);
+
+  // A machine with no browser answers honestly instead of reporting a success.
+  const nowhere = keySetupEndpoint({
+    sourceRoot: first,
+    openUrl: async () => null,
+  });
+  const failed = await request(install(nowhere).get('/api/setup/open-key'), {
+    method: 'POST',
+    body: JSON.stringify({ url: page }),
+  });
+  assert.equal(failed.status, 500);
+  assert.equal(failed.json().code, 'open-failed');
+
+  // The panel learns the control is worth showing from the status payload.
+  const status = await request(routes.get('/api/setup/status'), {
+    method: 'GET',
+  });
+  assert.equal(status.json().openKey, true);
 });
 
 test('Realtime service configuration selects compatible endpoint/model without forwarding request model IDs or keys', async () => {
