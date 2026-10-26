@@ -45,6 +45,7 @@
     "opensky:import": "./scripts/opensky-import-client.sh",
     "build": "vite build",
     "build:panel": "node scripts/build-panel.mjs",
+    "desktop:installer": "node desktop/build-installer.mjs",
     "apk:install": "node scripts/install-latest-apk.mjs",
     "apk:watch": "node scripts/install-latest-apk.mjs --watch",
     "preview": "vite preview",

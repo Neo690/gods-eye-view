@@ -42,3 +42,9 @@ android/*.apk
 
 # Local signing key for CI builds (never committed)
 .signing/
+
+# Desktop shell build output: the staged payload copied into the installer, and
+# electron-builder's release directory.
+desktop/.payload/
+desktop/release/
+desktop/node_modules/

@@ -219,6 +219,44 @@ the container.
 
 </details>
 
+### Path 4 — Windows installer (Setup.exe)
+
+One installer that starts the app's own local server inside the installed
+copy, so a Windows machine needs no Node and no terminal after the download.
+
+1. Download `gods-eye-view-windows-setup.exe` from this project's releases.
+2. Run it. It installs for the current user only — no administrator prompt —
+   and creates Start menu and desktop shortcuts.
+3. Start **God's Eye View**. The window is the same app as the browser paths,
+   POWER UP → Provider Settings included: keys entered there are stored in the
+   installed copy's own `.env`.
+
+The installer carries no credentials — that is checked while its payload is
+staged, so an installer can never ship a key by accident. A fresh install
+starts keyless and adds whatever you want in the app. Uninstalling from "Apps &
+features" removes the application; the shell's log under
+`%APPDATA%\God's Eye View\logs` stays.
+
+**Building the installer yourself:**
+
+```bash
+npm install
+(cd desktop && npm install)
+npm run desktop:installer     # -> desktop/release/God's Eye View Setup <version>.exe
+```
+
+`--skip-build` reuses the current `dist/`, and `npm run unpacked` inside
+`desktop/` produces `desktop/release/win-unpacked` without an installer.
+`CESIUM_ION_TOKEN` and `GOOGLE_MAPS_API_KEY` in the environment are inlined
+into the bundle at build time, exactly as in the Android build; leaving them
+unset ships the keyless imagery. Provider and voice keys are not build inputs:
+those are entered in the app after installation.
+
+`desktop/main.js` is the whole shell. It starts `vite preview` from the
+installed payload on `127.0.0.1:8790` and opens a window on it; `GEV_DESKTOP_PORT`
+overrides the port, and `--verify` starts the server, asks `/api/setup/status`
+once and exits without opening a window.
+
 ### Then power it up — in the app, not in a file
 
 Keys are upgrades, not prerequisites. When you want one, click the **POWER UP**

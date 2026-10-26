@@ -1,0 +1,120 @@
+name: Windows installer
+
+# The point of this workflow is that installing on Windows needs nothing but a
+# browser: the release page carries one Setup .exe that starts the app's own
+# local server inside the installed copy. No Node, no terminal, no Pinokio.
+on:
+  push:
+    branches: [android-shell, main]
+    # Only what the installer is made of: the client bundle's sources, the shell
+    # in desktop/, and the dependency manifest. Use `workflow_dispatch` to force
+    # a build after touching this file.
+    paths:
+      - 'desktop/**'
+      - 'src/**'
+      - 'public/**'
+      - 'build/**'
+      - 'server/**'
+      - 'config/**'
+      - 'index.html'
+      - 'style.css'
+      - 'vite.config.js'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installer:
+    name: Build and publish the Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: '1'
+    steps:
+      # A version per run keeps Windows' "Apps & features" entry and the
+      # installer's own file name on the update path instead of reporting the
+      # same version every time.
+      - name: Compute the version
+        shell: pwsh
+        run: '"GEV_DESKTOP_VERSION=1.0.${{ github.run_number }}" >> $env:GITHUB_ENV'
+
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+
+      # `npm install` rather than `npm ci`, for the same reason the Android
+      # workflow uses it: the artifact here is the installer, and the CI
+      # workflow owns the reproducibility gate.
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      # `working-directory` rather than `--prefix`: npm reads the package at the
+      # working directory, and a prefix would make it install the repository it
+      # is called from and record it as a dependency of desktop/.
+      - name: Install the shell's build dependencies
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: Build the client bundle
+        env:
+          # Client-side map credential, inlined into the bundle at build time,
+          # so it is a repository *variable* rather than a secret — the same
+          # rule as the Android build. Empty keeps the keyless Esri imagery.
+          CESIUM_ION_TOKEN: ${{ vars.CESIUM_ION_TOKEN }}
+          GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_API_KEY }}
+        shell: pwsh
+        run: |
+          if ($env:CESIUM_ION_TOKEN) { 'Cesium ion token: configured' } else { 'Cesium ion token: none (the globe stays on keyless Esri imagery)' }
+          if ($env:GOOGLE_MAPS_API_KEY) { 'Google Maps key: configured' } else { 'Google Maps key: none (the Google 3D basemap stays unavailable)' }
+          # Every other credential is server-side and belongs to the user: the
+          # payload is checked for credential files while it is staged, and the
+          # installer must never carry one.
+          npm run build
+
+      - name: Package the installer
+        run: npm run desktop:installer -- --skip-build
+
+      - name: Smoke-test the packaged app
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem desktop/release/win-unpacked/*.exe |
+            Where-Object { $_.Name -notlike 'Uninstall*' } |
+            Select-Object -First 1
+          if (-not $exe) { throw 'no packaged executable was produced' }
+          # A free port: the runner may already have something on the default.
+          $env:GEV_DESKTOP_PORT = '8791'
+          & $exe.FullName --verify
+          if ($LASTEXITCODE -ne 0) { throw "the packaged app did not answer /api/setup/status (exit $LASTEXITCODE)" }
+
+      - name: Publish the installer to the rolling release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $installer = Get-ChildItem desktop/release/*.exe |
+            Where-Object { $_.Name -like '*Setup*' } |
+            Select-Object -First 1
+          if (-not $installer) { throw 'no installer was produced' }
+          Copy-Item $installer.FullName gods-eye-view-windows-setup.exe
+          $notes = "Built from $env:GITHUB_SHA ($env:GEV_DESKTOP_VERSION) on $env:GITHUB_REF_NAME."
+          gh release view desktop-latest 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create desktop-latest --title "God's Eye View — Windows" --notes $notes --latest
+          }
+          gh release upload desktop-latest gods-eye-view-windows-setup.exe --clobber
+          gh release edit desktop-latest --notes $notes --latest
+          "Download: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/releases/latest/download/gods-eye-view-windows-setup.exe"
