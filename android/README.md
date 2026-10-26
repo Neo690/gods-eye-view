@@ -178,7 +178,19 @@ it answers `5xx` for a route `LiveApi` already serves, the shell re-serves that
 request itself and logs `Data server answered 502 for …; served it in-app
 instead`. That is what keeps the satellites alive on a phone when the host
 cannot reach CelesTrak, which refuses rebroadcast from datacentre addresses.
-A `4xx` is a deliberate answer and is passed through untouched.
+
+Two more answers get the same treatment, because they describe the server's
+address rather than the request. A `429` means the server — or the shared
+address it egresses from, which it does not own — is being rate limited:
+adsb.lol answers shared datacentre addresses with `429`, which emptied the
+military and direct ADS-B layers on a phone whose own address read the same
+feed, and the shell's `LiveApi.military()` and 250 nm snapshot serve them
+instead. A refused `/api/upstream` is a decision about the server's own
+deliberately narrow read-through list, so the shell answers that route itself
+over its fixed host list — the same list it uses when no data server is set,
+which is what the in-page fire, cyclone, radiation and radio adapters need to
+reach their own feeds. Every other `4xx` is a deliberate answer (a bad request,
+a foreign Host, a missing key) and is passed through untouched.
 
 ### POST endpoints
 

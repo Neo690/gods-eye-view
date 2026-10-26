@@ -261,15 +261,27 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Re-serves a request the hosted server failed, from the shell's own client.
+     * Re-serves a request the hosted server could not answer, from the shell's
+     * own client.
      *
      * <p>A hosted copy of this project is the primary data source, but it cannot
      * always reach an upstream: CelesTrak answers a rebroadcast from a
      * datacentre address with a connect timeout, which emptied the satellites
      * layer on a phone whose own network reads the same feed fine. When the
      * server answers 5xx for a route {@link LiveApi} already serves, the shell's
-     * copy is a better answer than an outage. A 4xx is a decision, not a
-     * failure, so it is passed through untouched.
+     * copy is a better answer than an outage.
+     *
+     * <p>Two more answers deserve the same treatment, because they say something
+     * about the server's address rather than about the request. A 429 means the
+     * server — or the shared address it egresses from, which it does not own — is
+     * being rate limited: adsb.lol answers datacentre and shared addresses with
+     * 429 while the phone's own address reads the same feed, so the military and
+     * direct ADS-B layers went empty on a phone whose traffic was fine. And a
+     * refusal of {@code /api/upstream} is a decision about the server's own
+     * deliberately narrow read-through list, not about this build: the shell
+     * serves that route itself, over its own fixed host list, and did so before
+     * any data server existed. Everything else in the 4xx range is a decision
+     * (a bad request, a foreign Host, a missing key), so it is passed through.
      *
      * @return the in-app response, or {@code null} to keep the server's answer.
      */
@@ -278,7 +290,11 @@ public class MainActivity extends Activity {
       String path,
       WebResourceResponse forwarded
     ) {
-      if (forwarded == null || forwarded.getStatusCode() < 500) return null;
+      if (forwarded == null) return null;
+      int status = forwarded.getStatusCode();
+      boolean serverRateLimited = status == 429;
+      boolean upstreamRefused = status >= 400 && "/api/upstream".equals(path);
+      if (status < 500 && !serverRateLimited && !upstreamRefused) return null;
       String method = request.getMethod() == null ? "GET" : request.getMethod().toUpperCase(Locale.ROOT);
       if (!"GET".equals(method) && !"HEAD".equals(method)) return null;
       if (!LiveApi.handles(path)) return null;
@@ -286,7 +302,7 @@ public class MainActivity extends Activity {
       if (local == null || local.getStatusCode() >= 500) return null;
       Log.i(
         TAG,
-        "Data server answered " + forwarded.getStatusCode() + " for " + path +
+        "Data server answered " + status + " for " + path +
           "; served it in-app instead"
       );
       return local;
