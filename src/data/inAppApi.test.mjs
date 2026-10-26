@@ -113,7 +113,9 @@ test('a stale or undated snapshot is refused', async () => {
     search: '?lat=30&lon=-97',
     now: () => NOW,
     upstream: async () =>
-      new Response(JSON.stringify({ ...snapshot, now: (NOW - 3_600_000) / 1000 })),
+      new Response(
+        JSON.stringify({ ...snapshot, now: (NOW - 3_600_000) / 1000 }),
+      ),
   });
   assert.equal(stale.status, 502);
   const undated = await gnssIntegrityResponse({
@@ -144,7 +146,9 @@ test('the shim answers its route and leaves every other request alone', async ()
   });
   assert.equal(installed, true);
   try {
-    const handled = await globalThis.fetch('/api/gnss-integrity?lat=30&lon=-97');
+    const handled = await globalThis.fetch(
+      '/api/gnss-integrity?lat=30&lon=-97',
+    );
     assert.equal(handled.status, 200);
     assert.deepEqual(calls, []);
 
@@ -184,11 +188,15 @@ const perimeter = (id, name) => ({
 });
 const geoJson = (features, more = false) =>
   new Response(
-    JSON.stringify({ type: 'FeatureCollection', features, ...(more ? { exceededTransferLimit: true } : {}) }),
+    JSON.stringify({
+      type: 'FeatureCollection',
+      features,
+      ...(more ? { exceededTransferLimit: true } : {}),
+    }),
     { status: 200, headers: { 'content-type': 'application/json' } },
   );
 
-test('fire perimeters come back in the server\'s shape', async () => {
+test("fire perimeters come back in the server's shape", async () => {
   const asked = [];
   const response = await firePerimetersResponse({
     now: () => NOW,
@@ -205,7 +213,10 @@ test('fire perimeters come back in the server\'s shape', async () => {
   assert.equal(body.rows[0].name, 'Bastrop');
   assert.equal(asked.length, 1);
   assert.match(asked[0], /^\/api\/upstream\?url=/);
-  assert.match(decodeURIComponent(asked[0]), /services3\.arcgis\.com\/T4QMspbfLg3qTGWY/);
+  assert.match(
+    decodeURIComponent(asked[0]),
+    /services3\.arcgis\.com\/T4QMspbfLg3qTGWY/,
+  );
   assert.match(decodeURIComponent(asked[0]), /f=geojson/);
 });
 
@@ -213,7 +224,11 @@ test('an exceeded transfer limit pages with resultOffset', async () => {
   const asked = [];
   const response = await firePerimetersResponse({
     upstream: async (url) => {
-      asked.push(new URL(url, 'https://appassets.androidplatform.net/').searchParams.get('url'));
+      asked.push(
+        new URL(url, 'https://appassets.androidplatform.net/').searchParams.get(
+          'url',
+        ),
+      );
       return asked.length === 1
         ? geoJson([perimeter('A1', 'One')], true)
         : geoJson([perimeter('A2', 'Two')]);
@@ -236,7 +251,7 @@ test('a refused WFIGS read is reported, not thrown', async () => {
   });
 });
 
-test('cyclones answer with the layer\'s document, and admit a dead status read', async () => {
+test("cyclones answer with the layer's document, and admit a dead status read", async () => {
   const now = Date.now();
   const iso = (ms) => new Date(now - ms).toISOString();
   const status = {
@@ -264,7 +279,10 @@ test('cyclones answer with the layer\'s document, and admit a dead status read',
   const ok = await cyclonesResponse({
     now: () => now,
     upstream: async (route) => {
-      const target = new URL(route, 'https://appassets.androidplatform.net/').searchParams.get('url');
+      const target = new URL(
+        route,
+        'https://appassets.androidplatform.net/',
+      ).searchParams.get('url');
       const body = target.includes('CurrentStorms') ? status : empty;
       return new Response(JSON.stringify(body), {
         status: 200,
@@ -287,7 +305,7 @@ test('cyclones answer with the layer\'s document, and admit a dead status read',
   assert.deepEqual(await down.json(), { error: 'cyclones_unavailable' });
 });
 
-test('the radio directory answers in the tuner\'s shape', async () => {
+test("the radio directory answers in the tuner's shape", async () => {
   const row = (uuid, name, lat, lon) => ({
     stationuuid: uuid,
     name,
@@ -392,9 +410,17 @@ test('a warm point is not asked for twice', async () => {
 });
 
 test('bad points are refused, and a dead upstream is reported', async () => {
-  assert.equal((await terrainHeightsResponse({ search: '?points=nope' })).status, 400);
-  assert.equal((await terrainHeightsResponse({ search: '?points=' })).status, 400);
-  const many = Array.from({ length: 2001 }, (_, i) => `-97.${i},30.1`).join(';');
+  assert.equal(
+    (await terrainHeightsResponse({ search: '?points=nope' })).status,
+    400,
+  );
+  assert.equal(
+    (await terrainHeightsResponse({ search: '?points=' })).status,
+    400,
+  );
+  const many = Array.from({ length: 2001 }, (_, i) => `-97.${i},30.1`).join(
+    ';',
+  );
   const tooMany = await terrainHeightsResponse({
     search: '?points=' + encodeURIComponent(many),
   });
@@ -490,7 +516,9 @@ test('gbfs answers allowlisted station documents and nothing else', async () => 
   const austin = encodeURIComponent(
     'https://austin.publicbikesystem.net/customer/gbfs/v2/en/station_status.json',
   );
-  const payload = { data: { stations: [{ station_id: 'a1', num_bikes_available: 7 }] } };
+  const payload = {
+    data: { stations: [{ station_id: 'a1', num_bikes_available: 7 }] },
+  };
   const asked = [];
   const ok = await gbfsResponse({
     encoded: austin,
@@ -506,13 +534,17 @@ test('gbfs answers allowlisted station documents and nothing else', async () => 
   );
   assert.deepEqual(await ok.json(), payload);
   assert.equal(ok.headers.get('cache-control'), 'no-store');
-  assert.equal(ok.headers.get('x-gbfs-upstream'), 'austin.publicbikesystem.net');
+  assert.equal(
+    ok.headers.get('x-gbfs-upstream'),
+    'austin.publicbikesystem.net',
+  );
 
   const info = await gbfsResponse({
     encoded: encodeURIComponent(
       'https://austin.publicbikesystem.net/customer/gbfs/v2/en/station_information.json',
     ),
-    upstream: async () => new Response(JSON.stringify(payload), { status: 200 }),
+    upstream: async () =>
+      new Response(JSON.stringify(payload), { status: 200 }),
   });
   assert.equal(info.headers.get('cache-control'), 'public, max-age=300');
 
@@ -581,9 +613,7 @@ test('the shim routes the paths that carry their subject', async () => {
 
     const gbfs = await globalThis.fetch(
       '/api/gbfs/' +
-        encodeURIComponent(
-          'https://example.com/gbfs/station_status.json',
-        ),
+        encodeURIComponent('https://example.com/gbfs/station_status.json'),
     );
     assert.equal(gbfs.status, 403);
 
@@ -661,7 +691,11 @@ test('radiationResponse returns 503 when all networks and space data fail', asyn
 test('installing outside the shell changes nothing', async () => {
   let called = false;
   const installed = installInAppApi({
-    location: { href: 'http://localhost/', origin: 'http://localhost', hostname: 'localhost' },
+    location: {
+      href: 'http://localhost/',
+      origin: 'http://localhost',
+      hostname: 'localhost',
+    },
     fetchImpl: async () => {
       called = true;
       return new Response('{}', { status: 200 });
@@ -736,11 +770,86 @@ test('weatherTileResponse answers with PNG for within bounds and transparent PNG
   assert.equal(oobBytes.byteLength, 334);
 
   // In-bounds tile for radar
-  const fakePng = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const fakePng = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  ]);
   const inRes = await weatherTileResponse({
     search: '?product=radar&time=2026-10-23T17:55:00.000Z&z=2&x=1&y=1',
     upstream: async () => new Response(fakePng, { status: 200 }),
   });
   assert.equal(inRes.status, 200);
   assert.equal(inRes.headers.get('content-type'), 'image/png');
+});
+
+test('the in-app shell serves the key registry with the desktop removal control, and a removal really clears the saved key', async () => {
+  // The phone has no server to ask, so the shim itself must mark what its own
+  // store holds — otherwise the panel offers the REMOVE button nowhere, and a
+  // key saved on the phone can never be deleted from it.
+  const store = new Map([
+    [
+      'gev:provider-api-keys',
+      JSON.stringify({ OPENAI_API_KEY: 'sk-saved-here' }),
+    ],
+  ]);
+  const storage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => void store.set(key, String(value)),
+    removeItem: (key) => void store.delete(key),
+  };
+  const savedStorage = Object.getOwnPropertyDescriptor(
+    globalThis,
+    'localStorage',
+  );
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: storage,
+    configurable: true,
+  });
+  const original = globalThis.fetch;
+  const installed = installInAppApi({
+    location: shell,
+    fetchImpl: async () => {
+      throw new Error('the shim must answer /api/setup itself');
+    },
+  });
+  assert.equal(installed, true);
+  try {
+    const status = await (await globalThis.fetch('/api/setup/status')).json();
+    const byId = Object.fromEntries(status.keys.map((key) => [key.id, key]));
+    assert.equal(byId.openai.managed, 'file', 'a key saved here is removable');
+    assert.equal(byId.openai.set, true);
+    assert.equal(
+      byId.windy.managed,
+      null,
+      'a shipped default is not removable',
+    );
+    assert.equal(byId.windy.set, true, 'though it still reads as configured');
+    assert.equal(
+      byId['google-maps'].managed,
+      null,
+      'an unset key has none either',
+    );
+
+    const removal = await globalThis.fetch('/api/setup/keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ OPENAI_API_KEY: null }),
+    });
+    assert.equal(removal.status, 200);
+    const payload = await removal.json();
+    assert.equal(payload.ok, true);
+    assert.equal(payload.store, 'local storage');
+    assert.equal(
+      JSON.parse(store.get('gev:provider-api-keys')).OPENAI_API_KEY,
+      undefined,
+      'the saved entry is gone',
+    );
+    const after = payload.status.keys.find((key) => key.id === 'openai');
+    assert.equal(after.set, false);
+    assert.equal(after.managed, null, 'a vanished key stops offering removal');
+  } finally {
+    globalThis.fetch = original;
+    if (savedStorage)
+      Object.defineProperty(globalThis, 'localStorage', savedStorage);
+    else delete globalThis.localStorage;
+  }
 });

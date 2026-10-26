@@ -529,6 +529,27 @@ export function keySetupStatus(env = {}) {
 }
 
 /**
+ * Mark the entries THIS store holds, so a panel with no server of its own
+ * offers the same control the desktop server derives from its .env
+ * (server/standalone/key-setup.js): `managed: 'file'` means every env var of
+ * the entry was saved from this panel, so it can also be removed from it.
+ * A key that is only set by the app's built-in defaults deliberately stays
+ * unmarked — the panel may replace it, but it is not this store's to delete.
+ * Mutates and returns the status for the caller's convenience.
+ * @param {ReturnType<typeof keySetupStatus>} status
+ * @param {Record<string, string>} stored Values saved from the panel only.
+ */
+export function markStoredKeyManagement(status, stored = {}) {
+  for (const key of status?.keys || []) {
+    const held = key.envVars.every(
+      (name) => String(stored?.[name] ?? '').trim() !== '',
+    );
+    key.managed = held ? 'file' : null;
+  }
+  return status;
+}
+
+/**
  * Validate a POST body into a clean {ENV_VAR: value} map, or say exactly why
  * not. Values must be single-line printable ASCII with no spaces — every real
  * provider credential is — which is also what makes the raw `KEY=value` line

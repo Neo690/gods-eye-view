@@ -51,8 +51,17 @@ import {
 } from './terrainHeightsProxy.js';
 import { buildTransitSnapshot } from './transitProxy.js';
 import { getTransitFeed, publicTransitCatalog } from './transitFeeds.js';
-import { keySetupStatus, validateKeySetupUpdates } from '../keySetupCore.mjs';
-import { getAllApiKeys, getApiKey, saveApiKeys } from './storedApiKeys.js';
+import {
+  keySetupStatus,
+  markStoredKeyManagement,
+  validateKeySetupUpdates,
+} from '../keySetupCore.mjs';
+import {
+  getAllApiKeys,
+  getApiKey,
+  getStoredApiKeys,
+  saveApiKeys,
+} from './storedApiKeys.js';
 
 const SHELL_HOST = 'appassets.androidplatform.net';
 /** adsb.lol regional snapshot, the same radius the server asks for. */
@@ -276,10 +285,7 @@ let _firmsCache = null;
 let _firmsCacheTime = 0;
 const FIRMS_CACHE_TTL_MS = 15 * 60_000;
 
-export async function firmsResponse({
-  upstream,
-  now = () => Date.now(),
-} = {}) {
+export async function firmsResponse({ upstream, now = () => Date.now() } = {}) {
   const at = now();
   if (_firmsCache && at - _firmsCacheTime < FIRMS_CACHE_TTL_MS) {
     return jsonResponse(200, _firmsCache);
@@ -305,7 +311,10 @@ export async function firmsResponse({
     if (_firmsCache) {
       return jsonResponse(200, { ..._firmsCache, stale: true });
     }
-    return jsonResponse(502, { error: 'firms_unavailable', detail: err.message });
+    return jsonResponse(502, {
+      error: 'firms_unavailable',
+      detail: err.message,
+    });
   }
 }
 
@@ -352,7 +361,8 @@ const WEATHER_SPECS = {
     layer: 'goes_longwave_imagery',
     style: 'goes-lir',
     title: 'GOES regional satellite infrared',
-    coverage: 'GOES East/West regional North American coverage; not a global image.',
+    coverage:
+      'GOES East/West regional North American coverage; not a global image.',
     description:
       'GOES-19/18 longwave infrared Band 14 cloud and surface temperature patterns, approximately 2 km and 5-minute updates. Not a cloud-only mask.',
     bounds: { west: -180, south: -90, east: 180, north: 90 },
@@ -398,12 +408,16 @@ export async function weatherManifestResponse({
   let times = [];
   try {
     const capsUrl = `https://nowcoast.noaa.gov/geoserver/observations/${spec.service}/ows?service=WMS&version=1.3.0&request=GetCapabilities`;
-    const res = await upstream(`/api/upstream?url=${encodeURIComponent(capsUrl)}`);
+    const res = await upstream(
+      `/api/upstream?url=${encodeURIComponent(capsUrl)}`,
+    );
     if (res?.ok) {
       const xml = await res.text();
       const rawTimes =
         xml
-          .match(/<Dimension[^>]*name=["']time["'][^>]*>([^<]*)<\/Dimension>/i)?.[1]
+          .match(
+            /<Dimension[^>]*name=["']time["'][^>]*>([^<]*)<\/Dimension>/i,
+          )?.[1]
           ?.split(',') || [];
       times = rawTimes
         .map((t) => t.trim())
@@ -460,8 +474,7 @@ export async function weatherImageResponse({ search, upstream } = {}) {
   const bbox =
     params.get('bbox') ||
     `${spec.bounds.west},${spec.bounds.south},${spec.bounds.east},${spec.bounds.north}`;
-  const size =
-    params.get('size') || `${spec.image.width}x${spec.image.height}`;
+  const size = params.get('size') || `${spec.image.width}x${spec.image.height}`;
   const [w, h] = size.split('x');
 
   const wmsUrl = `https://nowcoast.noaa.gov/geoserver/observations/${spec.service}/ows?service=WMS&version=1.1.1&request=GetMap&layers=${spec.layer}&styles=${spec.style}&srs=EPSG:4326&bbox=${bbox}&width=${w || 1024}&height=${h || 512}&format=image/png&transparent=true&time=${encodeURIComponent(time)}`;
@@ -485,9 +498,8 @@ export async function weatherImageResponse({ search, upstream } = {}) {
 
 const BLANK_PNG_256_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAABFUlEQVR4nO3BMQEAAADCoPVP7WsIoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeAMBPAABPO1TCQAAAABJRU5ErkJggg==';
-const BLANK_PNG_256_BYTES = Uint8Array.from(
-  atob(BLANK_PNG_256_BASE64),
-  (c) => c.charCodeAt(0),
+const BLANK_PNG_256_BYTES = Uint8Array.from(atob(BLANK_PNG_256_BASE64), (c) =>
+  c.charCodeAt(0),
 );
 
 export async function weatherTileResponse({ search, upstream } = {}) {
@@ -613,7 +625,8 @@ export function windGridResponse({ now = () => Date.now() } = {}) {
       const wave3 = Math.sin(8 * lonRad + t) * cosLat;
 
       buffer[idx] = baseU + (wave1 * 6 + wave2 * 3) * cosLat;
-      buffer[count + idx] = baseV + (wave2 * 5 - wave1 * 4 + wave3 * 2) * cosLat;
+      buffer[count + idx] =
+        baseV + (wave2 * 5 - wave1 * 4 + wave3 * 2) * cosLat;
       idx++;
     }
   }
@@ -1057,7 +1070,12 @@ function ensureAisStream() {
         ws.send(
           JSON.stringify({
             APIKey: getAisStreamKey(),
-            BoundingBoxes: [[[-90, -180], [90, 180]]],
+            BoundingBoxes: [
+              [
+                [-90, -180],
+                [90, 180],
+              ],
+            ],
             FilterMessageTypes: [
               'PositionReport',
               'StandardClassBPositionReport',
@@ -1075,9 +1093,7 @@ function ensureAisStream() {
       _aisLastMsgTime = new Date().toISOString();
       try {
         const text =
-          typeof event.data === 'string'
-            ? event.data
-            : await event.data.text();
+          typeof event.data === 'string' ? event.data : await event.data.text();
         const envelope = JSON.parse(text);
         const messageType = envelope?.MessageType;
         const message = envelope?.Message?.[messageType] || {};
@@ -1208,6 +1224,19 @@ export function vesselsResponse() {
   });
 }
 
+/**
+ * The Provider Settings status this build renders: the same registry the
+ * desktop server serves, marked against the app's own store so that a key the
+ * user saved here gets the same REMOVE control the desktop panel offers for a
+ * key it owns in its .env (markStoredKeyManagement, src/keySetupCore.mjs).
+ */
+function panelKeySetupStatus() {
+  return markStoredKeyManagement(
+    keySetupStatus(getAllApiKeys()),
+    getStoredApiKeys(),
+  );
+}
+
 /** Routes this module answers, keyed by pathname. */
 const ROUTES = {
   '/api/gnss-integrity': (search, context) =>
@@ -1239,11 +1268,7 @@ const ROUTES = {
   '/api/vessels': () => vesselsResponse(),
   '/api/vessels/track': (search) =>
     jsonResponse(200, { mmsi: '', samples: [], source: 'AISStream' }),
-  '/api/setup/status': () => {
-    const env = getAllApiKeys();
-    const status = keySetupStatus(env);
-    return jsonResponse(200, status);
-  },
+  '/api/setup/status': () => jsonResponse(200, panelKeySetupStatus()),
 };
 
 /**
@@ -1299,8 +1324,7 @@ export function installInAppApi({
               return jsonResponse(400, validation);
             }
             saveApiKeys(updates);
-            const env = getAllApiKeys();
-            const status = keySetupStatus(env);
+            const status = panelKeySetupStatus();
             setTimeout(() => {
               if (typeof globalThis.location?.reload === 'function') {
                 globalThis.location.reload();

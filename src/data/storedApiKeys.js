@@ -8,8 +8,8 @@ const DEFAULT_KEYS = Object.freeze({
   TOMTOM_API_KEY: 'wXoT3pXh2bF9KKdGBJ6U0R3tH7m8x4wQ',
 });
 
-/** Read all user-configured API keys combined with defaults. */
-export function getAllApiKeys() {
+/** Read only the keys saved from Provider Settings (no built-in defaults). */
+export function getStoredApiKeys() {
   let stored = {};
   try {
     if (typeof localStorage !== 'undefined') {
@@ -17,9 +17,14 @@ export function getAllApiKeys() {
       if (raw) stored = JSON.parse(raw);
     }
   } catch {}
+  return stored && typeof stored === 'object' ? stored : {};
+}
+
+/** Read all user-configured API keys combined with defaults. */
+export function getAllApiKeys() {
   return {
     ...DEFAULT_KEYS,
-    ...stored,
+    ...getStoredApiKeys(),
   };
 }
 
@@ -29,17 +34,11 @@ export function getApiKey(name, fallback = '') {
   return all[name] || fallback;
 }
 
-/** Save one or more API keys to localStorage. */
+/** Save one or more API keys to localStorage. A null, undefined or blank
+ * value REMOVES the entry, returning that key to its built-in default. */
 export function saveApiKeys(updates) {
   if (!updates || typeof updates !== 'object') return;
-  let stored = {};
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) stored = JSON.parse(raw);
-    }
-  } catch {}
-
+  const stored = { ...getStoredApiKeys() };
   for (const [key, value] of Object.entries(updates)) {
     if (value === null || value === undefined || String(value).trim() === '') {
       delete stored[key];
