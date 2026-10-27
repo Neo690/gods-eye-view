@@ -6,6 +6,13 @@ import { setTimeout as delay } from 'node:timers/promises';
 import * as providers from '../../server/providers/live.js';
 import * as portable from '../../src/data/adsbLolFallback.js';
 
+/**
+ * The military route with one feed, so its cache and cooldown stay
+ * unambiguous. The merge across several feeds has its own tests below.
+ */
+const militaryOneFeed = () =>
+  providers.militaryProxy({ feeds: [providers.MILITARY_FEEDS[0]] });
+
 function install(plugin, preview = false) {
   const routes = new Map();
   plugin[preview ? 'configurePreviewServer' : 'configureServer']({
@@ -331,7 +338,7 @@ test('military aircraft route answers 502 to an oversized body without caching i
     bodies.push(oversized.state);
     return oversized.response;
   });
-  const request = install(providers.adsbLolProxy());
+  const request = install(militaryOneFeed());
   const first = await request('/api/military');
   assert.equal(first.statusCode, 502);
   assert.equal(bodies[0].cancelled, true);
@@ -350,7 +357,7 @@ test('military aircraft route preserves fresh cache and stale response after ups
     if (++calls > 1) throw Error('offline');
     return Response.json({ ac: [{ hex: 'abc123' }] });
   });
-  const request = install(providers.adsbLolProxy());
+  const request = install(militaryOneFeed());
   const first = await request('/api/military');
   assert.equal((await request('/api/military')).body, first.body);
   assert.equal(calls, 1);
@@ -446,7 +453,7 @@ test('military aircraft route serves stale cache on an upstream 429 and cools do
       headers: { 'Retry-After': '20' },
     });
   });
-  const request = install(providers.adsbLolProxy());
+  const request = install(militaryOneFeed());
   const first = await request('/api/military');
   assert.equal(first.statusCode, 200);
   now += 13_000;
@@ -478,7 +485,7 @@ test('military aircraft route relays an upstream 429 when nothing is cached', as
     calls += 1;
     return new Response('{"error":"rate limited"}', { status: 429 });
   });
-  const request = install(providers.adsbLolProxy());
+  const request = install(militaryOneFeed());
   const limited = await request('/api/military');
   assert.equal(limited.statusCode, 429);
   assert.ok(limited.headers['retry-after']);
@@ -516,7 +523,7 @@ test('military fallback cancels a stalled 5xx body and starts cooldown at receip
       },
     );
   });
-  const request = install(providers.adsbLolProxy());
+  const request = install(militaryOneFeed());
   await request('/api/military');
   now += 1000;
   const hit = await request('/api/military');
@@ -551,7 +558,7 @@ test('military cooldown bounds untrusted Retry-After and defaults server errors'
           headers: { 'Retry-After': raw },
         }),
     );
-    const result = await install(providers.adsbLolProxy())('/api/military');
+    const result = await install(militaryOneFeed())('/api/military');
     assert.equal(Number(result.headers['retry-after']), seconds);
   }
 });
@@ -582,4 +589,191 @@ test('track backfill proxy returns 502 on an oversized upstream body and caches 
   const res2 = await tracks('/api/flights/track', '?icao24=def456');
   assert.equal(res2.statusCode, 502);
   assert.equal(callCount, 1);
+});
+
+const TWO_FEEDS = providers.MILITARY_FEEDS.filter((feed) => !feed.key);
+
+test('military merge reads every feed, deduplicates by ICAO24 and reports each one', async (t) => {
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    calls.push(url);
+    if (url.includes('opendata.adsb.fi'))
+      return Response.json({
+        ac: [
+          // The same aircraft adsb.lol also heard, but with a fresher fix.
+          {
+            hex: 'ABC123',
+            lat: 30.5,
+            lon: -97.5,
+            seen_pos: 1,
+            flight: 'RCH01',
+          },
+          // Only this network reported it.
+          { hex: 'feed02', lat: 31, lon: -98, seen_pos: 2 },
+          // A feed repeating itself still contributes one aircraft.
+          { hex: 'abc123', lat: 30.5, lon: -97.5, seen_pos: 1 },
+        ],
+      });
+    return Response.json({
+      ac: [
+        { hex: 'abc123', lat: 30, lon: -97, seen_pos: 20 },
+        { hex: 'deaf01', lat: 29, lon: -96, seen_pos: 5 },
+        // Positionless row for an aircraft the other feed placed: keeping this
+        // one would delete the aircraft from the map.
+        { hex: 'feed02' },
+      ],
+    });
+  });
+  const request = install(providers.militaryProxy({ feeds: TWO_FEEDS }));
+  const response = await request('/api/military');
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers['x-feed-source'], 'adsb.lol+adsb.fi');
+  assert.equal(response.headers['x-military-sources'], 'adsb.lol=3,adsb.fi=2');
+  assert.equal(response.headers['x-feed-cache'], 'MISS');
+  const body = JSON.parse(response.body);
+  assert.equal(body.total, 3);
+  assert.equal(body.sources.length, 2);
+  assert.deepEqual(
+    body.ac.map((row) => row.hex),
+    ['abc123', 'deaf01', 'feed02'],
+  );
+  assert.equal(body.ac[0].lat, 30.5, 'the freshest positioned row wins');
+  assert.equal(body.ac[1].lat, 29);
+  assert.equal(body.ac[2].lat, 31, 'a positioned row beats a positionless one');
+  assert.deepEqual(calls.sort(), [
+    'https://api.adsb.lol/v2/mil',
+    'https://opendata.adsb.fi/api/v2/mil',
+  ]);
+});
+
+test('a military feed that fails never costs another feed its data', async (t) => {
+  t.mock.method(console, 'error', () => {});
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('opendata.adsb.fi')) throw Error('offline');
+    return Response.json({
+      ac: [{ hex: 'abc123', lat: 30, lon: -97, seen_pos: 3 }],
+      now: 1_800_000_000_000,
+    });
+  });
+  const request = install(providers.militaryProxy({ feeds: TWO_FEEDS }));
+  const response = await request('/api/military');
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers['x-feed-source'], 'adsb.lol');
+  assert.equal(response.headers['x-military-sources'], 'adsb.lol=1');
+  assert.equal(response.headers['x-feed-cache'], 'MISS');
+  assert.equal(JSON.parse(response.body).total, 1);
+});
+
+test('military merge relays a failure only when no feed answered at all', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    calls += 1;
+    return new Response('{"error":"rate limited"}', {
+      status: 429,
+      headers: { 'Retry-After': '20' },
+    });
+  });
+  const request = install(providers.militaryProxy({ feeds: TWO_FEEDS }));
+  const limited = await request('/api/military');
+  assert.equal(calls, 2, 'both feeds were asked');
+  assert.equal(limited.statusCode, 429);
+  assert.equal(limited.headers['retry-after'], '20');
+  assert.equal(limited.headers['x-feed-source'], 'adsb.lol+adsb.fi');
+  const again = await request('/api/military');
+  assert.equal(again.statusCode, 429);
+  assert.equal(calls, 2, 'a cooling-down miss asks upstream again');
+  assert.ok(again.headers['retry-after']);
+});
+
+test('military merge dates the answer by its oldest feed and serves a stale one as STALE', async (t) => {
+  let now = 1_800_000_000_000;
+  let calls = 0;
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(console, 'warn', () => {});
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    calls += 1;
+    if (url.includes('opendata.adsb.fi'))
+      return Response.json({ ac: [{ hex: 'feed02', lat: 31, lon: -98 }] });
+    if (calls <= 2)
+      return Response.json({ ac: [{ hex: 'abc123', lat: 30, lon: -97 }] });
+    return new Response('{}', { status: 503 });
+  });
+  const request = install(providers.militaryProxy({ feeds: TWO_FEEDS }));
+  const first = await request('/api/military');
+  assert.equal(first.headers['x-feed-cache'], 'MISS');
+  // Both caches have gone cold; one feed answers and one fails, so the merged
+  // answer carries the older of the two ages and reads as STALE.
+  now += 13_000;
+  const mixed = await request('/api/military');
+  assert.equal(calls, 4, 'both feeds were refreshed');
+  assert.equal(mixed.headers['x-feed-cache'], 'STALE');
+  assert.equal(mixed.headers['x-feed-age-ms'], '13000');
+  assert.equal(mixed.headers['x-ads-b-upstream-status'], '503');
+  assert.equal(JSON.parse(mixed.body).total, 2);
+});
+
+test('a keyed military feed joins only when the operator configured its key', async (t) => {
+  assert.deepEqual(
+    providers.configuredMilitaryFeeds({}).map((feed) => feed.id),
+    ['adsb.lol', 'adsb.fi'],
+  );
+  assert.deepEqual(
+    providers
+      .configuredMilitaryFeeds({ ADSBX_API_KEY: 'fixture-key' })
+      .map((feed) => feed.id),
+    ['adsb.lol', 'adsb.fi', 'adsbexchange'],
+  );
+
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    calls.push({ url, headers: options?.headers });
+    return Response.json({ ac: [{ hex: 'abc123', lat: 30, lon: -97 }] });
+  });
+  environment(t, { ADSBX_API_KEY: undefined });
+  const request = install(providers.militaryProxy());
+  const anonymous = await request('/api/military');
+  assert.equal(calls.length, 2);
+  assert.equal(
+    anonymous.headers['x-feed-source'],
+    'adsb.lol+adsb.fi',
+    'no key, no request to the keyed feed',
+  );
+
+  environment(t, { ADSBX_API_KEY: 'fixture-key' });
+  const keyed = install(providers.militaryProxy());
+  const response = await keyed('/api/military');
+  assert.equal(calls.length, 5);
+  const keyedCall = calls.find((call) => call.url.includes('adsbexchange'));
+  assert.equal(
+    keyedCall.url,
+    'https://gateway.adsbexchange.com/api/aircraft/v2/mil',
+  );
+  assert.equal(keyedCall.headers['X-Api-Key'], 'fixture-key');
+  assert.equal(
+    response.headers['x-feed-source'],
+    'adsb.lol+adsb.fi+adsbexchange',
+  );
+  assert.equal(
+    response.headers['x-military-sources'],
+    'adsb.lol=1,adsb.fi=1,adsbexchange=1',
+  );
+});
+
+test('military merge skips a body it cannot parse and keeps rows without an ICAO24', async () => {
+  const merged = providers.mergeMilitaryPayloads([
+    { id: 'adsb.lol', body: '{"ac":[{"hex":"ABC123","lat":30,"lon":-97}]}' },
+    { id: 'adsb.fi', body: '<html>we are down for maintenance</html>' },
+  ]);
+  assert.equal(merged.total, 1);
+  assert.deepEqual(merged.sources, [{ id: 'adsb.lol', count: 1 }]);
+  assert.equal(merged.duplicates, 0);
+  const row = JSON.parse(merged.body).ac[0];
+  assert.equal(row.hex, 'abc123', 'the merged answer spells an ICAO24 one way');
+  assert.equal(row.lat, 30, 'every other field is passed through as received');
+
+  const unkeyed = providers.mergeMilitaryPayloads([
+    { id: 'adsb.lol', body: '{"ac":[{"alt_baro":"ground"}]}' },
+  ]);
+  assert.equal(unkeyed.total, 1, 'a row without an ICAO24 cannot be dropped');
 });

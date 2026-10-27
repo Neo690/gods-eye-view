@@ -16,7 +16,7 @@ import { gbfsProxy } from './gbfs.js';
 import { localReceiversProxy } from './local-receivers.js';
 import { transitProxy } from './transit.js';
 import { upstreamRelayProxy } from './upstream.js';
-import { adsbLolProxy } from './aircraft/adsb-lol.js';
+import { militaryProxy } from './aircraft/military.js';
 import { aisLiveProxy } from './vessels/ais-live.js';
 import { trackBackfillProxies } from './aircraft/tracks.js';
 import { openAiRealtimeProxy } from './openai.js';
@@ -61,7 +61,7 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     // The standalone shell reads feeds through this relay; the server-side
     // proxies above stay the browser's path.
     upstreamRelayProxy(),
-    adsbLolProxy(),
+    militaryProxy(),
     aisLiveProxy(),
     trackBackfillProxies(),
     openAiRealtimeProxy({ realtime }),

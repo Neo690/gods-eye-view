@@ -704,6 +704,18 @@ speed holds the last known value, as civil records do; a grounded row without
 speed reads 0. Rendering retains ground
 model ownership, motion history, military registration and tracking cleanup.
 
+`/api/military` merges several community military feeds (`adsb.lol` and `adsb.fi`
+keyless; ADSB Exchange only when `ADSBX_API_KEY` is set) into one readsb body by
+ICAO24, because each network is a different set of receivers. Two feeds reporting
+one aircraft keep the row with a position and then the freshest position; a
+positionless row is never kept over a positioned one, since the record owner
+drops positionless contacts. Each feed owns its own 12 s cache and cooldown, so a
+rate-limited feed serves its cached body as stale and never costs the others
+their data. The merged answer dates itself by its oldest contributing feed,
+names the feeds that answered in `X-Feed-Source`, and reports their counts in
+`X-Military-Sources`. The Android shell merges the same two keyless feeds in
+`LiveApi.military()`; keyed feeds stay out of a public download.
+
 Civil flights separate source acquisition, portable record reconciliation and
 scene application. The record owner keeps sticky metadata, geoid cache and
 bounded missing-poll state; ingestion owns cancellation, source freshness and
@@ -3656,7 +3668,7 @@ its criteria cannot be silently ignored.
 | Layer                  | Source                                                                                                                                                                                          | File                                                  | Proxy                                                    | Update Interval                                                                   |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | Live Flights ✈️        | OpenSky Network; bounded adsb.lol regional fallback                                                                                                                                             | `src/data/flights.js`                                 | `/api/flights` (OAuth + fallback)                        | 30s                                                                               |
-| Military Flights 🎖️    | adsb.lol /v2/mil                                                                                                                                                                                | `src/data/militaryFlights.js`                         | `/api/military`                                       | 15s                                                                               |
+| Military Flights 🎖️    | adsb.lol /v2/mil + adsb.fi /v2/mil, merged by ICAO24 (optional ADSB Exchange under `ADSBX_API_KEY`)                                                                                             | `src/data/militaryFlights.js`                         | `/api/military`                                       | 15s                                                                               |
 | Live AIS Vessels 🚢    | AISStream websocket                                                                                                                                                                             | `src/data/aisLiveVessels.js`                          | `/api/vessels`                                          | 60s (+800ms visibility pass)                                                      |
 | Mapped Installations ⌖ | OpenFreeMap military areas; optional configured Overpass names and Google Places search | `src/data/militaryInstallations.js` | OpenFreeMap tiles, `/api/military-installations`, `/api/google/text-search` | viewport-driven; transient errors back off, missing capability switches to tiles |
 | Earthquakes            | USGS                                                                                                                                                                                            | `src/data/earthquakes.js`                             | —                                                        | 60s                                                                               |

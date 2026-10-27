@@ -147,7 +147,7 @@ their `server/providers` counterparts:
 | `/api/celestrak/{group}`                   | CelesTrak GP/TLE text           | 6 h, stale on failure                                     |
 | `/api/flights`, `/api/opensky`             | OpenSky `states/all?extended=1` | 10 s; 250 nm adsb.lol snapshot if OpenSky is rate limited |
 | `/api/flights/track`, `/api/opensky-track` | OpenSky `tracks/all`            | 60 s                                                      |
-| `/api/military`, `/api/adsblol/mil`        | adsb.lol `/v2/mil`              | 12 s                                                      |
+| `/api/military`, `/api/adsblol/mil`        | adsb.lol + adsb.fi `/v2/mil`, merged by ICAO24 | 12 s per feed                                |
 | `/api/adsbdb/{callsign,aircraft}/{id}`     | adsbdb v0                       | 1 h                                                       |
 | `/api/launches`                            | Launch Library 2                | 15 min                                                    |
 | `/api/radiation`                           | BfS, Health Canada, Safecast, radmon.org, NOAA SWPC | In-app via `/api/upstream` |
@@ -155,6 +155,11 @@ their `server/providers` counterparts:
 
 The calls are issued from Java, so no CORS applies and no browser `Origin` is
 sent. Nothing is uploaded and no key is involved: these are the public feeds.
+The military route merges its feeds the way `server/providers/aircraft/military-feeds.js`
+does — same ICAO24 deduplication, same preference for a positioned then fresher
+row — and reports the ones that answered in `x-feed-source`. Keyed feeds stay
+out of the APK entirely: a key compiled into a public download is a published
+key, and a keyed feed's terms are the operator's to accept, not this build's.
 
 Layers whose upstream needs a credential cannot be faked, so they answer the
 way a keyless server does instead of 404 — the traffic layer falls back to OSM

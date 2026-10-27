@@ -115,6 +115,17 @@ export const DATA_CREDITS = [
       '<a href="https://adsb.lol" target="_blank" rel="noopener">adsb.lol</a> ' +
       '(ODbL 1.0)',
   },
+  // ADS-B Exchange stays out of this list on purpose: it is read only when an
+  // operator sets ADSBX_API_KEY of their own, so a permanent credit would name
+  // a source most installs never contact. DATA_SOURCES.md records its terms;
+  // its source row in the Layers panel names it while it is configured.
+  {
+    key: 'adsbfi',
+    html:
+      'Military flights (second receiver network, merged by ICAO24): ' +
+      '<a href="https://adsb.fi" target="_blank" rel="noopener">adsb.fi</a> ' +
+      '(personal, non-commercial use)',
+  },
   {
     key: 'adsbdb',
     html:

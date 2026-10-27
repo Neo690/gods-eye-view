@@ -17,8 +17,10 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -475,22 +477,81 @@ final class LiveApi {
     return bytes(200, "OK", "application/json", "utf-8", entry.body, headers());
   }
 
-  /* ── adsb.lol military feed and adsbdb enrichment ───────────────────── */
+  /* ── community military feeds and adsbdb enrichment ─────────────────── */
 
-private static WebResourceResponse military() throws IOException {
-  Cached entry = cache.get("adsb.lol:mil");
-  if (entry == null || entry.ageMs() >= 12_000L) {
-    try {
-      byte[] body = get("https://api.adsb.lol/v2/mil");
-      if (isJson(body)) {
-        entry = new Cached(body);
-        remember("adsb.lol:mil", entry);
+  /**
+   * The military feeds this shell reads, merged the way the project's server
+   * merges them (server/providers/aircraft/military-feeds.js): each network is
+   * a different set of receivers, so the same minute of sky comes back
+   * overlapping AND different.
+   *
+   * <p>The keyed feeds the server can read stay out of the APK. A key compiled
+   * into a public download is a published key, which is exactly the mistake the
+   * hard-coded traffic key already demonstrates.
+   */
+  private static final String[][] MILITARY_FEEDS = {
+    { "adsb.lol", "https://api.adsb.lol/v2/mil" },
+    { "adsb.fi", "https://opendata.adsb.fi/api/v2/mil" },
+  };
+
+  private static final long MILITARY_TTL_MS = 12_000L;
+
+private static WebResourceResponse military() {
+  Map<String, JSONObject> byIcao = new HashMap<>();
+  JSONArray unkeyed = new JSONArray();
+  List<String> answered = new ArrayList<>();
+  // Per-feed counts in the same shape the server reports them, so the two
+  // implementations of this route can be compared header for header.
+  List<String> reported = new ArrayList<>();
+  for (int index = 0; index < MILITARY_FEEDS.length; index += 1) {
+    String id = MILITARY_FEEDS[index][0];
+    String key = "mil:" + id;
+    Cached entry = cache.get(key);
+    if (entry == null || entry.ageMs() >= MILITARY_TTL_MS) {
+      try {
+        byte[] body = get(MILITARY_FEEDS[index][1]);
+        if (isJson(body)) {
+          entry = new Cached(body);
+          remember(key, entry);
+        }
+      } catch (IOException failure) {
+        // One feed down never costs the others their data: a shell that still
+        // has a cached copy serves it, and only a shell with nothing at all
+        // answers 502 below.
+        if (entry == null) continue;
       }
-    } catch (IOException failure) {
-      if (entry == null) throw failure;
     }
+    if (entry == null) continue;
+    JSONArray aircraft = militaryAircraft(entry.body);
+    if (aircraft == null) continue;
+    answered.add(id);
+    int count = 0;
+    for (int row = 0; row < aircraft.length(); row += 1) {
+      JSONObject contact = aircraft.optJSONObject(row);
+      if (contact == null) continue;
+      count += 1;
+      String icao = contact.optString("hex", "").trim().toLowerCase(Locale.ROOT);
+      if (icao.isEmpty()) {
+        // No identity to deduplicate on: keep the row as received.
+        unkeyed.put(contact);
+        continue;
+      }
+      // The ICAO24 is the row's identity, so the merged answer spells it one
+      // way however the feed that won happened to write it.
+      try {
+        contact.put("hex", icao);
+      } catch (JSONException impossible) {
+        // Storing a string cannot fail; org.json declares the exception anyway.
+        Log.w(TAG, "military row kept its original ICAO24 spelling", impossible);
+      }
+      JSONObject incumbent = byIcao.get(icao);
+      if (incumbent == null || preferredMilitaryRow(contact, incumbent)) {
+        byIcao.put(icao, contact);
+      }
+    }
+    reported.add(id + "=" + count);
   }
-  if (entry == null) {
+  if (answered.isEmpty()) {
     return json(
       502,
       "Bad Gateway",
@@ -498,14 +559,87 @@ private static WebResourceResponse military() throws IOException {
       headers("Cache-Control", "no-store")
     );
   }
-  return bytes(
-    200,
-    "OK",
-    "application/json",
-    "utf-8",
-    entry.body,
-    headers("x-feed-source", "adsb.lol")
+  JSONArray ac = new JSONArray();
+  for (JSONObject contact : byIcao.values()) ac.put(contact);
+  for (int row = 0; row < unkeyed.length(); row += 1) ac.put(unkeyed.opt(row));
+  try {
+    JSONObject merged = new JSONObject();
+    merged.put("ac", ac);
+    merged.put("total", ac.length());
+    return bytes(
+      200,
+      "OK",
+      "application/json",
+      "utf-8",
+      merged.toString().getBytes(StandardCharsets.UTF_8),
+      headers(
+        "x-feed-source",
+        String.join("+", answered),
+        "x-military-sources",
+        String.join(",", reported)
+      )
+    );
+  } catch (JSONException failure) {
+    return json(
+      502,
+      "Bad Gateway",
+      "{\"error\":\"military_unavailable\"}",
+      headers()
+    );
+  }
+}
+
+/** The `ac` array of a readsb body, or null when the body is not one. */
+private static JSONArray militaryAircraft(byte[] body) {
+  try {
+    JSONObject payload = new JSONObject(
+      new String(body, StandardCharsets.UTF_8)
+    );
+    return payload.optJSONArray("ac");
+  } catch (JSONException notAnObject) {
+    return null;
+  }
+}
+
+/**
+ * Does `candidate` describe one aircraft better than `incumbent`?
+ *
+ * <p>A row with a position always wins: the aircraft layers drop a positionless
+ * contact, so keeping one would delete the very aircraft the merge is widening
+ * coverage for. Between two positioned rows the freshest observation wins, and
+ * a tie keeps the incumbent so the answer is stable between refreshes.
+ */
+private static boolean preferredMilitaryRow(
+  JSONObject candidate,
+  JSONObject incumbent
+) {
+  boolean candidatePositioned = militaryPositioned(candidate);
+  if (candidatePositioned != militaryPositioned(incumbent)) {
+    return candidatePositioned;
+  }
+  double candidateSeen = militarySeenPosition(candidate);
+  double incumbentSeen = militarySeenPosition(incumbent);
+  if (Double.isNaN(candidateSeen)) return false;
+  if (Double.isNaN(incumbentSeen)) return true;
+  return candidateSeen < incumbentSeen;
+}
+
+private static boolean militaryPositioned(JSONObject contact) {
+  double latitude = contact.optDouble("lat", Double.NaN);
+  double longitude = contact.optDouble("lon", Double.NaN);
+  return (
+    !Double.isNaN(latitude) &&
+    !Double.isNaN(longitude) &&
+    Math.abs(latitude) <= 90 &&
+    Math.abs(longitude) <= 180
   );
+}
+
+/** Seconds since the position was observed, or NaN when the row omits it. */
+private static double militarySeenPosition(JSONObject contact) {
+  return contact.has("seen_pos")
+    ? contact.optDouble("seen_pos", Double.NaN)
+    : Double.NaN;
 }
 
 private static WebResourceResponse enrichment(String tail) throws IOException {
