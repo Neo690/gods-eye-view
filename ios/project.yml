@@ -1,0 +1,55 @@
+# XcodeGen spec for the iOS shell.
+#
+# The app is the SAME Vite build the desktop and the APK run: `prepare-payload.mjs`
+# copies `dist/` into `GodsEyeView/www` and writes `BuildConfig.swift`, then
+# `xcodegen generate` turns this file into GodsEyeView.xcodeproj.
+#
+# Why a loopback HTTP server instead of WKURLSchemeHandler: geolocation,
+# getUserMedia, Web Workers and IndexedDB all need a secure context, and the
+# Secure Contexts standard treats `http://127.0.0.1` as potentially trustworthy
+# while it makes no such promise for arbitrary custom schemes. Serving the
+# bundle from 127.0.0.1 keeps `/api/*` same-origin too.
+name: GodsEyeView
+options:
+  bundleIdPrefix: com.godseye
+  deploymentTarget:
+    iOS: '16.0'
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+settings:
+  base:
+    MARKETING_VERSION: '1.0'
+    CURRENT_PROJECT_VERSION: '1'
+    SWIFT_VERSION: '5.9'
+    IPHONEOS_DEPLOYMENT_TARGET: '16.0'
+    # The shell must not be modernised into Swift 6 strict concurrency: the
+    # URLSession bridge is called from a socket task.
+    SWIFT_STRICT_CONCURRENCY: minimal
+
+targets:
+  GodsEyeView:
+    type: application
+    platform: iOS
+    sources:
+      - path: GodsEyeView
+        excludes:
+          - 'www/**'
+      # The bundle is copied verbatim as a folder reference so relative asset
+      # paths and nested directories survive the way they do in the APK.
+      - path: GodsEyeView/www
+        type: folder
+        buildPhase: resources
+    # A shared scheme, so `xcodebuild -scheme GodsEyeView` works on a project
+    # XcodeGen just generated, in CI as well as in Xcode.
+    scheme:
+      gatherCoverageData: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.godseye.view
+        INFOPLIST_FILE: GodsEyeView/Info.plist
+        TARGETED_DEVICE_FAMILY: '1,2'
+        ASSETCATALOG_COMPILER_APPICON_NAME: ''
+        ENABLE_USER_SCRIPT_SANDBOXING: 'NO'
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ''

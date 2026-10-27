@@ -260,6 +260,34 @@ installed payload on `127.0.0.1:8790` and opens a window on it; `GEV_DESKTOP_POR
 overrides the port, and `--verify` starts the server, asks `/api/setup/status`
 once and exits without opening a window.
 
+### Path 5 — iPhone app (iOS)
+
+The same bundle in a WKWebView, served from `http://127.0.0.1:47821` out of the
+app's own bundle. The loopback origin is deliberate: it is a secure context, so
+geolocation, the microphone, workers and storage all work, and `/api/*` stays
+same-origin the way `server/` expects. `ios/` holds a Swift shell plus the
+[XcodeGen](https://github.com/yonaskolb/XcodeGen) spec that generates the Xcode
+project.
+
+Building it needs a Mac with Xcode 15+ (iOS 16 target) and
+`brew install xcodegen`:
+
+```bash
+npm ci
+npm run build
+GEV_API_BASE=https://your-data-server npm run ios:payload   # optional, same variable as the APK
+cd ios && xcodegen generate && open GodsEyeView.xcodeproj
+```
+
+Pick your team under *Signing & Capabilities* to run it on a phone; a free
+Apple ID works but its profile expires after seven days. Full details — device
+install, permissions, what the shell provides — in
+[ios/README.md](ios/README.md).
+
+No `.ipa` is published from CI: an installable iOS build needs your Apple
+signing identity. The `iOS app` workflow compiles the shell on a macOS runner
+instead, so a broken Swift change fails the build rather than reaching a phone.
+
 ### Then power it up — in the app, not in a file
 
 Keys are upgrades, not prerequisites. When you want one, click the **POWER UP**

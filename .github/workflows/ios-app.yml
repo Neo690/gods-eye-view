@@ -1,0 +1,105 @@
+name: iOS app
+
+# Unlike the Android workflow this one publishes nothing: an installable iOS app
+# needs an Apple Developer signing identity and a provisioning profile, which
+# belong to the maintainer's account, not to this repository. What a runner can
+# prove is that the shell compiles against the real SDK and the real bundle, so
+# that is what this job does — on every push that touches either half.
+#
+# To build a signed IPA or send a build to a phone, use Xcode on a Mac (or a
+# paid CI macOS runner with the signing secrets): see ios/README.md.
+on:
+  push:
+    branches: [android-shell, main, ios-shell]
+    paths:
+      - 'ios/**'
+      - 'scripts/prepare-ios-payload.mjs'
+      - 'src/**'
+      - 'public/**'
+      - 'build/**'
+      - 'server/**'
+      - 'config/**'
+      - 'index.html'
+      - 'style.css'
+      - 'vite.config.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ios-app.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compile the iOS shell
+    runs-on: macos-15
+    timeout-minutes: 40
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: '1'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      # The client-side map credentials only. Everything else is server-side and
+      # must not be inlined into a bundle that ships inside a public app.
+      - name: Build the web bundle
+        env:
+          CESIUM_ION_TOKEN: ${{ vars.CESIUM_ION_TOKEN }}
+          GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_API_KEY }}
+        run: npm run build
+
+      - name: Stage the bundle into the iOS shell
+        env:
+          GEV_API_BASE: ${{ vars.GEV_API_BASE }}
+        run: npm run ios:payload
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodegen generate
+          ls -d GodsEyeView.xcodeproj
+
+      # Simulator, unsigned: this compiles Swift against the iOS SDK and links
+      # the shell, which is the part a Windows machine cannot check. A device
+      # build would additionally require a signing identity.
+      - name: Compile for the simulator
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project GodsEyeView.xcodeproj \
+            -scheme GodsEyeView \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Verify the app carries the console
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          APP="$(find build/Build/Products -name 'GodsEyeView.app' -maxdepth 3 | head -1)"
+          test -n "$APP"
+          test -f "$APP/www/index.html"
+          echo "bundle: $(du -sh "$APP/www" | cut -f1) in $APP"

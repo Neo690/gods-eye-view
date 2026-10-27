@@ -49,6 +49,7 @@
     "apk:install": "node scripts/install-latest-apk.mjs",
     "apk:watch": "node scripts/install-latest-apk.mjs --watch",
     "apk:seed-keys": "node scripts/seed-phone-keys.mjs",
+    "ios:payload": "node scripts/prepare-ios-payload.mjs",
     "towers:build": "node scripts/build-anfr-towers.mjs",
     "preview": "vite preview",
     "test": "node scripts/run-unit-tests.mjs",

@@ -50,3 +50,15 @@ android/*.apk
 desktop/.payload/
 desktop/release/
 desktop/node_modules/
+
+# iOS shell: the bundle `npm run ios:payload` stages, Xcode's output, and the
+# project XcodeGen derives from ios/project.yml (the spec is the source of truth).
+# The folder itself stays in the repository: XcodeGen refuses a folder
+# reference to a path that does not exist, so a fresh clone must be able to
+# generate the project before the first `npm run ios:payload`.
+ios/GodsEyeView/www/*
+!ios/GodsEyeView/www/.gitkeep
+ios/GodsEyeView.xcodeproj/
+ios/build/
+ios/DerivedData/
+ios/*.ipa

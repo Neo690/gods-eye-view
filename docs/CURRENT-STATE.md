@@ -1,5 +1,22 @@
 # God's Eye View Current State
 
+The iOS shell in `ios/` runs the same `dist/` bundle the browser, the desktop
+app and the APK run; it is not a second implementation. `WKWebView` loads it
+from `http://127.0.0.1:47821`, a loopback origin the Secure Contexts standard
+treats as trustworthy, which is what makes geolocation, `getUserMedia`, workers
+and `localStorage` work — a `WKURLSchemeHandler` page is not a secure context —
+and which keeps `/api/*` same-origin. The port is fixed because Provider
+Settings keys live in the origin's `localStorage`. `LocalServer` serves the
+bundle out of `GodsEyeView/www` and routes `/api/*` to `ApiForwarder`, which
+replays the request against `BuildConfig.apiBase` (`GEV_API_BASE`, https only
+under ATS); with no base, `/api/*` answers a JSON 503 naming the missing
+configuration instead of a bare 404. `scripts/prepare-ios-payload.mjs` stages
+the build and writes that constant, refusing plain HTTP and credential-shaped
+files, and `ios/project.yml` is the XcodeGen spec that produces the project.
+`ios-app.yml` compiles the shell for the simulator on a macOS runner; no `.ipa`
+is published, because signing belongs to an Apple account rather than the
+repository.
+
 Analyst region queries resolve unique Natural Earth names offline without
 geocoding, so Gold Coast and Ivory Coast name the West African natural regions.
 Duplicate names require a geocoded containment anchor; when several entries for
