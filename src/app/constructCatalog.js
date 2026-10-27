@@ -31,6 +31,7 @@ import { createApplicationFirePerimeters } from './layers/perimeters.js';
 import { createApplicationGnssIntegrity } from './layers/gnss.js';
 import { createApplicationCellTowers } from './layers/cellTowers.js';
 import { createApplicationIotSensors } from './layers/iotSensors.js';
+import { createPrivateWifiLayer } from '../layers/privateWifi/index.js';
 import { createApplicationCables } from './layers/submarineCables.js';
 import { createApplicationStreetLevel } from './layers/streetLevel.js';
 import { createInfrastructureLayers } from '../data/infrastructure.js';
@@ -45,6 +46,9 @@ import { createBhoteKoshiLocatorLayer } from '../data/bhoteKoshiLocator.js';
 export const LOCAL_ONLY_LAYER_METADATA = Object.freeze([
   Object.freeze({ id: 'local-adsb', disposition: 'local-only' }),
   Object.freeze({ id: 'windy-weather', disposition: 'local-only' }),
+  // An imported wardrive is one operator's own file: a share link must never
+  // imply that the recipient has it, and it must never be restored for them.
+  Object.freeze({ id: 'private-wifi', disposition: 'local-only' }),
 ]);
 
 /** Serialization metadata for every layer the application catalog constructs. */
@@ -134,6 +138,7 @@ export function createApplicationCatalog({
         }),
         createApplicationCellTowers(),
         createApplicationIotSensors(),
+        createPrivateWifiLayer(),
         createApplicationAlpr({ surface, source: sources.alpr }),
         createApplicationStreetLevel({
           surface,

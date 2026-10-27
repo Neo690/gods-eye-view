@@ -16,6 +16,7 @@ import android.view.ViewGroup;
 import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -46,10 +47,13 @@ public class MainActivity extends Activity {
   private static final String START_URL = "https://" + ASSET_HOST + "/index.html";
   private static final int REQUEST_MIC = 41;
   private static final int REQUEST_LOCATION = 42;
+  private static final int REQUEST_FILE_CHOOSER = 43;
 
   private WebView webView;
   private PermissionRequest pendingAudioRequest;
   private GeolocationPermissions.Callback pendingLocationCallback;
+  /** The page's file input, waiting for the system picker to answer. */
+  private ValueCallback<Uri[]> pendingFileChooser;
   private String pendingLocationOrigin;
   private ApiForwarder apiForwarder;
 
@@ -187,6 +191,27 @@ public class MainActivity extends Activity {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
       requestPermissions(new String[] { Manifest.permission.RECORD_AUDIO }, REQUEST_MIC);
     }
+  }
+
+  /**
+   * Answers a page file input with the file the operator picked.
+   *
+   * <p>Without this override a WebView silently ignores {@code <input
+   * type="file">}: no picker, no callback, a button that does nothing. The
+   * private Wi-Fi layer is built on that input, so the shell has to answer it.
+   * {@code FileChooserParams.parseResult} returns null for a cancelled pick,
+   * which is exactly what the page expects.
+   */
+  @Override
+  protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+    if (requestCode != REQUEST_FILE_CHOOSER) return;
+    ValueCallback<Uri[]> callback = pendingFileChooser;
+    pendingFileChooser = null;
+    if (callback == null) return;
+    callback.onReceiveValue(
+      WebChromeClient.FileChooserParams.parseResult(resultCode, data)
+    );
   }
 
   @Override
@@ -418,6 +443,51 @@ public class MainActivity extends Activity {
     @Override
     public void onPermissionRequestCanceled(PermissionRequest request) {
       if (pendingAudioRequest == request) pendingAudioRequest = null;
+    }
+
+    /**
+     * The system file picker behind {@code <input type="file">}.
+     *
+     * <p>The intent comes from the page's own {@code accept} list, then the
+     * MIME types are widened: a WiGLE export is reported as text/csv by one
+     * file manager, application/vnd.ms-excel by another and
+     * application/octet-stream by a third, and a picker that greys out the
+     * operator's own file is worse than no filter at all.
+     */
+    @Override
+    public boolean onShowFileChooser(
+      WebView view,
+      ValueCallback<Uri[]> callback,
+      FileChooserParams params
+    ) {
+      if (pendingFileChooser != null) {
+        pendingFileChooser.onReceiveValue(null);
+        pendingFileChooser = null;
+      }
+      pendingFileChooser = callback;
+      Intent intent = params != null ? params.createIntent() : null;
+      if (intent == null) {
+        intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setType("*/*");
+      }
+      intent.addCategory(Intent.CATEGORY_OPENABLE);
+      intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[] {
+        "text/csv",
+        "text/comma-separated-values",
+        "text/plain",
+        "application/csv",
+        "application/vnd.ms-excel",
+        "application/octet-stream",
+      });
+      try {
+        startActivityForResult(intent, REQUEST_FILE_CHOOSER);
+      } catch (ActivityNotFoundException error) {
+        Log.w(TAG, "No file picker available", error);
+        pendingFileChooser = null;
+        callback.onReceiveValue(null);
+        return false;
+      }
+      return true;
     }
 
     /**

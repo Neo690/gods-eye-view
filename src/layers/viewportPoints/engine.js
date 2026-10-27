@@ -1,5 +1,5 @@
 import * as Cesium from 'cesium';
-import { formatNumber, msg, t } from '../../i18n/index.js';
+import { formatNumber, msg, t, translateKnown } from '../../i18n/index.js';
 import { translateFeedError } from '../../ui/statusText.js';
 import {
   MAX_POINTS,
@@ -43,6 +43,9 @@ export function cameraBounds(viewer) {
  * @param {string} config.colour Point colour (CSS).
  * @param {number} [config.pixelSize]
  * @param {number} [config.refreshMs] Interval the data manager re-reads at.
+ * @param {(context: {refresh: () => void}) => {chips?: Array<object>, detail?: string}}
+ *   [config.extras] Row controls a local-data layer owns itself (importing a
+ *   file, clearing it). Called on every panel refresh, so it must only read.
  */
 export function createViewportPointsLayer({
   id,
@@ -56,6 +59,7 @@ export function createViewportPointsLayer({
   refreshMs = 120000,
   requiresKeyId,
   emptyHint,
+  extras,
 }) {
   if (typeof source?.getSnapshot !== 'function')
     throw new TypeError(`${name} layer requires a snapshot source`);
@@ -265,18 +269,26 @@ export function createViewportPointsLayer({
     },
 
     getRowControls() {
+      // One reload path for provider switches and for a layer that supplies
+      // its own controls: both mean "the data changed under the last read".
+      const reload = () => {
+        _retryAt = 0;
+        _failureCount = 0;
+        if (_manager) void _manager.refreshLayer(id);
+        else void layer.update();
+      };
       const chips = choices.map((choice) => ({
         label: choice.label,
         active: choice.id === _activeSource,
         onClick: () => {
           if (choice.id === _activeSource) return;
           _activeSource = choice.id;
-          _retryAt = 0;
-          _failureCount = 0;
-          if (_manager) void _manager.refreshLayer(id);
-          else void layer.update();
+          reload();
         },
       }));
+      const extra =
+        typeof extras === 'function' ? extras({ refresh: reload }) : null;
+      if (Array.isArray(extra?.chips)) chips.push(...extra.chips);
       const errorLine = _lastError
         ? ` · ${translateFeedError(_lastError)}`
         : _retryAt
@@ -287,16 +299,27 @@ export function createViewportPointsLayer({
       return {
         chips,
         info:
-          t('{count} in view · {source} · {attribution}', {
-            count: formatNumber(_points.length),
-            source:
-              choices.find((choice) => choice.id === _activeSource)?.label ??
-              attribution,
-            attribution,
-          }) +
+          // Without provider choices the attribution IS the source; naming it
+          // twice would read like a duplicate, not a citation.
+          (choices.length
+            ? t('{count} in view · {source} · {attribution}', {
+                count: formatNumber(_points.length),
+                source:
+                  choices.find((choice) => choice.id === _activeSource)
+                    ?.label ?? attribution,
+                // A local layer's attribution is UI copy ("Your WiGLE
+                // export"); a provider citation is a product name and stays
+                // as written, which is exactly what translateKnown decides.
+                attribution: translateKnown(attribution),
+              })
+            : t('{count} in view · {attribution}', {
+                count: formatNumber(_points.length),
+                attribution: translateKnown(attribution),
+              })) +
           (_truncated
             ? ` · ${t('capped at {limit}', { limit: MAX_POINTS })}`
             : '') +
+          (extra?.detail ? ` · ${extra.detail}` : '') +
           errorLine,
         infoTitle:
           (_coverage?.clamped

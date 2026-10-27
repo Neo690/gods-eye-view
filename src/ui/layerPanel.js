@@ -65,6 +65,7 @@ const PANEL_GROUPS = [
       'local-dams',
       'cell-towers',
       'iot-sensors',
+      'private-wifi',
     ],
   },
   {
