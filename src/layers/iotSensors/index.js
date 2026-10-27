@@ -6,7 +6,9 @@ export * from '../viewportPoints/records.js';
 
 /** Providers this layer can read, in panel order. */
 export const IOT_PROVIDERS = Object.freeze([
+  // i18n-ignore: product name
   Object.freeze({ id: 'opensensemap', label: 'openSenseMap' }),
+  // i18n-ignore: product name
   Object.freeze({ id: 'ttn', label: 'TTN LoRaWAN' }),
 ]);
 

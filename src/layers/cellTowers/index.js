@@ -12,7 +12,9 @@ export * from '../viewportPoints/records.js';
  * instead of averaging them into one confidence.
  */
 export const CELL_TOWER_PROVIDERS = Object.freeze([
+  // i18n-ignore: product name of the French spectrum agency
   Object.freeze({ id: 'anfr', label: 'ANFR (France)' }),
+  // i18n-ignore: product name
   Object.freeze({ id: 'opencellid', label: 'OpenCelliD' }),
 ]);
 
