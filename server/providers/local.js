@@ -30,6 +30,8 @@ import { gnssIntegrityProxy } from './gnssIntegrity.js';
 import { radiationProxy } from './radiation.js';
 import { cycloneProxy } from './cyclones.js';
 import { windProxy } from './wind.js';
+import { iotSensorsProxy } from './iotSensors.js';
+import { cellTowersProxy } from './cellTowers.js';
 
 /**
  * Construct the local provider plugins in their established order.
@@ -46,6 +48,8 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     adsbdbProxy(),
     overpassProxy(),
     militaryInstallationsProxy(),
+    cellTowersProxy(),
+    iotSensorsProxy(),
     regionalBriefProxy(),
     geocodeProxy(),
     weatherEffectsProxy(),

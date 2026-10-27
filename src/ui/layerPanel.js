@@ -63,6 +63,8 @@ const PANEL_GROUPS = [
       'local-datacenters',
       'telegeography-submarine-cables',
       'local-dams',
+      'cell-towers',
+      'iot-sensors',
     ],
   },
   {

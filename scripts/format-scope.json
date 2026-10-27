@@ -1089,5 +1089,7 @@
   "src/ui/cctvBadges.test.mjs",
   "scripts/qa-status-badges.mjs",
   "scripts/seed-phone-keys.mjs",
-  "scripts/seed-phone-keys.test.mjs"
+  "scripts/seed-phone-keys.test.mjs",
+  "scripts/build-anfr-towers.mjs",
+  "src/tooling/cellTowersIot.test.mjs"
 ]

@@ -128,7 +128,7 @@ test('reservation ledger is complete, pinned, and rejects duplicate or malformed
     { ...parseLayerStateTokenReservations(reservationRows) },
     { ...LAYER_STATE_TOKEN_RESERVATIONS },
   );
-  assert.equal(Object.keys(LAYER_STATE_TOKEN_RESERVATIONS).length, 31);
+  assert.equal(Object.keys(LAYER_STATE_TOKEN_RESERVATIONS).length, 34);
   assert.deepEqual(
     { ...LAYER_STATE_TOKEN_RESERVATIONS },
     {
@@ -136,6 +136,11 @@ test('reservation ledger is complete, pinned, and rejects duplicate or malformed
       'street-level': '0',
       'gnss-integrity': '3',
       'air-quality': '4',
+      radiation: '5',
+      // New layers take the next free digits; 6/7 stay free for the
+      // merge-time fixtures below.
+      'cell-towers': '6',
+      'iot-sensors': '7',
     },
   );
   assert.throws(
@@ -391,7 +396,8 @@ test('checker reads a complete future base ledger and rejects retired-token reus
     },
     (cwd) => {
       const published = readPublishedLayerStateReservations('HEAD', cwd);
-      assert.equal(Object.keys(published).length, 32);
+      // The real ledger plus the fixture's own retired row.
+      assert.equal(Object.keys(published).length, 35);
       assert.equal(published['retired-layer'], '00');
       assert.throws(
         () =>
