@@ -1,0 +1,5 @@
+{
+  "entrypoint": "index.js",
+  "compatibilityDate": "2025-06-01",
+  "modules": [{ "name": "index.js", "type": "esm", "path": "./index.js" }]
+}
