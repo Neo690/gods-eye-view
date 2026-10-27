@@ -48,6 +48,7 @@
     "desktop:installer": "node desktop/build-installer.mjs",
     "apk:install": "node scripts/install-latest-apk.mjs",
     "apk:watch": "node scripts/install-latest-apk.mjs --watch",
+    "apk:seed-keys": "node scripts/seed-phone-keys.mjs",
     "preview": "vite preview",
     "test": "node scripts/run-unit-tests.mjs",
     "test:track": "node scripts/track-regression.mjs",

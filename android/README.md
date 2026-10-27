@@ -79,6 +79,43 @@ Unauthenticated GitHub API calls are limited to 60 an hour, so the default
 interval is two minutes. Export `GITHUB_TOKEN` to poll faster, or when the repository is
 private.
 
+## Put the desktop keys back into the phone
+
+The phone keeps the provider keys its Provider Settings panel saves in its own
+local storage. An in-place update preserves them — that is why `apk:install`
+uses the published asset — but a reinstall, a switch between signing keys or a
+"clear data" does not. `npm run apk:seed-keys` replays them from this machine:
+
+```bash
+npm run apk:seed-keys                       # the installed desktop app's .env
+npm run apk:seed-keys -- --from=.env.deploy # a specific file
+npm run apk:seed-keys -- --dry-run          # name the keys, write nothing
+```
+
+It hands the values to the app's own save route — the one the panel's SAVE
+button posts to, with the same validation — over the WebView debugging socket,
+so nothing is baked into the APK: the release is public and every phone would
+share an embedded key. Output names providers and never prints a value:
+
+```
+reading keys from …\Gods Eye View\resources\gods-eye-view\.env
+ignoring 2 name(s) the app does not know: URADMONITOR_USER_HASH, URADMONITOR_USER_ID
+9 key(s) the app knows: AISSTREAM_API_KEY, …
+wrote 9 key(s): AISSTREAM_API_KEY, …, WINDY_API_KEY
+providers lit: 3/11 -> 8/11
+```
+
+The file is looked up in this order: the installed desktop app's own `.env`
+(the one its Provider Settings writes), then `./.env`, then `./.env.deploy`.
+Names the panel does not know are listed and skipped, so a server-only variable
+cannot fail the whole save. Options: `--from=<file>`, `--serial=<device>`,
+`--port=<n>` (default 9333), `--adb=<path>`, `--dry-run`, `--help`.
+
+The app must be the one `adb` sees; the command starts it when it is not
+running and waits for its socket. Keep the phone unlocked — the socket exists
+only while the app lives. Run `npm run apk:install` first when the installed
+build is older than the checkout.
+
 ## What the shell provides
 
 - `INTERNET` for tiles, fonts and feeds.
