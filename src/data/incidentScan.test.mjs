@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   INCIDENT_LIMITS,
   incidentCellKey,
+  rankIncidents,
   scanIncidents,
 } from './incidentScan.js';
 
@@ -300,6 +301,37 @@ test('critical incidents are listed before warnings', () => {
     incidents.map((incident) => incident.severity),
     ['critical', 'warning'],
   );
+});
+
+test('the ranking is shared, so a zone alert is ordered against a scan alert', () => {
+  const listed = rankIncidents(
+    [
+      { id: 'zone:1', severity: 'warning', atMs: minutesAgo(3) },
+      { id: 'quake:1', severity: 'critical', atMs: minutesAgo(30) },
+      { id: 'zone:1', severity: 'warning', atMs: minutesAgo(3) },
+      { id: 'fire:1', severity: 'warning', atMs: minutesAgo(2) },
+      { severity: 'critical', atMs: NOW },
+    ],
+    { limits: INCIDENT_LIMITS },
+  );
+  assert.deepEqual(
+    listed.map((incident) => incident.id),
+    ['quake:1', 'fire:1', 'zone:1'],
+    'critical first, then the most recent; the duplicate id and the id-less entry are dropped',
+  );
+});
+
+test('the ranking caps the list and keeps ties in a stable order', () => {
+  const incidents = ['b', 'a', 'c'].map((name) => ({
+    id: name,
+    severity: 'warning',
+    atMs: NOW,
+  }));
+  assert.deepEqual(
+    rankIncidents(incidents, { limits: { maxIncidents: 2 } }).map((i) => i.id),
+    ['a', 'b'],
+  );
+  assert.deepEqual(rankIncidents(), []);
 });
 
 test('grid keys separate neighbouring cells and stay inside the longitude range', () => {

@@ -844,9 +844,11 @@ export class StyleManager extends ShellFacade {
 
   /**
    * Mounts the alert centre (src/ui/alertCenter.js): the HUD bell, the incident
-   * list and the toast. Its scan reads the analyst records of the layers that
-   * are ON — a layer that is off has no records, so its incidents age out
-   * rather than being reported from data the app never loaded.
+   * list, the zone-rule editor and the toast. Its scan reads the analyst records
+   * of the layers that are ON — a layer that is off has no records, so its
+   * incidents age out rather than being reported from data the app never loaded.
+   * The AIS records feed the MMSI half of a zone's watch list, so a rule that
+   * lists vessels only reports while that layer is on.
    * @returns {void}
    */
   _initAlertCenter() {
@@ -872,11 +874,29 @@ export class StyleManager extends ShellFacade {
       provider: () => ({
         flights: records('flights', 4000),
         military: records('military', 4000),
+        vessels: records('ais-live-vessels', 2000),
         earthquakes: records('earthquakes', 4000),
         fires: records('local-firms', 6000),
         cyclones: records('weather-cyclones', 200),
         gnss: gnss(),
       }),
+      // A zone is drawn where the operator is looking, and can be flown back to
+      // from the panel: both reuse the camera state the share links already use.
+      viewCentre: () => {
+        const state = this.getCameraState();
+        return state ? { lat: state.lat, lon: state.lon } : null;
+      },
+      focusZone: (rule) =>
+        this.applyCameraState({
+          lat: rule.centre.lat,
+          lon: rule.centre.lon,
+          // A ring fills the frame from about three radii up, and never closer
+          // than 15 km, so a small circle is not a rooftop view.
+          alt: Math.max(rule.radiusKm * 3000, 15000),
+          heading: 0,
+          pitch: -60,
+          roll: 0,
+        }),
       showToast: (text) => this._showToast(text),
     });
   }

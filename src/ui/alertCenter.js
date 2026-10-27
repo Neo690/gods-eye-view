@@ -6,6 +6,12 @@
  * reported, turns arrivals into toasts and renders the list behind the HUD
  * bell. The button lives beside the language picker in #corner-actions.
  *
+ * The same panel owns the zone rules and their editor: a rule is a circle plus
+ * the ICAO24/MMSI addresses to watch, judged by the zone watcher
+ * (src/data/zoneWatch.js) and ranked with the scan's incidents, so the two
+ * kinds of alert arrive in one list. A rule's identifiers are split by shape in
+ * a single field — six hex digits is an aircraft, nine digits is a vessel.
+ *
  * What it does NOT do: fetch. The scan reads the analyst records of the layers
  * the operator has already turned on, so a phone with no data on has nothing
  * to report — hence the note in the panel. A layer that is off reports no
@@ -24,7 +30,22 @@
  * mount function is the only DOM code.
  */
 import { formatNumber, formatRelativeTime, t } from '../i18n/index.js';
-import { INCIDENT_SEVERITY, scanIncidents } from '../data/incidentScan.js';
+import {
+  INCIDENT_LIMITS,
+  INCIDENT_SEVERITY,
+  rankIncidents,
+  scanIncidents,
+} from '../data/incidentScan.js';
+import { ZoneWatch } from '../data/zoneWatch.js';
+import {
+  ZONE_RULE_KINDS,
+  ZONE_RULE_LIMITS,
+  parseWatchIdentifiers,
+  readStoredRules,
+  validateZoneRule,
+  watchCount,
+  writeStoredRules,
+} from '../data/zoneRules.js';
 import { layerNameForId } from './layerNames.js';
 
 /** An incident stays listed this long after the last scan that reported it. */
@@ -38,6 +59,26 @@ export const SCAN_INTERVAL_MS = 45 * 1000;
 export const FIRST_SCAN_DELAY_MS = 12 * 1000;
 
 const DISMISSED_STORAGE_KEY = 'gev.alerts.dismissed';
+
+/**
+ * The three kinds, in the order the panel offers them. Built through `t()` at
+ * call time, so a picker mounted before the locale loads still reads right.
+ * @returns {Array<{value: string, label: string}>}
+ */
+function zoneKindOptions() {
+  return [
+    { value: ZONE_RULE_KINDS.entry, label: t('Entry') },
+    { value: ZONE_RULE_KINDS.exit, label: t('Exit') },
+    { value: ZONE_RULE_KINDS.parking, label: t('Parking') },
+  ];
+}
+
+/** One kind's label, for a rule row. */
+function zoneKindLabel(kind) {
+  return (
+    zoneKindOptions().find((option) => option.value === kind)?.label ?? kind
+  );
+}
 
 /**
  * The live incident list: what the scan last reported, plus a retention
@@ -301,9 +342,144 @@ function buildMarkup(doc, ids) {
   const empty = doc.createElement('p');
   empty.className = 'alert-center-empty';
   empty.textContent = t('No active incident.');
-  popup.append(header, note, list, empty);
+
+  // Zone rules live behind a disclosure: the incident list stays the panel's
+  // main content, and the editor is one press away when it is wanted.
+  const zones = doc.createElement('details');
+  zones.className = 'alert-center-zones';
+  const zonesSummary = doc.createElement('summary');
+  zonesSummary.className = 'alert-center-zones-summary';
+  const zonesNote = doc.createElement('p');
+  zonesNote.className = 'alert-center-note';
+  zonesNote.textContent = t(
+    'A zone watches the contacts of the layers you have turned on.',
+  );
+
+  const zoneForm = doc.createElement('form');
+  zoneForm.className = 'alert-center-zone-form';
+  const input = (attributes) => {
+    const element = doc.createElement(attributes.tag ?? 'input');
+    element.className = 'alert-center-zone-input';
+    for (const [name, value] of Object.entries(attributes)) {
+      if (name === 'tag') continue;
+      if (name === 'text') {
+        element.textContent = value;
+        continue;
+      }
+      element[name] = value;
+    }
+    return element;
+  };
+  const nameInput = input({
+    type: 'text',
+    placeholder: t('Name'),
+    ariaLabel: t('Name'),
+    maxLength: ZONE_RULE_LIMITS.maxNameLength,
+  });
+  const kindSelect = input({
+    tag: 'select',
+    ariaLabel: t('What the zone watches for'),
+  });
+  const kinds = zoneKindOptions();
+  for (const option of kinds) {
+    kindSelect.append(
+      input({ tag: 'option', value: option.value, text: option.label }),
+    );
+  }
+  // Set the choice rather than letting the first option be the value by
+  // accident, so the panel and the rule it builds agree on the default.
+  kindSelect.value = kinds[0].value;
+  const radiusInput = input({
+    type: 'number',
+    placeholder: t('Radius (km)'),
+    ariaLabel: t('Radius (km)'),
+    min: ZONE_RULE_LIMITS.minRadiusKm,
+    max: ZONE_RULE_LIMITS.maxRadiusKm,
+    step: 0.5,
+    value: ZONE_RULE_LIMITS.defaultRadiusKm,
+  });
+  const latInput = input({
+    type: 'number',
+    placeholder: t('Latitude'),
+    ariaLabel: t('Latitude'),
+    step: 'any',
+  });
+  const lonInput = input({
+    type: 'number',
+    placeholder: t('Longitude'),
+    ariaLabel: t('Longitude'),
+    step: 'any',
+  });
+  const useCentre = input({
+    tag: 'button',
+    type: 'button',
+    className: 'alert-center-zone-action',
+    text: t('Use the map centre'),
+  });
+  const idsInput = input({
+    tag: 'textarea',
+    placeholder: t('ICAO24 or MMSI, separated by spaces'),
+    ariaLabel: t('ICAO24 or MMSI, separated by spaces'),
+    rows: 2,
+    className: 'alert-center-zone-input alert-center-zone-ids',
+  });
+  const submit = input({
+    tag: 'button',
+    type: 'submit',
+    className: 'alert-center-zone-action',
+    text: t('Add a zone'),
+  });
+  zoneForm.append(
+    nameInput,
+    kindSelect,
+    radiusInput,
+    latInput,
+    lonInput,
+    useCentre,
+    idsInput,
+    submit,
+  );
+  const zonesError = doc.createElement('p');
+  zonesError.className = 'alert-center-zone-error';
+  zonesError.hidden = true;
+  const zonesList = doc.createElement('ul');
+  zonesList.className = 'alert-center-zone-list';
+  const zonesEmpty = doc.createElement('p');
+  zonesEmpty.className = 'alert-center-zone-empty';
+  zonesEmpty.textContent = t('No zone rule yet.');
+  zones.append(
+    zonesSummary,
+    zonesNote,
+    zoneForm,
+    zonesError,
+    zonesList,
+    zonesEmpty,
+  );
+
+  popup.append(header, note, list, empty, zones);
   wrap.append(button, popup);
-  return { wrap, button, badge, popup, list, empty, purge };
+  return {
+    wrap,
+    button,
+    badge,
+    popup,
+    list,
+    empty,
+    purge,
+    zones,
+    zonesSummary,
+    zoneForm,
+    nameInput,
+    kindSelect,
+    radiusInput,
+    latInput,
+    lonInput,
+    useCentre,
+    idsInput,
+    zonesError,
+    zonesList,
+    zonesEmpty,
+  };
 }
 
 /**
@@ -313,18 +489,25 @@ function buildMarkup(doc, ids) {
  * @param {Element} options.root          Container element; emptied and filled.
  * @param {() => object} options.provider Snapshot of the watched layers.
  * @param {(text: string) => void} [options.showToast]
+ * @param {() => ({lat: number, lon: number}|null)} [options.viewCentre]
+ *   Where the camera is looking, for the zone editor's "map centre" action.
+ * @param {(rule: object) => void} [options.focusZone]
+ *   Fly the camera to a rule's circle. The button is hidden without it.
  * @param {Document} [options.documentRef]
  * @param {Storage} [options.storage]
  * @param {() => number} [options.now]
  * @param {number} [options.intervalMs]
  * @param {number} [options.firstDelayMs]
- * @returns {{scanNow: () => Array<object>, render: () => void, destroy: () => void}}
- *   scanNow returns the incidents announced by that scan.
+ * @returns {{scanNow: () => Array<object>, render: () => void, renderZones: () => void, rules: () => Array<object>, destroy: () => void}}
+ *   scanNow returns the incidents announced by that scan; `rules` is a copy of
+ *   the zone rules currently loaded.
  */
 export function mountAlertCenter({
   root,
   provider,
   showToast = () => {},
+  viewCentre = null,
+  focusZone = null,
   documentRef = globalThis.document,
   storage = globalThis.localStorage,
   now = () => Date.now(),
@@ -332,7 +515,13 @@ export function mountAlertCenter({
   firstDelayMs = FIRST_SCAN_DELAY_MS,
 } = {}) {
   if (!root || !documentRef) {
-    return { scanNow: () => [], render: () => {}, destroy: () => {} };
+    return {
+      scanNow: () => [],
+      render: () => {},
+      renderZones: () => {},
+      rules: () => [],
+      destroy: () => {},
+    };
   }
   const doc = documentRef;
   const ids = { popup: 'alert-center-popup', heading: 'alert-center-heading' };
@@ -342,6 +531,11 @@ export function mountAlertCenter({
 
   const feed = new IncidentFeed({ now });
   feed.restoreDismissals(readDismissed(storage), now());
+
+  // The zone rules this panel owns. They are read once at mount and written
+  // back on every change; the watcher holds the membership those rules need.
+  let rules = readStoredRules(storage);
+  const zoneWatch = new ZoneWatch({ now });
 
   let scanTimer = null;
   let firstTimer = null;
@@ -417,6 +611,136 @@ export function mountAlertCenter({
     ui.list.hidden = count === 0;
   };
 
+  const setZoneError = (message) => {
+    ui.zonesError.hidden = !message;
+    ui.zonesError.textContent = message ?? '';
+  };
+
+  const renderZoneRow = (rule) => {
+    const row = doc.createElement('li');
+    row.className = 'alert-center-zone-row';
+    row.dataset.kind = rule.kind;
+
+    const toggle = doc.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.className = 'alert-center-zone-toggle';
+    toggle.checked = rule.enabled !== false;
+    toggle.setAttribute('aria-label', t('Watch this zone'));
+    toggle.title = t('Watch this zone');
+    toggle.addEventListener('change', () => {
+      rules = rules.map((entry) =>
+        entry.id === rule.id ? { ...entry, enabled: toggle.checked } : entry,
+      );
+      writeStoredRules(storage, rules);
+      renderZones();
+    });
+
+    const label = doc.createElement('span');
+    label.className = 'alert-center-zone-label';
+    const watched = watchCount(rule);
+    label.textContent = [
+      rule.name,
+      zoneKindLabel(rule.kind),
+      t('{radius} km', {
+        radius: formatNumber(rule.radiusKm, { maximumFractionDigits: 1 }),
+      }),
+      watched ? t('{count} watched', { count: watched }) : t('Every contact'),
+    ].join(' · ');
+    label.title = `${formatNumber(rule.centre.lat, {
+      maximumFractionDigits: 4,
+    })}, ${formatNumber(rule.centre.lon, { maximumFractionDigits: 4 })}`;
+
+    const focus = doc.createElement('button');
+    focus.type = 'button';
+    focus.className = 'alert-center-zone-focus';
+    focus.textContent = '◎';
+    focus.hidden = typeof focusZone !== 'function';
+    focus.title = t('Centre on this zone');
+    focus.setAttribute('aria-label', t('Centre on this zone'));
+    focus.addEventListener('click', () => focusZone?.(rule));
+
+    const remove = doc.createElement('button');
+    remove.type = 'button';
+    remove.className = 'alert-center-zone-remove';
+    remove.textContent = '×';
+    remove.title = t('Remove this zone');
+    remove.setAttribute('aria-label', t('Remove this zone'));
+    remove.addEventListener('click', () => {
+      rules = rules.filter((entry) => entry.id !== rule.id);
+      writeStoredRules(storage, rules);
+      setZoneError(null);
+      renderZones();
+    });
+
+    row.append(toggle, label, focus, remove);
+    return row;
+  };
+
+  const renderZones = () => {
+    ui.zonesSummary.textContent = t('Zone rules ({count})', {
+      count: rules.length,
+    });
+    ui.zonesList.textContent = '';
+    for (const rule of rules) ui.zonesList.append(renderZoneRow(rule));
+    ui.zonesEmpty.hidden = rules.length > 0;
+    ui.zonesList.hidden = rules.length === 0;
+  };
+
+  const onUseCentre = () => {
+    const centre = viewCentre?.();
+    if (!centre) {
+      setZoneError(t('The map is not ready yet'));
+      return;
+    }
+    ui.latInput.value = String(Number(centre.lat.toFixed(6)));
+    ui.lonInput.value = String(Number(centre.lon.toFixed(6)));
+    setZoneError(null);
+  };
+
+  const onZoneSubmit = (event) => {
+    event.preventDefault?.();
+    if (rules.length >= ZONE_RULE_LIMITS.maxRules) {
+      setZoneError(
+        t('That is as many zones as the panel keeps ({max})', {
+          max: ZONE_RULE_LIMITS.maxRules,
+        }),
+      );
+      return;
+    }
+    const split = parseWatchIdentifiers(ui.idsInput.value);
+    const result = validateZoneRule(
+      {
+        name: ui.nameInput.value,
+        kind: ui.kindSelect.value,
+        centre: { lat: ui.latInput.value, lon: ui.lonInput.value },
+        radiusKm: ui.radiusInput.value,
+        watch: split,
+      },
+      { existing: rules },
+    );
+    if (!result.ok) {
+      setZoneError(
+        t(result.reason, {
+          min: ZONE_RULE_LIMITS.minRadiusKm,
+          max: ZONE_RULE_LIMITS.maxRadiusKm,
+        }),
+      );
+      return;
+    }
+    rules = [...rules, result.rule];
+    writeStoredRules(storage, rules);
+    ui.nameInput.value = '';
+    ui.idsInput.value = '';
+    setZoneError(
+      split.rejected.length
+        ? t('Not an ICAO24 or an MMSI: {list}', {
+            list: split.rejected.join(', '),
+          })
+        : null,
+    );
+    renderZones();
+  };
+
   const setOpen = (next) => {
     open = next;
     ui.popup.hidden = !next;
@@ -452,6 +776,9 @@ export function mountAlertCenter({
 
   ui.button.addEventListener('click', onButtonClick);
   ui.purge.addEventListener('click', onPurgeClick);
+  ui.useCentre.hidden = typeof viewCentre !== 'function';
+  ui.useCentre.addEventListener('click', onUseCentre);
+  ui.zoneForm.addEventListener('submit', onZoneSubmit);
   doc.addEventListener('pointerdown', onDocumentPointer, true);
   doc.addEventListener('keydown', onDocumentKey, true);
 
@@ -468,7 +795,15 @@ export function mountAlertCenter({
     }
     if (!source) return [];
     const at = now();
-    const incidents = scanIncidents(source, { now: at });
+    // Zone rules are judged beside the scan and ranked with it, so a zone alert
+    // and an emergency share one ordering and one cap.
+    const incidents = rankIncidents(
+      [
+        ...scanIncidents(source, { now: at }),
+        ...zoneWatch.update(source, rules, at),
+      ],
+      { limits: INCIDENT_LIMITS },
+    );
     const added = feed.update(incidents, at);
     render();
     if (!baselined) {
@@ -498,13 +833,16 @@ export function mountAlertCenter({
     firstTimer = scanTimer = null;
     ui.button.removeEventListener('click', onButtonClick);
     ui.purge.removeEventListener('click', onPurgeClick);
+    ui.useCentre.removeEventListener('click', onUseCentre);
+    ui.zoneForm.removeEventListener('submit', onZoneSubmit);
     doc.removeEventListener('pointerdown', onDocumentPointer, true);
     doc.removeEventListener('keydown', onDocumentKey, true);
     ui.wrap.closest?.('#top-center-actions')?.classList?.remove('alerts-open');
     ui.wrap.remove();
   };
 
+  renderZones();
   render();
   start();
-  return { scanNow, render, destroy };
+  return { scanNow, render, renderZones, rules: () => rules, destroy };
 }

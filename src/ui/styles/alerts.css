@@ -158,7 +158,10 @@
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   transform: none;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
 #top-center-actions .alert-center-popup .alert-center-purge:hover,
@@ -291,6 +294,225 @@
   color: rgba(198, 218, 226, 0.7);
 }
 
+/* ============================================================
+   Zone rules — the editor behind the list's disclosure
+   (src/ui/alertCenter.js). Separated from the incident list by a
+   rule, so the panel keeps one reading order: what is happening
+   now, then what to watch for. The #top-center-actions prefix
+   outranks that row's button and input rules, as above.
+   ============================================================ */
+
+.alert-center-zones {
+  margin-block-start: 0.5rem;
+  padding-block-start: 0.35rem;
+  border-block-start: 1px solid rgba(54, 220, 255, 0.18);
+}
+
+.alert-center-zones-summary {
+  padding: 0.1rem 0.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1rem;
+  text-transform: uppercase;
+  color: rgba(85, 223, 245, 0.9);
+  cursor: pointer;
+}
+
+.alert-center-zones-summary:hover,
+.alert-center-zones-summary:focus-visible {
+  color: #fff;
+  outline: none;
+}
+
+#top-center-actions .alert-center-popup .alert-center-zone-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.3rem;
+  margin-block-end: 0.4rem;
+}
+
+#top-center-actions .alert-center-popup .alert-center-zone-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 24px;
+  margin: 0;
+  padding: 0.2rem 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  line-height: 1.3;
+  color: var(--text-primary);
+  background: rgba(7, 18, 26, 0.72);
+  border: 1px solid rgba(54, 220, 255, 0.24);
+  border-radius: 0.3rem;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transform: none;
+}
+
+#top-center-actions .alert-center-popup .alert-center-zone-input::placeholder {
+  color: rgba(160, 190, 202, 0.6);
+}
+
+#top-center-actions .alert-center-popup .alert-center-zone-input:focus {
+  border-color: rgba(54, 220, 255, 0.6);
+  outline: none;
+}
+
+#top-center-actions .alert-center-popup .alert-center-zone-ids {
+  grid-column: 1 / -1;
+  min-height: 40px;
+  resize: vertical;
+}
+
+#top-center-actions .alert-center-popup .alert-center-zone-action {
+  width: auto;
+  height: auto;
+  min-height: 24px;
+  margin: 0;
+  padding: 0.25rem 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.04rem;
+  line-height: 1.2;
+  color: rgba(198, 232, 242, 0.9);
+  background: rgba(54, 220, 255, 0.1);
+  border: 1px solid rgba(54, 220, 255, 0.32);
+  border-radius: 0.3rem;
+  cursor: pointer;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transform: none;
+}
+
+#top-center-actions .alert-center-popup .alert-center-zone-action:hover,
+#top-center-actions
+  .alert-center-popup
+  .alert-center-zone-action:focus-visible {
+  color: #fff;
+  background: rgba(54, 220, 255, 0.24);
+  border-color: rgba(54, 220, 255, 0.6);
+  outline: none;
+  transform: none;
+}
+
+/* The submit sits under the fields it commits. */
+#top-center-actions
+  .alert-center-popup
+  .alert-center-zone-action[type='submit'] {
+  grid-column: 1 / -1;
+}
+
+.alert-center-zone-error {
+  margin: 0 0 0.35rem;
+  padding: 0 0.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  line-height: 1.4;
+  color: #ffc45c;
+}
+
+.alert-center-zone-error[hidden] {
+  display: none;
+}
+
+.alert-center-zone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.alert-center-zone-list[hidden] {
+  display: none;
+}
+
+.alert-center-zone-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 0.35rem;
+  align-items: center;
+  padding: 0.25rem 0.3rem;
+  background: rgba(9, 22, 32, 0.6);
+  border: 1px solid rgba(54, 220, 255, 0.14);
+  border-radius: 0.3rem;
+}
+
+.alert-center-zone-toggle {
+  width: 0.85rem;
+  height: 0.85rem;
+  margin: 0;
+  accent-color: #36dcff;
+}
+
+.alert-center-zone-label {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  line-height: 1.35;
+  color: #e6f6fb;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#top-center-actions .alert-center-popup .alert-center-zone-focus,
+#top-center-actions .alert-center-popup .alert-center-zone-remove {
+  width: auto;
+  height: auto;
+  min-width: 22px;
+  min-height: 22px;
+  margin: 0;
+  padding: 0 0.25rem;
+  font-size: 0.8rem;
+  line-height: 1;
+  color: rgba(198, 218, 226, 0.65);
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transform: none;
+}
+
+#top-center-actions .alert-center-popup .alert-center-zone-focus:hover,
+#top-center-actions .alert-center-popup .alert-center-zone-focus:focus-visible {
+  color: #55dff5;
+  background: rgba(54, 220, 255, 0.14);
+  outline: none;
+  transform: none;
+}
+
+#top-center-actions .alert-center-popup .alert-center-zone-remove:hover,
+#top-center-actions
+  .alert-center-popup
+  .alert-center-zone-remove:focus-visible {
+  color: #ff9c9c;
+  background: rgba(255, 96, 96, 0.12);
+  outline: none;
+  transform: none;
+}
+
+.alert-center-zone-focus[hidden] {
+  display: none;
+}
+
+.alert-center-zone-empty {
+  margin: 0.15rem 0 0.1rem;
+  padding: 0 0.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: rgba(198, 218, 226, 0.62);
+}
+
+.alert-center-zone-empty[hidden] {
+  display: none;
+}
+
 /* Phone: the list becomes a sheet across the screen, under the top row. */
 @media (max-width: 720px) {
   .alert-center-popup {
@@ -300,6 +522,39 @@
     inset-block-end: auto;
     width: auto;
     max-height: calc(100dvh - 190px);
+  }
+
+  /* Touch targets, and one column: a two-column grid on a phone squeezes the
+     name field until it is unusable. */
+  #top-center-actions .alert-center-popup .alert-center-zone-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #top-center-actions .alert-center-popup .alert-center-zone-input {
+    min-height: 32px;
+    font-size: 0.7rem;
+  }
+
+  #top-center-actions .alert-center-popup .alert-center-zone-action {
+    min-height: 32px;
+    font-size: 0.66rem;
+  }
+
+  .alert-center-zone-label {
+    font-size: 0.68rem;
+    white-space: normal;
+  }
+
+  #top-center-actions .alert-center-popup .alert-center-zone-focus,
+  #top-center-actions .alert-center-popup .alert-center-zone-remove {
+    min-width: 30px;
+    min-height: 30px;
+    font-size: 0.95rem;
+  }
+
+  .alert-center-zone-empty,
+  .alert-center-zone-error {
+    font-size: 0.64rem;
   }
 
   .alert-center-title {
