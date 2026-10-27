@@ -401,6 +401,36 @@ const layers = [
     context: false,
     noQuery: 'use set_context_mode contacts',
   },
+  {
+    id: 'cell-towers',
+    aliases: ['cell towers', 'cell sites', 'phone masts', 'relay antennas'],
+    context: false,
+    noQuery: 'site map; no countable analyst records',
+  },
+  {
+    id: 'iot-sensors',
+    aliases: ['iot', 'iot sensors', 'connected objects', 'sensor map'],
+    context: false,
+    noQuery: 'sensor map; no countable analyst records',
+  },
+  {
+    id: 'radiation',
+    aliases: ['radiation', 'dose rate', 'radioactivity'],
+    context: false,
+    noQuery: 'station readings are presented in the layer panel',
+  },
+  {
+    id: 'windy-weather',
+    aliases: ['local weather', 'windy', 'point forecast'],
+    context: false,
+    noQuery: 'one point forecast for the map centre; no records',
+  },
+  {
+    id: 'private-wifi',
+    aliases: ['private wifi', 'wardrive', 'imported wifi'],
+    context: false,
+    noQuery: "one operator's imported file; never shared or queried",
+  },
 ];
 
 /**
