@@ -36,7 +36,10 @@ const MAX_POINTS = 500;
 const OPEN_SENSE_MAP_LIMIT = 20;
 const MAX_SPAN_DEG = 6;
 const MAX_TTN_RADIUS_M = 100_000;
-const TIMEOUT_MS = 12_000;
+const TIMEOUT_MS = 15_000;
+// openSenseMap and the TTN mapper are volunteer services: name the client so
+// they can reach its operator instead of blocking an anonymous datacentre IP.
+const USER_AGENT = 'GodsEyeView/0.2 (+https://github.com/Neo690/gods-eye-view)';
 const MAX_RESPONSE_BYTES = 6 * 1024 * 1024;
 
 /**
@@ -130,10 +133,10 @@ export function viewToRadius(view) {
 async function fetchJson(url, { fetchImpl, signal }) {
   const upstream = await fetchImpl(url, {
     signal,
-    headers: { accept: 'application/json' },
+    headers: { accept: 'application/json', 'user-agent': USER_AGENT },
   });
   if (!upstream.ok) {
-    const error = new Error(`upstream ${upstream.status}`);
+    const error = new Error(`upstream answered ${upstream.status}`);
     error.status = upstream.status;
     throw error;
   }
@@ -265,7 +268,17 @@ export function iotSensorsProxy({
           source,
           attribution: SOURCES[source],
         }),
-      () => json(502, { error: 'iot_upstream_unavailable', source }),
+      // The upstream's own status is the difference between "the provider is
+      // down" and "this host is blocked", which is exactly what the operator
+      // needs to read instead of a bare 502.
+      (error) =>
+        json(502, {
+          error: 'iot_upstream_unavailable',
+          source,
+          upstreamStatus: error?.status ?? null,
+          reason:
+            error?.name === 'AbortError' ? 'timeout' : (error?.message ?? null),
+        }),
     );
   }
 
