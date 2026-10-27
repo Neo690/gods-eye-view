@@ -9,10 +9,13 @@
  *
  * The locate button reads the DEVICE's own GPS through the browser's
  * geolocation API, which is what makes the view agree with the phone. It is a
- * toggle: the first press starts a watch and flies to the fix, later fixes
- * keep the marker where the device actually is, and the second press stops
- * the watch and removes the marker. Nothing here follows the camera after the
- * first flight — the operator stays in charge of where they are looking.
+ * toggle: the first press starts a watch and flies to the fix; from then on
+ * EVERY fix carries the camera with it, at the height and pitch the operator
+ * chose, which is what makes a moving vehicle stay under the crosshair the
+ * way it does on a phone map. Panning or zooming by hand releases the camera
+ * without losing the position: the marker keeps moving, the button turns into
+ * one that recentres, and a second press on it while following stops the watch
+ * and removes the marker.
  */
 import * as Cesium from 'cesium';
 import { t } from '../i18n/index.js';
@@ -49,6 +52,9 @@ export const LOCATE_RANGE_M = 2200;
 export const LOCATE_PITCH_DEG = -55;
 const LOCATE_PITCH = Cesium.Math.toRadians(LOCATE_PITCH_DEG);
 export const DEVICE_ENTITY_ID = 'device-location';
+
+/** A follow step shorter than this would only jitter the view. */
+const FOLLOW_MIN_MOVE_M = 1.5;
 
 /**
  * Step the camera in or out from its current height.
@@ -137,6 +143,50 @@ export function flyToFix(viewer, fix, { settleDelayMs = 2400 } = {}) {
 }
 
 /**
+ * Carry the camera to a new fix, keeping what the operator chose to look at:
+ * the same height, pitch and heading, moved over the device.
+ *
+ * This is a view set rather than a flight: fixes arrive about once a second,
+ * and a flight per fix would never settle. Below `FOLLOW_MIN_MOVE_M` the view
+ * is left alone, so a stationary phone does not redraw the globe.
+ *
+ * @param {object} viewer
+ * @param {{lon: number, lat: number, previous?: {lon: number, lat: number}|null}} fix
+ * @returns {boolean} Whether the camera moved.
+ */
+export function followFix(viewer, fix) {
+  const camera = viewer?.camera;
+  if (!camera?.setView) return false;
+  const previous = fix?.previous;
+  if (
+    previous &&
+    Number.isFinite(previous.lat) &&
+    Number.isFinite(previous.lon)
+  ) {
+    const metres = Cesium.Cartesian3.distance(
+      Cesium.Cartesian3.fromDegrees(previous.lon, previous.lat),
+      Cesium.Cartesian3.fromDegrees(fix.lon, fix.lat),
+    );
+    if (metres < FOLLOW_MIN_MOVE_M) return false;
+  }
+  const height = Number(camera.positionCartographic?.height);
+  camera.setView({
+    destination: Cesium.Cartesian3.fromDegrees(
+      fix.lon,
+      fix.lat,
+      Number.isFinite(height) && height > 0 ? height : LOCATE_RANGE_M,
+    ),
+    orientation: {
+      heading: Number.isFinite(camera.heading) ? camera.heading : 0,
+      pitch: Number.isFinite(camera.pitch) ? camera.pitch : LOCATE_PITCH,
+      roll: 0,
+    },
+  });
+  viewer.scene?.requestRender?.();
+  return true;
+}
+
+/**
  * The marker: a pip at the device, ringed by the accuracy the fix claims.
  *
  * No text label: console text on the globe goes through the world-overlay host
@@ -211,6 +261,12 @@ export function bindMapViewControls({
   let destroyed = false;
   /** 'precise' until the satellite attempt fails, then 'network'. */
   let stage = 'precise';
+  /** 'off' | 'following' (camera rides along) | 'attached' (only the marker). */
+  let mode = 'off';
+  /** The last fix, so a second press can recentre without waiting for GPS. */
+  let lastFix = null;
+  /** Camera moves we asked for, whose moveEnd must not release following. */
+  let ownMoves = 0;
 
   const listen = (element, handler) => {
     if (!element) return;
@@ -232,15 +288,44 @@ export function bindMapViewControls({
     locate?.setAttribute('aria-busy', String(next));
   };
 
+  /** Our own camera moves must not read as the operator taking over. */
+  const claimCameraMove = () => {
+    ownMoves += 1;
+  };
+
+  const setMode = (next) => {
+    mode = next;
+    setPressed(next === 'following');
+  };
+
   const stopLocating = () => {
     if (watchId !== null) geolocation?.clearWatch?.(watchId);
     watchId = null;
     stage = 'precise';
     marker?.remove?.();
     marker = null;
+    lastFix = null;
     setWaiting(false);
-    setPressed(false);
+    setMode('off');
   };
+
+  /**
+   * Panning, rotating or zooming by hand is the operator taking the camera
+   * back. The watch keeps running — a phone map keeps the dot moving — and the
+   * button becomes the one that recentres.
+   */
+  const onCameraMoveEnd = () => {
+    if (ownMoves > 0) {
+      ownMoves -= 1;
+      return;
+    }
+    if (destroyed || mode !== 'following') return;
+    setMode('attached');
+  };
+  viewer?.camera?.moveEnd?.addEventListener?.(onCameraMoveEnd);
+  removers.push(() =>
+    viewer?.camera?.moveEnd?.removeEventListener?.(onCameraMoveEnd),
+  );
 
   const startLocating = () => {
     if (!geolocation?.watchPosition) {
@@ -256,6 +341,8 @@ export function bindMapViewControls({
       const fix = readFix(position);
       if (!fix) return;
       setWaiting(false);
+      const previous = lastFix;
+      lastFix = fix;
       if (!marker) {
         marker = addDeviceMarker(viewer, fix);
       } else {
@@ -263,8 +350,14 @@ export function bindMapViewControls({
       }
       if (first) {
         first = false;
+        claimCameraMove();
         navigateToFix(fix);
+        setMode('following');
         showToast?.(t('Following your position'));
+      } else if (mode === 'following') {
+        // The whole point of the toggle: the vehicle stays under the camera.
+        // Only a move that actually happens may claim a moveEnd.
+        if (followFix(viewer, { ...fix, previous })) claimCameraMove();
       }
       viewer.scene?.requestRender?.();
     };
@@ -303,8 +396,17 @@ export function bindMapViewControls({
     if (!zoomBy(viewer, 'out')) return;
   });
   listen(locate, () => {
-    if (watchId !== null) {
+    if (mode === 'following') {
       stopLocating();
+      return;
+    }
+    if (mode === 'attached') {
+      // Recentre on the fix we already have, then ride along again.
+      setMode('following');
+      if (lastFix) {
+        claimCameraMove();
+        navigateToFix(lastFix);
+      }
       return;
     }
     startLocating();

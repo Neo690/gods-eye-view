@@ -30,13 +30,22 @@ class FakeButton extends EventTarget {
 function createViewer({ height = 1_000_000 } = {}) {
   const calls = [];
   const entities = [];
+  const moveEndListeners = new Set();
   const viewer = {
     camera: {
       positionCartographic: { height },
+      pitch: -0.96,
+      heading: 0,
       cancelFlight: () => calls.push(['cancelFlight']),
       zoomIn: (distance) => calls.push(['zoomIn', distance]),
       zoomOut: (distance) => calls.push(['zoomOut', distance]),
       flyTo: (options) => calls.push(['flyTo', options]),
+      setView: (view) => calls.push(['setView', view]),
+      // The operator moving the map, as Cesium reports it.
+      moveEnd: {
+        addEventListener: (listener) => moveEndListeners.add(listener),
+        removeEventListener: (listener) => moveEndListeners.delete(listener),
+      },
     },
     scene: { requestRender: () => calls.push(['requestRender']) },
     entities: {
@@ -50,7 +59,10 @@ function createViewer({ height = 1_000_000 } = {}) {
       },
     },
   };
-  return { viewer, calls, entities };
+  const operatorMoves = () => {
+    for (const listener of moveEndListeners) listener();
+  };
+  return { viewer, calls, entities, operatorMoves, moveEndListeners };
 }
 
 function createGeolocation() {
@@ -70,7 +82,7 @@ function createGeolocation() {
 }
 
 function createControls(options = {}) {
-  const { viewer, calls, entities } = createViewer(options);
+  const { viewer, calls, entities, operatorMoves } = createViewer(options);
   const elements = {
     zoomIn: new FakeButton(),
     zoomOut: new FakeButton(),
@@ -84,7 +96,16 @@ function createControls(options = {}) {
     showToast: (text) => toasts.push(text),
     geolocation,
   });
-  return { viewer, calls, entities, elements, toasts, geolocation, controls };
+  return {
+    viewer,
+    calls,
+    entities,
+    elements,
+    toasts,
+    geolocation,
+    controls,
+    operatorMoves,
+  };
 }
 
 test('readFix keeps a real fix and drops the null-island one', () => {
@@ -211,7 +232,8 @@ test('the locate button toggles a watch, flies once and marks the device', () =>
   assert.ok(flight, 'the first fix flies the camera');
   assert.deepEqual(toasts, ['Following your position']);
 
-  // Later fixes move the marker, not the camera.
+  // Later fixes carry the camera too — a vehicle under the crosshair — while
+  // the marker follows on its own.
   calls.length = 0;
   geolocation.stepped.watch.success({
     coords: { latitude: 48.86, longitude: 2.36, accuracy: 20 },
@@ -219,13 +241,73 @@ test('the locate button toggles a watch, flies once and marks the device', () =>
   assert.equal(
     calls.some(([name]) => name === 'flyTo'),
     false,
+    'a second fix must not restart a flight',
   );
+  const follow = calls.find(([name]) => name === 'setView');
+  assert.ok(follow, 'the camera rides along with the fix');
   assert.equal(entities.length, 1);
 
   elements.locate.click();
   assert.deepEqual(geolocation.stepped.cleared, [7]);
   assert.equal(entities.length, 0);
   assert.equal(elements.locate.getAttribute('aria-pressed'), 'false');
+});
+
+test('panning releases the camera, and the button recentres without dropping the watch', () => {
+  const { elements, calls, entities, geolocation, operatorMoves } =
+    createControls();
+  elements.locate.click();
+  geolocation.stepped.watch.success({
+    coords: { latitude: 48.8566, longitude: 2.3522, accuracy: 15 },
+  });
+  assert.equal(elements.locate.getAttribute('aria-pressed'), 'true');
+
+  // Cesium reports the end of our own flight first; the pan is the next one.
+  operatorMoves();
+  assert.equal(elements.locate.getAttribute('aria-pressed'), 'true');
+  operatorMoves();
+  assert.equal(elements.locate.getAttribute('aria-pressed'), 'false');
+  assert.equal(
+    geolocation.stepped.cleared.length,
+    0,
+    'the watch keeps running: only the camera is released',
+  );
+  assert.equal(entities.length, 1);
+
+  // A fix still moves the dot, and no longer the camera.
+  calls.length = 0;
+  geolocation.stepped.watch.success({
+    coords: { latitude: 48.87, longitude: 2.37, accuracy: 15 },
+  });
+  assert.equal(
+    calls.some(([name]) => name === 'setView'),
+    false,
+    'a released camera stays where the operator put it',
+  );
+
+  // Pressing again recentres on the device and rides along once more.
+  calls.length = 0;
+  elements.locate.click();
+  assert.equal(elements.locate.getAttribute('aria-pressed'), 'true');
+  assert.ok(calls.some(([name]) => name === 'flyTo'), 'the press recentres');
+  calls.length = 0;
+  geolocation.stepped.watch.success({
+    coords: { latitude: 48.88, longitude: 2.38, accuracy: 15 },
+  });
+  assert.ok(calls.some(([name]) => name === 'setView'));
+});
+
+test('a stationary fix does not redraw the camera', () => {
+  const { elements, calls, geolocation } = createControls();
+  elements.locate.click();
+  geolocation.stepped.watch.success({
+    coords: { latitude: 48.8566, longitude: 2.3522, accuracy: 15 },
+  });
+  calls.length = 0;
+  geolocation.stepped.watch.success({
+    coords: { latitude: 48.8566, longitude: 2.3522, accuracy: 15 },
+  });
+  assert.equal(calls.some(([name]) => name === 'setView'), false);
 });
 
 test('the injected flight is what a first fix asks for', () => {
