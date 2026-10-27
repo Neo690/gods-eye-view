@@ -95,7 +95,7 @@ export function createAnimation({
     }
 
     for (let i = 0; i < count; i++) {
-      if (layerState._dots.length >= MAX_DOTS) return;
+      if (layerState._dots.length >= (layerState._maxDots ?? MAX_DOTS)) return;
 
       // Random start position: pick a random segment and offset within it —
       // unless this is a queued jam dot with a platoon placement.

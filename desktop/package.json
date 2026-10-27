@@ -1,0 +1,22 @@
+{
+  "name": "gods-eye-view-desktop",
+  "productName": "God's Eye View",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Desktop shell for God's Eye View: starts the app's local server and shows the globe in its own window.",
+  "main": "main.js",
+  "license": "MIT",
+  "author": {
+    "name": "Neo690"
+  },
+  "scripts": {
+    "start": "electron .",
+    "payload": "node prepare-payload.mjs",
+    "installer": "node build-installer.mjs",
+    "unpacked": "node build-installer.mjs --dir --skip-build"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.0.12"
+  }
+}

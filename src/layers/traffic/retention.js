@@ -95,7 +95,7 @@ export function createRetention({ state, parts }) {
         const count = Math.min(
           record.target - active,
           budget,
-          MAX_DOTS - state._dots.length,
+          (state._maxDots ?? MAX_DOTS) - state._dots.length,
         );
         if (count > 0) {
           const before = state._dots.length;
@@ -178,7 +178,7 @@ export function createRetention({ state, parts }) {
     const budgets = parts.model.allocateRoadDotBudgets(
       wanted,
       altitude,
-      roadDotBudget(altitude),
+      roadDotBudget(altitude, state._maxDots ?? MAX_DOTS),
     );
     for (let i = 0; i < wanted.length; i++)
       records.get(wanted[i].key).target = budgets[i];

@@ -81,8 +81,12 @@ export function createViewport({ state, services, parts }) {
     state._altitudeGateOpen = altitudeGateOpen(altitude);
     const center = state._altitudeGateOpen ? getCameraCenterLatLon() : null;
     const desired = new Map();
+    // A network switched off in the Layers row is not a candidate at either
+    // distance: being already active must not keep it alive past the switch.
+    const hidden = state._hiddenFeeds;
     if (center) {
       for (const feed of transitFeedsInRange(center.lat, center.lon)) {
+        if (hidden.has(feed.id)) continue;
         desired.set(feed.id, feed);
       }
       // Hysteresis: a feed already active stays active a little past its edge.
@@ -91,6 +95,7 @@ export function createViewport({ state, services, parts }) {
         center.lon,
         RANGE_SLACK_KM,
       )) {
+        if (hidden.has(feed.id)) continue;
         if (state._activeFeeds.has(feed.id)) desired.set(feed.id, feed);
       }
     }
@@ -114,12 +119,27 @@ export function createViewport({ state, services, parts }) {
     governorRequestRender('transit-proximity');
   }
 
-  function onCameraChanged() {
+  /**
+   * React to a camera change.
+   *
+   * `camera.changed` fires on a percentage of the view moving, so a flight can
+   * end without a final delivery: the last event arrives while the camera is
+   * still high, the proximity check clears every feed, and no later event
+   * re-resolves them — the layer then sits on "no feed here yet" over a covered
+   * city until someone re-picks it. `moveEnd` passes `{ immediate: true }` so
+   * the view the camera actually parked on is inspected once.
+   */
+  function onCameraChanged(options = {}) {
     // The bounds update immediately; the feed proximity check stays debounced.
     // A person dragging the globe should not wait a third of a second for the
     // vehicles under the cursor to start moving again.
     refreshViewBounds();
     clearTimeout(state._cameraDebounceTimer);
+    if (options?.immediate) {
+      state._cameraDebounceTimer = null;
+      runProximityCheck();
+      return;
+    }
     state._cameraDebounceTimer = setTimeout(() => {
       state._cameraDebounceTimer = null;
       runProximityCheck();

@@ -63,6 +63,9 @@ const PANEL_GROUPS = [
       'local-datacenters',
       'telegeography-submarine-cables',
       'local-dams',
+      'cell-towers',
+      'iot-sensors',
+      'private-wifi',
     ],
   },
   {
@@ -70,6 +73,7 @@ const PANEL_GROUPS = [
     ids: [
       'rocket-launches',
       'earthquakes',
+      'radiation',
       'local-firms',
       'fire-perimeters',
       'gnss-integrity',
@@ -400,23 +404,21 @@ export class LayerPanel {
               this.setLayerParams(layer.id, chip.params, { origin: 'user' });
           });
           row.appendChild(controls);
-          // An ordered list below the chips, for a layer whose row carries a
-          // sequence (turn-by-turn directions). Its own delegated listener, its
-          // own container — the chip row stays a chip row.
-          const list = document.createElement('ol');
-          list.className = 'data-row-list';
-          list.hidden = true;
-          this._bind(list, 'click', (event) => {
-            const button = event.target?.closest?.('.data-row-list-item');
-            if (!button || button.disabled) return;
-            const item = this._rowControlsFor(layer.id)?.list?.items?.find(
-              (entry) => entry.id === button.dataset.listItemId,
-            );
-            if (item?.params)
-              this.setLayerParams(layer.id, item.params, { origin: 'user' });
+          // Two optional lists below the chips, each its own container and its
+          // own delegated listener. `networks` is a set of switches — the
+          // radiation sources, each of which can be drawn or not; `list` is
+          // everything else, a sequence (turn-by-turn directions) or a set of
+          // peers (transit feeds, a drive's stops). A row may carry either,
+          // both, or neither, so both nodes exist and hide themselves empty.
+          const networks = this._createRowListContainer(layer.id, 'networks', {
+            className: 'data-row-list data-networks',
+          });
+          row.appendChild(networks);
+          const list = this._createRowListContainer(layer.id, 'list', {
+            className: 'data-row-list data-row-list--sequence',
           });
           row.appendChild(list);
-          this._syncRowControls(controls, layer, list);
+          this._syncRowControls(controls, layer, list, networks);
         }
       }
 
@@ -509,18 +511,25 @@ export class LayerPanel {
    * @param {object} layer Registered layer entry.
    * @param {HTMLElement|null} [listContainer] The row's `.data-row-list` node.
    */
-  _syncRowControls(container, layer, listContainer = null) {
+  _syncRowControls(
+    container,
+    layer,
+    listContainer = null,
+    networksContainer = null,
+  ) {
     if (!container) return;
     const controls = layer.enabled ? this._rowControlsFor(layer.id) : null;
     if (controls?.readout) {
       container.remove();
       listContainer?.remove();
+      networksContainer?.remove();
       return;
     }
     const chips = controls?.chips || [];
     const legend = controls?.legend || [];
     const infoText = controls?.info;
     this._syncRowList(listContainer, controls?.list || null);
+    this._syncRowList(networksContainer, controls?.networks || null);
     container.hidden = chips.length === 0 && legend.length === 0 && !infoText;
 
     const info = container._rowControlsInfo || null;
@@ -575,6 +584,40 @@ export class LayerPanel {
   }
 
   /**
+   * One of a row's two delegated lists.
+   *
+   * A list that declares `ordered: false` is a set of peers — transit feeds,
+   * radiation networks — and gets `<ul>`, which is what it is; a sequence
+   * (turn-by-turn directions) stays `<ol>` so its order is announced. The
+   * listener resolves the clicked entry against the LIVE descriptor, so a
+   * stale row can never apply an inverted switch.
+   * @param {string} layerId
+   * @param {'list'|'networks'} key Which descriptor on the row controls.
+   * @param {{className: string}} options
+   * @returns {HTMLElement}
+   */
+  _createRowListContainer(layerId, key, { className }) {
+    const list = document.createElement(
+      this._rowControlsFor(layerId)?.[key]?.ordered === false ? 'ul' : 'ol',
+    );
+    list.className = className;
+    list.hidden = true;
+    this._bind(list, 'click', (event) => {
+      const button = event.target?.closest?.('.data-row-list-item');
+      if (!button || button.disabled) return;
+      const item = this._rowControlsFor(layerId)?.[key]?.items?.find(
+        (entry) => entry.id === button.dataset.listItemId,
+      );
+      // Same two shapes a chip offers: an action the layer owns, or a
+      // parameter handed to the manager.
+      if (typeof item?.onClick === 'function') item.onClick();
+      else if (item?.params)
+        this.setLayerParams(layerId, item.params, { origin: 'user' });
+    });
+    return list;
+  }
+
+  /**
    * Render a row's ordered list (turn-by-turn directions).
    *
    * Each entry is a real `<button>` inside a real `<li>`, so Tab reaches it and
@@ -622,7 +665,8 @@ export class LayerPanel {
       this._syncRowControls(
         row.querySelector('.data-toggle-controls'),
         layer,
-        row.querySelector('.data-row-list'),
+        row.querySelector('.data-row-list--sequence'),
+        row.querySelector('.data-networks'),
       );
     }
     this._refreshWeatherPanel();

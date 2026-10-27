@@ -3,6 +3,9 @@
 .git
 node_modules
 dist
+# The Android shell carries its own copy of the built client (~45 MB); a hosted
+# server has no use for it and it would only slow the image build down.
+android
 .env
 .env.*
 !.env.example

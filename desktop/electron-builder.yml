@@ -1,0 +1,52 @@
+# Windows installer for God's Eye View. `desktop/build-installer.mjs` runs this
+# configuration; every path below is relative to desktop/.
+#
+# Windows only: macOS and Linux installation runs through the Pinokio launcher
+# documented in the README. Keeping the packaged targets to one platform keeps
+# the shell's support surface to what this repository can actually test.
+
+appId: com.godseyeview.desktop
+productName: God's Eye View
+copyright: God's Eye View — MIT
+
+directories:
+  output: release
+  buildResources: assets
+
+# The shell itself: main process, its server helper, the window icon. The app
+# rides along as extraResources rather than inside the archive, because
+# `vite preview` reads its configuration and providers from a real directory.
+files:
+  - main.js
+  - server.js
+  - package.json
+  - assets/**
+
+# The source is the staging directory, not the payload itself: electron-builder's
+# copy filter drops a `node_modules` that sits at the root of what it copies,
+# and the app cannot start without one. One level up it is an ordinary
+# subdirectory, which is the same reason a nested node_modules is kept in a
+# normal app's resources.
+extraResources:
+  - from: .payload
+    to: .
+
+win:
+  icon: assets/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: ${productName} Setup ${version}.exe
+
+nsis:
+  # An assisted installer, not a silent one: the user sees where it lands and
+  # can change it. Per-user by default, so it needs no administrator prompt.
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: God's Eye View
+  # Window state and the shell's log in %APPDATA% survive an uninstall; the
+  # installed app itself, including any keys entered in POWER UP, does not.
+  deleteAppDataOnUninstall: false

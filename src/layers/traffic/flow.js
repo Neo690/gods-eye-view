@@ -9,6 +9,8 @@ import { matchFlowToRoads } from '../../data/flowMatch.js';
 import {
   DOT_HEIGHT_OFFSET,
   FAST_FETCH_ALTITUDE,
+  MAX_DOTS,
+  SURFACE_STATION_BUDGET,
   roadDotBudget,
 } from './policy.js';
 import { msg } from '../../i18n/index.js';
@@ -370,7 +372,7 @@ export function createFlow({ state: layerState, services, parts, source }) {
     const budgets = parts.model.allocateRoadDotBudgets(
       selected,
       altitude,
-      roadDotBudget(altitude),
+      roadDotBudget(altitude, layerState._maxDots ?? MAX_DOTS),
     );
     const admitted = selected.filter((r, i) => budgets[i] > 0);
     const camera = layerState._viewer.camera?.positionWC;
@@ -405,13 +407,15 @@ export function createFlow({ state: layerState, services, parts, source }) {
       if (lower[i]) ordered.push(lower[i]);
       if (upper[i]) ordered.push(upper[i]);
     }
+    const surfaceStations =
+      layerState._surfaceStations ?? SURFACE_STATION_BUDGET;
     for (const road of ordered) {
       const keys = roadHeightStations(road.coords).indices.map(
         (i) =>
           `${road.coords[i][0].toFixed(6)},${road.coords[i][1].toFixed(6)}`,
       );
       const fresh = [...new Set(keys)].filter((key) => !stations.has(key));
-      if (stations.size + fresh.length > 1000) continue;
+      if (stations.size + fresh.length > surfaceStations) continue;
       for (const key of fresh) stations.add(key);
       bounded.push(road);
     }

@@ -1,0 +1,122 @@
+name: Deploy to Render
+
+# The Render service was created from a public Git URL, so Render has no
+# webhook on this repository and its `autoDeploy` never fires by itself. This
+# workflow is the bridge: a push to the branch the service builds from asks
+# Render for a deploy through its API, which is the same call the dashboard's
+# "Manual Deploy" makes.
+#
+# It also stays until the deploy is live and then asks the public origin the
+# same questions a browser does, so a broken build shows up as a red run
+# instead of a service that quietly serves the previous release.
+#
+# Needs a repository secret RENDER_API_KEY (Render -> Account Settings -> API
+# Keys). Deploys are serialised, not cancelled: a push that arrives mid-build
+# queues the next one instead of leaving the service on an older commit.
+on:
+  push:
+    branches: [android-shell]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-deploy
+  cancel-in-progress: false
+
+env:
+  RENDER_SERVICE_ID: srv-dbe6r4rncjis73d78o90
+  BASE_URL: https://gev-data.onrender.com
+
+jobs:
+  deploy:
+    name: Ask Render for a deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Trigger the deploy
+        id: trigger
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RENDER_API_KEY:-}" ]; then
+            echo "::error::RENDER_API_KEY is not set; add it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          body=$(curl -sS --fail-with-body -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}' \
+            "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys")
+          printf '%s\n' "$body"
+          deploy_id=$(printf '%s' "$body" | jq -r '.id // ""')
+          case "$deploy_id" in
+            dep-*) ;;
+            *) echo "::error::Render did not accept the deploy"; exit 1 ;;
+          esac
+          echo "deploy_id=$deploy_id" >> "$GITHUB_OUTPUT"
+          echo "queued $deploy_id for ${GITHUB_SHA}"
+
+      - name: Wait until it is live
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          DEPLOY_ID: ${{ steps.trigger.outputs.deploy_id }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 1200))
+          while :; do
+            status=$(curl -sS --fail-with-body \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys/${DEPLOY_ID}" | jq -r '.status')
+            echo "status: $status"
+            case "$status" in
+              live) exit 0 ;;
+              *_failed|canceled|deactivated)
+                echo "::error::Render reported $status for $DEPLOY_ID"
+                exit 1 ;;
+            esac
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::$DEPLOY_ID was still $status after ${deadline}s"
+              exit 1
+            fi
+            sleep 10
+          done
+
+      - name: Check the origin answers
+        run: |
+          set -euo pipefail
+          # A free instance sleeps when idle, so the first request can pay a
+          # cold start of up to a minute; retry rather than fail on that.
+          code=000
+          for attempt in $(seq 1 8); do
+            code=$(curl -sS -o "$RUNNER_TEMP/home.html" -w '%{http_code}' \
+              --max-time 120 "$BASE_URL/" || echo 000)
+            echo "GET / -> $code (attempt $attempt)"
+            [ "$code" = "200" ] && break
+            sleep 10
+          done
+          if [ "$code" != "200" ]; then
+            echo "::error::$BASE_URL/ answered $code"
+            exit 1
+          fi
+          grep -q "<title>God's Eye View</title>" "$RUNNER_TEMP/home.html" \
+            || { echo "::error::the served document is not the app"; exit 1; }
+
+          curl -sS --fail-with-body --max-time 120 \
+            "$BASE_URL/api/terrain/heights?points=2.3522,48.8566" -o "$RUNNER_TEMP/heights.json"
+          cat "$RUNNER_TEMP/heights.json"
+          python3 - "$RUNNER_TEMP/heights.json" <<'PY'
+          import json, sys
+          data = json.load(open(sys.argv[1]))
+          results = data.get("results") or []
+          if len(results) != 1:
+              raise SystemExit("expected one height, got %d" % len(results))
+          elevation = results[0].get("elevation")
+          # Paris sits around 30-40 m: a plausible number proves the route ran
+          # for real instead of answering with a placeholder.
+          if not isinstance(elevation, (int, float)) or not 20 <= elevation <= 60:
+              raise SystemExit("implausible elevation for Paris: %r" % (elevation,))
+          print("elevation ok: %.2f m" % elevation)
+          PY

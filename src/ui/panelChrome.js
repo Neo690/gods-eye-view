@@ -8,6 +8,21 @@ import {
   collapsePanelOnEscape,
   createHoverDisclosure,
 } from './panelDisclosure.js';
+import {
+  createMobilePanelTabs,
+  MOBILE_PANEL_TAB_MEDIA,
+} from './mobilePanelTabs.js';
+import { createPanelDrawer, PANEL_DRAWER_MEDIA } from './panelDrawer.js';
+import { applyRailAccordion } from './panelRailAccordion.js';
+import { PANEL_WINDOW_IDS } from './panelWindows.js';
+import {
+  createPanelSwipeDismiss,
+  PANEL_SWIPE_MEDIA,
+} from './panelSwipeDismiss.js';
+import {
+  createPanelScrollIndicators,
+  PANEL_SCROLL_MEDIA,
+} from './panelScrollIndicator.js';
 const SHARE_PANEL_STATE_SPECS = Object.freeze([
   { id: 'control-panel', pinnable: true },
   { id: 'location-bar', pinnable: true },
@@ -145,7 +160,142 @@ export class PanelChrome {
     });
     this._initCommandDockPins();
     this._initCommandDockTrayMetrics();
+    this._initMobilePanelTabs();
+    this._initPanelDrawer();
     this._maybeNotifyLayoutReset();
+    // Every window the operator had open is restored above; on a desktop the
+    // rule lands the rails back at one, without rewriting what was restored.
+    // A share link restored later still opens what its author sent.
+    this._applyRailAccordion(this._railAccordionOwnerForLayout());
+  }
+
+  /**
+   * One drawer owns the six rail windows above the phone breakpoint
+   * (panelDrawer.js): the list is the single way in, and a tab press goes
+   * through the same `setPanelCollapsed` as a chip press.
+   */
+  _initPanelDrawer() {
+    this._panelDrawer?.destroy();
+    this._panelDrawer = createPanelDrawer({
+      document: document,
+      setPanelCollapsed: (panelId, collapsed, options) =>
+        this.setPanelCollapsed(panelId, collapsed, options),
+      isWide: () => this._railAccordionApplies(),
+    });
+    this._initRailAccordionBreakpoint();
+  }
+
+  /**
+   * Whether one window at a time applies: a desktop, with no Cockpit rail and
+   * no embed view, both of which lay the rails out themselves.
+   * @returns {boolean}
+   */
+  _railAccordionApplies() {
+    if (this.cockpitView?.active) return false;
+    if (document.body?.classList?.contains('ui-embed')) return false;
+    return !!globalThis.window?.matchMedia?.(PANEL_DRAWER_MEDIA)?.matches;
+  }
+
+  /**
+   * Close every other rail window, or release the ones this rule closed when it
+   * stops applying. A window closed here is marked, never persisted: it was put
+   * away because another window opened, not because the operator asked.
+   * @param {string|null} [ownerId] The window the operator just opened.
+   */
+  _applyRailAccordion(ownerId = null) {
+    const applies = this._railAccordionApplies();
+    return applyRailAccordion({
+      ownerId: applies ? ownerId : null,
+      enabled: applies,
+    });
+  }
+
+  /** Every window the accordion put away, back to the operator's own state. */
+  _releaseRailAccordion() {
+    return applyRailAccordion({ ownerId: null, enabled: false });
+  }
+
+  /**
+   * The window a layout change should leave open: the first one the drawer
+   * offers that is open, so the rule lands on a window the operator can see
+   * rather than on whichever rail happened to be measured first.
+   * @returns {string|null}
+   */
+  _railAccordionOwnerForLayout() {
+    return (
+      PANEL_WINDOW_IDS.find(
+        (id) => !document.getElementById(id)?.classList.contains('collapsed'),
+      ) ?? null
+    );
+  }
+
+  _initRailAccordionBreakpoint() {
+    const previous = this._railAccordionMedia;
+    if (previous && this._railAccordionOnBreakpoint)
+      previous.removeEventListener?.('change', this._railAccordionOnBreakpoint);
+    this._railAccordionMedia = null;
+    const media = globalThis.window?.matchMedia?.(PANEL_DRAWER_MEDIA);
+    if (!media?.addEventListener) return;
+    // Leaving the desktop layout releases what the accordion closed; coming
+    // back re-applies it, because a restored or phone-era layout may hold
+    // several windows and the rule is one at a time.
+    this._railAccordionOnBreakpoint = () => {
+      const applies = this._railAccordionApplies();
+      this._applyRailAccordion(
+        applies ? this._railAccordionOwnerForLayout() : null,
+      );
+    };
+    media.addEventListener('change', this._railAccordionOnBreakpoint);
+    this._railAccordionMedia = media;
+  }
+
+  /**
+   * One strip owns the six rail windows on a phone (see mobilePanelTabs.js):
+   * the rails keep the panels, the strip keeps the way in, and only one is
+   * open at a time. Built here because collapse state is owned here — a tab
+   * press goes through the same `setPanelCollapsed` as a chip press, so
+   * persistence, share links and the Cockpit rail stay in step.
+   */
+  _initMobilePanelTabs() {
+    this._mobilePanelTabs?.destroy();
+    this._mobilePanelTabs = createMobilePanelTabs({
+      document: document,
+      setPanelCollapsed: (panelId, collapsed, options) =>
+        this.setPanelCollapsed(panelId, collapsed, options),
+      isMobile: () => !!window.matchMedia?.(MOBILE_PANEL_TAB_MEDIA).matches,
+    });
+    this._initMobilePanelSwipe();
+  }
+
+  /**
+   * A sheet also closes the way a bottom sheet does: drag its header down and
+   * let go (panelSwipeDismiss.js). A close goes through the same
+   * `setPanelCollapsed` as the collapse button, so persistence, share links and
+   * the tab list stay in step with the gesture.
+   */
+  _initMobilePanelSwipe() {
+    this._mobilePanelSwipe?.destroy();
+    this._mobilePanelSwipe = createPanelSwipeDismiss({
+      document: document,
+      setPanelCollapsed: (panelId, collapsed, options) =>
+        this.setPanelCollapsed(panelId, collapsed, options),
+      isMobile: () => !!window.matchMedia?.(PANEL_SWIPE_MEDIA).matches,
+    });
+    this._initMobilePanelScrollbars();
+  }
+
+  /**
+   * Android draws overlay scrollbars and ignores the stylesheet's
+   * `::-webkit-scrollbar` bar, so an open sheet gets a drawn one
+   * (panelScrollIndicator.js): Data layers is two screens tall and looked like
+   * a panel that simply ended halfway down.
+   */
+  _initMobilePanelScrollbars() {
+    this._mobilePanelScrollbars?.destroy();
+    this._mobilePanelScrollbars = createPanelScrollIndicators({
+      document: document,
+      isMobile: () => !!window.matchMedia?.(PANEL_SCROLL_MEDIA).matches,
+    });
   }
 
   _collapsePanelOnEscape(event, panelId) {
@@ -377,6 +527,7 @@ export class PanelChrome {
       // restore the user's explicit expanded preference at its own viewport.
       const collapsed =
         panelEl.classList.contains('layout-auto-collapsed') ||
+        panelEl.classList.contains('rail-accordion-collapsed') ||
         panelEl.classList.contains('cyber-accordion-collapsed')
           ? false
           : panelEl.classList.contains('collapsed');
@@ -409,6 +560,11 @@ export class PanelChrome {
         syncShare: false,
       });
     }
+    // A restored layout can hold several windows — the hash carries the one
+    // this session left behind. A desktop still shows one: the view the link
+    // describes is the camera and the layers, and every window stays one click
+    // away in the drawer.
+    this._applyRailAccordion(this._railAccordionOwnerForLayout());
     this.shareLinkManager?.onPanelStateChange?.();
   }
 
@@ -606,6 +762,11 @@ export class PanelChrome {
     this._scheduleLeftPanelLayout({
       reconsiderAutoCollapse: this._leftPanelStack?.contains(panelEl) === true,
     });
+    // One window at a time on a desktop: an operator's own toggle owns the
+    // rails, and every sibling it left open is put away (marked, not saved).
+    // Restoring a share link must not: it reopens the state it was given.
+    if (explicit && !restore)
+      this._applyRailAccordion(nextCollapsed ? null : panelId);
     if (syncShare) this.shareLinkManager?.onPanelStateChange?.();
   }
 
@@ -616,6 +777,9 @@ export class PanelChrome {
     // A new Cockpit session owns both side rails. Clear standard map-view
     // panels once on entry; NEXT/PREVIOUS never reaches this callback, so
     // panels the operator opens while already inside remain untouched.
+    // The desktop accordion releases first, so what Cockpit remembers is the
+    // operator's own layout and not the windows it had put away.
+    this._releaseRailAccordion();
     this._cockpitPanelRestore = new Map();
     this._cockpitContextCollapsedForDataPanel = false;
     for (const panelId of COCKPIT_ENTRY_COLLAPSE_PANEL_IDS) {
@@ -645,12 +809,31 @@ export class PanelChrome {
         syncShare: false,
       });
     }
+    // The Cockpit rail has its own layout; the map view behind it does not,
+    // so the one-window-at-a-time rule is restored to the map view here.
+    this._applyRailAccordion(this._railAccordionOwnerForLayout());
   }
   destroy() {
     if (this._disposed) return;
     this._disposed = true;
     this._lifetime.destroy();
     this._panelLayout.destroy();
+    this._panelDrawer?.destroy();
+    this._panelDrawer = null;
+    if (this._railAccordionMedia && this._railAccordionOnBreakpoint) {
+      this._railAccordionMedia.removeEventListener?.(
+        'change',
+        this._railAccordionOnBreakpoint,
+      );
+    }
+    this._railAccordionMedia = null;
+    this._railAccordionOnBreakpoint = null;
+    this._mobilePanelTabs?.destroy();
+    this._mobilePanelTabs = null;
+    this._mobilePanelSwipe?.destroy();
+    this._mobilePanelSwipe = null;
+    this._mobilePanelScrollbars?.destroy();
+    this._mobilePanelScrollbars = null;
     for (const control of this._panelDisclosureControls || [])
       control.destroy();
     this._panelDisclosureControls = [];

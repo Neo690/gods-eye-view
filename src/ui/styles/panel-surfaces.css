@@ -76,6 +76,35 @@
   position: relative;
 }
 
+/* ── Panel glass ───────────────────────────────
+   One surface recipe for every rail panel and its sheet, so the globe stays
+   visible while a layer panel or the Display sheet is open. The small chips
+   (--glass-bg) keep their heavier tint; these are the windows that used to
+   read as opaque black over the map. */
+:is(
+    .panel-inner,
+    .data-panel-inner,
+    .scene-panel-inner,
+    .cctv-panel-inner,
+    .street-level-panel-inner,
+    .global-context-panel-inner,
+    .weather-panel-inner,
+    .recent-imagery-panel-inner,
+    .location-inner,
+    #pp-toggles:not(.collapsed)
+  ) {
+  background: var(--panel-glass);
+  backdrop-filter: var(--panel-glass-blur);
+  -webkit-backdrop-filter: var(--panel-glass-blur);
+}
+
+[data-panel-surface]::before,
+[data-panel-popup]::before {
+  background-color: var(--panel-glass);
+  backdrop-filter: var(--panel-glass-blur);
+  -webkit-backdrop-filter: var(--panel-glass-blur);
+}
+
 :is([data-panel-surface], [data-panel-popup])::before {
   content: '';
   position: absolute;

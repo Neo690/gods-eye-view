@@ -9,9 +9,11 @@ import {
   syncPlayback,
 } from './movement.js';
 import {
+  LINE_BADGE_SCREEN_PX,
   SELECTED_ICON_PX,
   haloFrame,
   transitIcon,
+  transitLineBadge,
 } from '../../data/transitIcons.js';
 import {
   presetSpriteOutlinePx,
@@ -102,8 +104,12 @@ export function createRendering({ state, services, parts }) {
     entry.surfaceReady = !!known;
     entry.heightPending = !known;
     entry.marker.show = !!known && vehicleInView(entry);
+    if (entry.lineBadge) entry.lineBadge.show = badgeShown(entry);
     if (known) {
       entry.marker.position = state._scratchCartesian;
+      // The pill rides the same point as the glyph, offset in screen pixels —
+      // no second projection, and it follows a glide for free.
+      if (entry.lineBadge) entry.lineBadge.position = state._scratchCartesian;
       entry.hasRendered = true;
     }
   }
@@ -246,11 +252,97 @@ export function createRendering({ state, services, parts }) {
       entry.detectContact.bracketHalfWidth = Math.ceil(px / 2) + 2;
       entry.detectContact.bracketHalfHeight = Math.ceil(px / 2) + 2;
     }
+    // A rail line wears the operator's own colour, which is what a rider looks
+    // for; sensors keep the mode palette (and hide the pill) so a thermal frame
+    // stays a thermal frame.
     const preset = presetColor(style, entry.mode);
     if (preset) marker.color = preset;
+    else if (state._stylePreset === 'normal' && entry.railStyle?.color)
+      marker.color = lineColor(entry.railStyle.color);
     else
       marker.color =
         MODE_CESIUM_COLORS[entry.mode] || MODE_CESIUM_COLORS.unknown;
+    syncLineBadge(entry, px);
+  }
+
+  /** Operator line colour, cached — a string→Color parse per vehicle per poll
+   * would be waste on a fleet that never changes livery. */
+  const _lineColors = new Map();
+  function lineColor(hex) {
+    let color = _lineColors.get(hex);
+    if (!color) {
+      color = Cesium.Color.fromCssColorString(hex);
+      _lineColors.set(hex, color);
+    }
+    return color;
+  }
+
+  /**
+   * Whether a rail pill is allowed on screen right now: only beside a glyph
+   * that is itself drawn, and only in the ordinary view. A pill with no glyph
+   * is a label on an empty road, and a sensor frame shows silhouettes.
+   */
+  function badgeShown(entry) {
+    if (!entry.lineBadge) return false;
+    if (!entry.railStyle?.label) return false;
+    if (state._stylePreset !== 'normal') return false;
+    return !!entry.marker.show;
+  }
+
+  /**
+   * The line pill beside a rail vehicle: the operator's line name on the
+   * operator's colour, in the same billboard collection as the glyph so the
+   * existing show/hide, preset and teardown paths cover it.
+   *
+   * It shares the vehicle's `id`, so a click on the pill selects the vehicle
+   * the same way a click on the glyph does. It never rotates: a rotated label
+   * is unreadable at the size this renders.
+   * @param {object} entry
+   * @param {number} glyphPx On-screen size the glyph was just given.
+   */
+  function syncLineBadge(entry, glyphPx) {
+    const marker = entry.marker;
+    if (!marker) return;
+    const rail = entry.railStyle;
+    const image = rail?.label
+      ? transitLineBadge(rail.label, rail.color, { ink: rail.ink })
+      : null;
+    if (!image) {
+      if (entry.lineBadge) {
+        state._markers.remove(entry.lineBadge);
+        entry.lineBadge = null;
+      }
+      return;
+    }
+    const selected = state._selectedKey === entry.key;
+    const width = LINE_BADGE_SCREEN_PX.width * (selected ? 1.15 : 1);
+    const height = LINE_BADGE_SCREEN_PX.height * (selected ? 1.15 : 1);
+    // Beside the glyph, nudged up: below it is where the trail runs.
+    const offsetX = Math.round((glyphPx || width) / 2 + width / 2 + 3);
+    if (!entry.lineBadge) {
+      entry.lineBadge = state._markers.add({
+        id: entry.key,
+        position: marker.position,
+        image,
+        width,
+        height,
+        rotation: 0,
+        pixelOffset: new Cesium.Cartesian2(offsetX, -4),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      });
+      entry.lineBadge.show = badgeShown(entry);
+      entry.badgeOffsetX = offsetX;
+      return;
+    }
+    const badge = entry.lineBadge;
+    if (badge.image !== image) badge.image = image;
+    if (badge.width !== width) badge.width = width;
+    if (badge.height !== height) badge.height = height;
+    if (entry.badgeOffsetX !== offsetX) {
+      badge.pixelOffset = new Cesium.Cartesian2(offsetX, -4);
+      entry.badgeOffsetX = offsetX;
+    }
+    badge.show = badgeShown(entry);
   }
 
   function addMarker(key, entry) {
@@ -545,6 +637,7 @@ export function createRendering({ state, services, parts }) {
       }
       entry.marker.show =
         visible && !entry.heightPending && entry.surfaceReady !== false;
+      if (entry.lineBadge) entry.lineBadge.show = badgeShown(entry);
       visibility.heightPending = !!entry.heightPending;
       visibility.surfaceReady = entry.surfaceReady ?? null;
       schedulePlayback(entry);
@@ -603,6 +696,7 @@ export function createRendering({ state, services, parts }) {
     refreshVisibility,
     vehicleInView,
     addMarker,
+    paintLineStyle: (entry) => applySpriteStyle(entry),
     paintMode,
     paintSelected,
     applySpriteStyle,

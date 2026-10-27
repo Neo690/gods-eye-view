@@ -1,0 +1,5 @@
+// Root build file: one application module, no third-party libraries. The web
+// app is bundled as assets, so the Android side only supplies the shell.
+plugins {
+  id 'com.android.application' version '8.13.0' apply false
+}

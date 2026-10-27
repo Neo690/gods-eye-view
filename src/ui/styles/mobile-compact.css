@@ -1,0 +1,1150 @@
+/* ── Compact phone shell ───────────────────────
+   The desktop console is a two-rail HUD around a full-height globe. On a
+   phone the two rails stack into two half-screen scroll columns, the HUD
+   readouts collide, and the dock loses its labels. This sheet keeps the
+   globe as the surface and turns the console into a phone layout:
+
+     - the two rails become two chip rows under the brand;
+     - an expanded panel becomes a full-width sheet over the globe;
+     - the HUD keeps its classification line and one summary line up top,
+       coordinates and telemetry sit in one row above the credits;
+     - the dock spans the width with touch-sized targets.
+
+   Imported last so it can outrank the command-dock sheets, which are
+   imported after responsive.css. */
+
+/* The phone tab strip exists in the DOM at every width so a rotation does not
+   have to rebuild it; above the breakpoint the rails keep their own chips. */
+.gev-panel-tabs {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  /* ── Brand and view actions ─────────────────── */
+  #title-bar {
+    top: 10px;
+    left: 12px;
+  }
+
+  #title-bar h1 {
+    font-size: 15px;
+    letter-spacing: 3px;
+    gap: 6px;
+  }
+
+  #title-bar .title-logo {
+    width: 32px;
+  }
+
+  #title-bar .subtitle {
+    display: none;
+  }
+
+  #top-center-actions {
+    top: 10px;
+    right: 12px;
+    left: auto;
+    transform: none;
+    gap: 6px;
+  }
+
+  #top-center-actions button {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    padding: 0;
+    border-radius: 10px;
+  }
+
+  #top-center-actions .material-symbols-outlined {
+    font-size: 17px;
+  }
+
+  #style-indicator {
+    display: none;
+  }
+
+  /* ── Rails: two chip rows ───────────────────── */
+  #left-panel-stack,
+  #right-context-rail {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    width: auto;
+    max-width: none;
+    max-height: none;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 0;
+    overflow: visible;
+    z-index: 130;
+    /* The rail keeps its desktop bottom anchor so its floor stays inside the
+       required credit band; on a phone its box is transparent and must not
+       swallow map gestures below the chips. */
+    pointer-events: none;
+  }
+
+  #left-panel-stack > *,
+  #right-context-rail > * {
+    pointer-events: auto;
+  }
+
+  #left-panel-stack {
+    top: 54px;
+    bottom: auto;
+  }
+
+  #right-context-rail {
+    top: 102px;
+  }
+
+  /* A collapsed panel is a chip; an expanded panel leaves the row and
+     becomes a sheet (next block). Two ids are deliberate: the desktop rails
+     spend the second one on each panel's `width: 100%` / `flex: 0 0 auto`, and
+     a class-only rule loses to it. A panel added to a rail belongs in this
+     list — left out, it keeps its desktop width, swallows the row and leaves
+     its siblings 2px wide, which is what `#street-level-panel` did. */
+  #left-panel-stack > #data-panel.collapsed,
+  #left-panel-stack > #scene-panel.collapsed,
+  #right-context-rail > #pp-toggles.collapsed,
+  #right-context-rail > #cctv-panel.collapsed,
+  #right-context-rail > #street-level-panel.collapsed,
+  #right-context-rail > #weather-panel.collapsed,
+  #right-context-rail > #recent-imagery-panel.collapsed,
+  #right-context-rail > #global-context-panel.collapsed {
+    position: relative;
+    inset: auto;
+    /* Content width, not an equal share: 'STREET LEVEL' needs 74px where a
+       quarter of a 340px row leaves 59. A chip that does not fit wraps. */
+    flex: 0 1 auto;
+    min-width: 0;
+    width: auto;
+    max-width: none;
+    box-sizing: border-box;
+    margin: 0;
+    height: 42px;
+    border: 1px solid rgba(0, 212, 255, 0.16);
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+  }
+
+  #left-panel-stack > .panel-collapsible.collapsed > div,
+  #right-context-rail > .panel-collapsible.collapsed > div {
+    height: 100%;
+    min-height: 0;
+    padding: 6px 8px 6px 10px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  #left-panel-stack > .panel-collapsible.collapsed .panel-header,
+  #right-context-rail > .panel-collapsible.collapsed .panel-header,
+  #right-context-rail > .panel-collapsible.collapsed .pp-header-row {
+    width: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    gap: 6px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  #left-panel-stack .panel-title,
+  #right-context-rail .panel-title,
+  #right-context-rail .pp-header-label {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 10px;
+    letter-spacing: 1.4px;
+    white-space: nowrap;
+  }
+
+  #left-panel-stack .panel-divider,
+  #right-context-rail .panel-divider {
+    display: none;
+  }
+
+  /* A chip is its own collapse control. The arrow would cost 30 of the ~110px
+     a three-chip row leaves, so the disclosure button becomes an invisible
+     full-bleed hit area instead of disappearing: it keeps its accessible name
+     and the controller's click handler stays wired. */
+  #left-panel-stack > .panel-collapsible.collapsed .panel-collapse-btn,
+  #right-context-rail > .panel-collapsible.collapsed .panel-collapse-btn,
+  #right-context-rail > .panel-collapsible.collapsed .pp-collapse-btn {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: transparent;
+    font-size: 0;
+    cursor: pointer;
+  }
+
+  /* An open sheet closes from its header. */
+  #left-panel-stack > .panel-collapsible:not(.collapsed) .panel-collapse-btn,
+  #right-context-rail > .panel-collapsible:not(.collapsed) .panel-collapse-btn,
+  #right-context-rail > .panel-collapsible:not(.collapsed) .pp-collapse-btn {
+    flex: 0 0 auto;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 9px;
+  }
+
+  /* The Display chip keeps its header row centred at a fixed offset, which
+     parks the label outside the chip. Rebuild it as a plain full-width row. */
+  /* Padding and border belong on the inner row, not the chip: a flex-basis of
+     0 with a content box would add the 22px of chrome on top of the third of
+     the row, stealing width from the Context chip. */
+  #right-context-rail #pp-toggles.collapsed {
+    display: block;
+    box-sizing: border-box;
+    height: 42px;
+    padding: 0;
+    overflow: hidden;
+    /* Display's collapsed card normally lives on its header row; the chip owns
+       the surface here so the header row can fill it exactly. */
+    border: 1px solid rgba(0, 212, 255, 0.16);
+    border-radius: 12px;
+    background: var(--panel-glass);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+    backdrop-filter: var(--panel-glass-blur);
+    -webkit-backdrop-filter: var(--panel-glass-blur);
+  }
+
+  /* Display draws its own collapsed card on the header row (its chip has no
+     surface of its own), so the row has to keep the glass treatment while
+     filling the third of the rail row. */
+  #right-context-rail #pp-toggles.collapsed .pp-header-row {
+    flex: none;
+    box-sizing: border-box;
+    width: 100%;
+    height: 42px;
+    min-width: 0;
+    min-height: 42px;
+    margin: 0;
+    padding: 0 10px;
+    justify-content: flex-start;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  #right-context-rail #pp-toggles.collapsed .pp-header-label {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  #right-context-rail #global-context-panel.collapsed,
+  #right-context-rail #global-context-panel {
+    width: auto;
+  }
+
+  /* The Context chip carries a compact radio launcher; keep it inside. */
+  #right-context-rail #context-radio-dock {
+    margin-left: auto;
+  }
+
+  #right-context-rail .context-radio-mini {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    top: 104px;
+    width: auto;
+  }
+
+  /* An open sheet has to paint over the other rail: both rails are stacking
+     contexts at the same level, so the sibling rail's chips otherwise float on
+     top of the open sheet. */
+  #left-panel-stack:has(> #data-panel:not(.collapsed)),
+  #left-panel-stack:has(> #scene-panel:not(.collapsed)),
+  #right-context-rail:has(> #pp-toggles:not(.collapsed)),
+  #right-context-rail:has(> #cctv-panel:not(.collapsed)),
+  #right-context-rail:has(> #street-level-panel:not(.collapsed)),
+  #right-context-rail:has(> #global-context-panel:not(.collapsed)) {
+    z-index: 240;
+  }
+
+  /* ── Expanded panel = sheet ─────────────────── */
+  /* Sized to end well above the dock and to leave the map — and the HUD
+     that lives on it — visible around it: a window that covered the whole
+     screen was what made the map unreadable while any panel was open. */
+  #left-panel-stack > #data-panel:not(.collapsed),
+  #left-panel-stack > #scene-panel:not(.collapsed),
+  #right-context-rail > #pp-toggles:not(.collapsed),
+  #right-context-rail > #cctv-panel:not(.collapsed),
+  #right-context-rail > #street-level-panel:not(.collapsed),
+  #right-context-rail > #weather-panel:not(.collapsed),
+  #right-context-rail > #recent-imagery-panel:not(.collapsed),
+  #right-context-rail > #global-context-panel:not(.collapsed) {
+    position: fixed;
+    /* Directly under the action row (10 + 34 + 10): the classification window
+       starts at 54 too, and a sheet that began below it sliced "NORMAL" in
+       half on a 672px-tall viewport. It covers that window instead, whole. */
+    top: 54px;
+    right: 8px;
+    bottom: auto;
+    left: 8px;
+    z-index: 220;
+    width: auto;
+    max-width: none;
+    /* Ends 12px above the zoom cluster: 54 of top + 12 of gap + the cluster's
+       138 + its 205 anchor, measured against the viewport that is actually on
+       screen (`dvh` — `vh` follows the tallest possible one on a phone with
+       a collapsing URL bar, which let a sheet run 16px into the "+"). */
+    max-height: calc(100dvh - 409px);
+    margin: 0;
+    /* A column, not a plain block: `max-height` only bounds the sheet's own
+       box. Without a flex container to shrink into, the panel's inner block
+       kept its content height (2.1k px of Data layers) and `overflow: hidden`
+       simply clipped the rest — the list had nothing to scroll, so no
+       scrollbar could appear and the group under the fold was unreachable. */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 16px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.62);
+    /* A downward drag on the header closes the sheet, and the sheet follows
+       the finger while it happens (ui/panelSwipeDismiss.js). The offset is a
+       transform so the sheet's box — and the map under it — does not reflow. */
+    transform: translateY(var(--sheet-draw, 0px));
+    transition: transform 170ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+
+  /* While a finger owns the sheet the offset must land exactly where the
+     finger is; the settle-back transition takes over again on release. */
+  #left-panel-stack > .panel-collapsible[data-sheet-dragging='true'],
+  #right-context-rail > .panel-collapsible[data-sheet-dragging='true'] {
+    transition: none;
+  }
+
+  /* ── Scrollbar you can see ──────────────────── */
+  /* Android Chrome draws overlay scrollbars and ignores `::-webkit-scrollbar`,
+     so the bar layers.css styles for `.data-toggle-list` never shows there:
+     a sheet whose list is two screens tall looked like one that just stopped.
+     ui/panelScrollIndicator.js draws this bar as DOM beside the scroller. */
+  .gev-scroll-indicator {
+    position: absolute;
+    top: 10px;
+    right: 3px;
+    bottom: 10px;
+    width: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .gev-scroll-indicator[hidden] {
+    display: none;
+  }
+
+  .gev-scroll-thumb {
+    position: absolute;
+    left: 0;
+    width: 4px;
+    border-radius: 999px;
+    background: linear-gradient(
+      180deg,
+      rgba(0, 212, 255, 0.85),
+      rgba(0, 212, 255, 0.35)
+    );
+    box-shadow: 0 0 8px rgba(0, 212, 255, 0.35);
+    pointer-events: auto;
+    /* The thumb owns its drag: without this, pulling it pans the sheet. */
+    touch-action: none;
+    cursor: grab;
+  }
+
+  .gev-scroll-indicator[data-dragging='true'] .gev-scroll-thumb {
+    background: linear-gradient(
+      180deg,
+      rgba(0, 212, 255, 1),
+      rgba(0, 212, 255, 0.55)
+    );
+    cursor: grabbing;
+  }
+
+  /* The header is the grip: `touch-action: none` lets it claim the vertical
+     axis, while the body keeps panning its own scroller as before. */
+  #left-panel-stack
+    > .panel-collapsible:not(.collapsed)
+    .panel-header,
+  #right-context-rail
+    > .panel-collapsible:not(.collapsed)
+    .panel-header,
+  #right-context-rail
+    > .panel-collapsible:not(.collapsed)
+    > .pp-header-row {
+    touch-action: none;
+  }
+
+  #left-panel-stack > .panel-collapsible:not(.collapsed) > div,
+  #right-context-rail > .panel-collapsible:not(.collapsed) > div {
+    /* The sheet is the flex container now, so the inner block fills the space
+       that is left instead of claiming its content height. */
+    flex: 1 1 auto;
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #left-panel-stack > .panel-collapsible:not(.collapsed) [data-rail-scroller],
+  #left-panel-stack > .panel-collapsible:not(.collapsed) .data-toggle-list,
+  #right-context-rail > .panel-collapsible:not(.collapsed) [data-rail-scroller],
+  #right-context-rail > .panel-collapsible:not(.collapsed) .pp-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  /* Display keeps its own grid of toggle groups. The generic sheet rule above
+     hands every direct child `height: 100%`, which would blow the header row
+     up to the height of the sheet and push the controls out of view. */
+  #right-context-rail #pp-toggles:not(.collapsed) {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    background: var(--panel-glass);
+    backdrop-filter: var(--panel-glass-blur);
+    -webkit-backdrop-filter: var(--panel-glass-blur);
+    overflow: hidden;
+  }
+
+  #right-context-rail #pp-toggles:not(.collapsed) > .pp-header-row {
+    flex: 0 0 auto;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    height: auto;
+    min-height: 32px;
+    margin: 0;
+    padding: 0 2px;
+  }
+
+  #right-context-rail #pp-toggles:not(.collapsed) > .pp-panel-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 10px;
+    height: auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  #right-context-rail #pp-toggles:not(.collapsed) .pp-toggle-group,
+  #right-context-rail #pp-toggles:not(.collapsed) > .pp-panel-body > * {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  /* ── HUD: one summary line, one telemetry row ─ */
+  /* The tactical/operator variants pin this corner at max(14vh, 136px), which
+     lands inside the chip rows on a phone; the attribute selector matches those
+     rules and source order settles the tie. */
+  /* The classification window starts right under the action row now that the
+     rails no longer draw chips there: top of the screen carries the state,
+     the bottom carries the telemetry, and the middle of the map stays open. */
+  #intel-hud[data-variant] .hud-top-left {
+    top: 54px;
+    left: 12px;
+    width: fit-content;
+    max-width: calc(100vw - 24px);
+  }
+
+  /* ── Windows: glass off, data on ─────────────
+     Three slabs of near-black were doing the reading, and paying for it with
+     the map underneath. The readouts already glow in their own colour, so the
+     scrim goes to a trace of it and each line gains a dark shadow instead:
+     legible over a white roof, and the imagery keeps its detail. */
+  #intel-hud .hud-top-left,
+  #intel-hud .hud-bottom-left,
+  #intel-hud .hud-bottom-right {
+    padding: 4px 6px;
+    background: transparent;
+    border: 0;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
+  }
+
+  /* A soft pool behind the text, drawn under it and feathered to nothing at
+     its edges: the window has no frame, and the map keeps its detail right up
+     to the letters. `closest-side` is what makes it end exactly where the
+     halo's box ends, so there is no step to see. */
+  #intel-hud .hud-top-left::before,
+  #intel-hud .hud-bottom-center > .hud-corner::before {
+    content: '';
+    position: absolute;
+    inset: -9px -11px;
+    z-index: -1;
+    border-radius: 50% / 40%;
+    background: radial-gradient(
+      closest-side,
+      rgba(2, 8, 12, 0.62),
+      rgba(2, 8, 12, 0.3) 68%,
+      rgba(2, 8, 12, 0)
+    );
+  }
+
+  /* ── Draggable windows ───────────────────────
+     Each of the three can be pulled around by finger (see hudWindowDrag.js).
+     The module only writes the offset, so the transform lives here: one place
+     to move them, and the halo drawn above travels with its window for free.
+     `touch-action: none` is what lets a drag be a drag instead of a page
+     scroll, and taking pointer events is the price of being grabbable — the
+     rest of the HUD stays a read-out the globe can be turned through. */
+  #intel-hud .hud-top-left,
+  #intel-hud .hud-bottom-left,
+  #intel-hud .hud-bottom-right {
+    pointer-events: auto;
+    touch-action: none;
+    transform: translate3d(
+      var(--hud-window-dx, 0px),
+      var(--hud-window-dy, 0px),
+      0
+    );
+    transition: transform 120ms ease-out;
+  }
+
+  /* Direct feedback while the finger is down: no easing, no delay. */
+  #intel-hud .hud-corner[data-hud-dragging='true'] {
+    transition: none;
+    cursor: grabbing;
+  }
+
+  /* The readouts keep their own colour, one step up from the 60% the desktop
+     uses, and every line gets a hard dark rim: a halo alone is readable on a
+     night city and disappears on a white roof. */
+  #intel-hud .hud-top-left *,
+  #intel-hud .hud-bottom-left *,
+  #intel-hud .hud-bottom-right * {
+    color: rgba(0, 255, 255, 0.9);
+    /* A 1px rim, not a 7px smear: five stacked lines of blurred shadow pooled
+       into a grey slab behind the block. */
+    text-shadow:
+      -1px -1px 0 rgba(0, 0, 0, 0.85),
+      1px -1px 0 rgba(0, 0, 0, 0.85),
+      -1px 1px 0 rgba(0, 0, 0, 0.85),
+      1px 1px 0 rgba(0, 0, 0, 0.85),
+      0 0 3px rgba(0, 0, 0, 0.7),
+      0 0 8px var(--hud-glow);
+  }
+
+  #intel-hud .hud-content,
+  #intel-hud .hud-summary-wrap {
+    width: auto;
+    max-width: 100%;
+  }
+
+  /* REC / orbital pass share the classification line's row on a phone and
+     cannot both fit; the recording cue is the desktop affordance. */
+  #intel-hud .hud-top-right {
+    display: none;
+  }
+
+  /* 10px/1.6 overflows a 360px phone by a few pixels; the line is a single
+     unbreakable string, so the tracking gives way rather than the text. */
+  #intel-hud .hud-classification {
+    font-size: 9.5px;
+    letter-spacing: 1.1px;
+  }
+
+  #intel-hud .hud-system {
+    font-size: 10px;
+  }
+
+  #intel-hud .hud-mode {
+    font-size: 14px;
+    letter-spacing: 3px;
+  }
+
+  #intel-hud .hud-summary-wrap {
+    max-width: calc(100vw - 24px);
+  }
+
+  #intel-hud .hud-summary-label {
+    font-size: 9px;
+  }
+
+  /* The summary is a full address on a phone; two lines carry it where the
+     desktop single-line ellipsis would cut it after the street number. */
+  #intel-hud .hud-summary {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow: hidden;
+    font-size: 10px;
+    line-height: 1.3;
+    letter-spacing: 0.8px;
+  }
+
+  /* The classification window is centred; the telemetry pair was pinned to
+     the left and right edges, which is what made the view read as full. Both
+     share the classification's centre line now, so the edges of the map stay
+     open. The column sits above the credit band, which keeps its desktop
+     anchor (2vh + 5rem, re-measured by the attribution pin). */
+  #intel-hud .hud-bottom-center {
+    position: absolute;
+    inset: auto 0 140px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+  }
+
+  /* `relative` with no offsets lays out exactly like `static` — that is what
+     drops the desktop corner anchors — and gives the halo above something to
+     be inset from. Both boxes take the same width so the pair reads as one
+     column instead of two centred blocks of different sizes. */
+  #intel-hud .hud-bottom-center > .hud-corner {
+    position: relative;
+    inset: auto;
+    box-sizing: border-box;
+    min-width: min(100%, 208px);
+    max-width: calc(100vw - 24px);
+  }
+
+  /* One alignment for both, and it is the centre line they are stacked on: a
+     left-aligned MGRS above a right-aligned GSD staggered the column. The
+     inline `text-align: right` on the desktop markup is on the wrapper, so the
+     lines themselves take this. */
+  #intel-hud .hud-bottom-center .hud-content {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  /* GSD/NIIRS/SUN were sized to stop wrapping mid-label; on one centre line
+     they have the whole width for it. */
+  #intel-hud .hud-bottom-center .hud-content > div {
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  #intel-hud .hud-content,
+  #intel-hud .hud-rec {
+    font-size: 9.5px;
+    letter-spacing: 0.6px;
+  }
+
+  #intel-hud .hud-orbital {
+    font-size: 9px;
+    letter-spacing: 0.8px;
+  }
+
+  #intel-hud .hud-ais-vessel {
+    display: none;
+  }
+
+  #intel-hud .hud-bracket {
+    display: none;
+  }
+
+  /* Key setup / Ground Station provider settings on mobile */
+  #key-setup-chip {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 4px;
+    height: 30px;
+    min-height: 30px;
+    padding: 0 8px;
+    font-size: 0.58rem;
+    line-height: 1;
+    white-space: nowrap;
+    border-radius: 4px;
+  }
+
+  /* That leaves the language picker alone in the corner, where its stock
+     0.9rem inset puts it squarely on the presets chip. It steps up into the
+     gap between the dock and the HUD row instead. */
+  /* The ion credit is a required attribution, and it is inline and nowrap:
+     with Cesium's full-size wordmark (138×28) the strip measured 381px on a
+     360px phone, so the end of "Attribution des données" ran off-screen.
+     The wordmark gives way; the 10px text keeps every credit legible — the
+     line now ends at 344px, inside the screen. Cesium writes
+     `vertical-align` inline, hence the one `!important`. */
+  #cesium-credits img {
+    height: 18px;
+    width: auto;
+    vertical-align: -4px !important;
+  }
+
+  /* The globe now shares the strip under the credit band with the provider
+     chooser — the same line, the other corner. At 70px it sat on the last
+     words of the attribution, which may not be covered. */
+  #corner-actions {
+    inset-inline-end: 10px;
+    inset-block-end: calc(66px + env(safe-area-inset-bottom));
+  }
+
+  /* 30px: the strip between the credit line and the dock is 33px on a 672px
+     viewport, and the button has to clear the credit from below. */
+  #corner-actions .locale-picker-button {
+    height: 30px;
+    min-height: 30px;
+    padding: 0 0.55rem;
+  }
+
+  /* The list is a full-width sheet, and pinned 16px from the bottom it covers
+     the dock — including the VISUAL PRESETS label the user just read. It opens
+     from the same line as the chip instead, clear of the credit row. */
+  #corner-actions .locale-picker-popup {
+    inset-block-end: 66px;
+    max-height: calc(100dvh - 170px);
+  }
+
+  /* ── Dock: full width, touch-sized ──────────── */
+  /* The sliding module re-centres the dock with translateX(-50%) every time a
+     tray opens, on the assumption that it is a fit-content block with room to
+     slide. Here it already spans the viewport, so that transform moves it half
+     off-screen; each state keeps the same anchor instead. */
+  #command-dock,
+  #command-dock:has(#location-bar:not(.collapsed)),
+  #command-dock:has(#control-panel:not(.collapsed)) {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    min-height: 54px;
+    transform: none;
+    gap: 6px;
+    align-items: stretch;
+  }
+
+  /* The same module sizes a tray from --dock-side-compact (3.25rem at this
+     width) in both states. On a three-chip row each tray gets the half its
+     label needs, open or closed, because its body is a popover, not a growth. */
+  #command-dock > #location-bar,
+  #command-dock > #control-panel,
+  #command-dock > #location-bar:not(.collapsed),
+  #command-dock > #control-panel:not(.collapsed),
+  #command-dock:has(#location-bar:not(.collapsed)) > #control-panel,
+  #command-dock:has(#control-panel:not(.collapsed)) > #location-bar {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    height: 54px;
+  }
+
+  /* Collapsed trays are label-only chips: the dock's own rules keep the city
+     pills and preset grid in the flow, which is what made an 86px block. */
+  #command-dock #location-bar.collapsed .panel-inner,
+  #command-dock #location-bar.collapsed .location-inner,
+  #command-dock #control-panel.collapsed .panel-inner {
+    display: flex;
+    align-items: center;
+  }
+
+  #command-dock #location-bar .location-toolbar,
+  #command-dock #control-panel.collapsed .panel-header {
+    margin: 0;
+  }
+
+  #command-dock #location-bar.collapsed .location-city-row,
+  #command-dock #location-bar.collapsed .location-mini-status,
+  #command-dock #control-panel.collapsed .button-grid,
+  #command-dock #control-panel.collapsed .panel-mini-status,
+  #command-dock #location-bar.collapsed .location-mini-city,
+  #command-dock #location-bar.collapsed .location-mini-poi {
+    display: none !important;
+  }
+
+  #command-dock .panel-inner,
+  #command-dock .location-inner,
+  #command-dock #control-panel.collapsed .panel-inner,
+  #command-dock #location-bar.collapsed .location-inner {
+    padding: 6px 10px;
+  }
+
+  /* A 620px rule caps these at 2.3rem, which is what left the phone showing
+     'L…' and 'ESETS'. The id pair below outranks the per-panel flex rule. */
+  #command-dock .panel-title,
+  #command-dock .location-toolbar-label {
+    max-width: none;
+    min-width: 0;
+    font-size: 9px;
+    letter-spacing: 0.6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #command-dock #control-panel .panel-title,
+  #command-dock #location-bar .location-toolbar-label {
+    flex: 1 1 auto;
+    width: auto;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  /* The glyph box eats the label's width at this size; the label carries the
+     meaning and the tray is one tap away from its icon row. */
+  #command-dock .dock-label-icon {
+    display: none;
+  }
+
+  #command-dock .dock-tray-toggle {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  #command-dock .panel-header,
+  #command-dock .location-toolbar {
+    margin: 0 0 2px;
+    min-height: 14px;
+  }
+
+  /* The mic keeps its 92px whether a tray is open or not: the sliding module
+     would otherwise blow it up to --dock-voice-width (8.75rem) and squeeze the
+     two labels out of the row. */
+  #command-dock > #gev-voice-control,
+  #command-dock:has(#location-bar:not(.collapsed)) > #gev-voice-control,
+  #command-dock:has(#control-panel:not(.collapsed)) > #gev-voice-control {
+    flex: 0 0 92px;
+    min-width: 0;
+    width: 92px;
+    height: 54px;
+    padding: 6px 8px;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #command-dock #gev-voice-control .gev-voice-heading,
+  #command-dock #gev-voice-control .gev-voice-kicker,
+  #command-dock #gev-voice-control #gev-voice-detail,
+  #command-dock #gev-voice-control .gev-voice-readout,
+  #command-dock #gev-voice-control .gev-voice-visualizer {
+    display: none;
+  }
+
+  #command-dock #gev-voice-button {
+    width: 56px;
+    height: 40px;
+  }
+
+  /* The tray bodies are popovers above a full-width dock, so they cannot be
+     placed from the desktop chip widths (that centring maths assumes a
+     compact 52px chip beside a 140px mic). Each one spans the dock and hangs
+     off its own edge; the upstream gap above the dock still clears the
+     credit line, so only the horizontal anchor changes. */
+  #command-dock #location-bar .dock-popover-content,
+  #command-dock #location-bar:not(.collapsed) .dock-popover-content,
+  #command-dock #control-panel .dock-popover-content,
+  #command-dock #control-panel:not(.collapsed) .dock-popover-content {
+    left: 0;
+    right: auto;
+    width: calc(100vw - 16px);
+    max-width: none;
+  }
+
+  #command-dock #control-panel .dock-popover-content,
+  #command-dock #control-panel:not(.collapsed) .dock-popover-content {
+    left: auto;
+    right: 0;
+  }
+
+  /* The voice card is anchored to the mic, which stays centred in this row,
+     and voice-card.css already caps it at calc(100vw - 1.5rem) below 900px.
+     Its dismiss button is the one touch target the card never enlarged. */
+  #command-dock .gev-voice-card-dismiss {
+    width: 28px;
+    height: 28px;
+  }
+
+  /* ── Provider chooser: the left corner ───────
+     It used to sit over the mic, on the one strip of map the credit line
+     runs through: two lines of glass on the busiest 33px of the screen. It
+     takes the mirror of the language globe's slot instead — same band, same
+     compact control, other corner — and shows only the provider's own name.
+
+     `left` is measured from the mic column: this file pins that column at
+     92px and the dock centres it, so the field lands 10px off the screen
+     edge at every phone width without a magic viewport number. It sits in
+     the strip under the credit band, which is the one row on the map that is
+     already clear — the logo above it may not be covered. */
+  #command-dock .gev-voice-provider-field {
+    left: calc(56px - 50vw);
+    right: auto;
+    /* 100% is the mic column (54px, the dock's own height) measured up from
+       the dock's bottom, so the control hangs just off the dock's top edge —
+       under the credit line, not on it. The height follows the same 2vh the
+       credit band does: on a short screen that strip is 30px, not 34. */
+    bottom: calc(100% + 4px);
+    box-sizing: border-box;
+    width: min(9.5rem, calc(50vw - 24px));
+    height: min(28px, calc(2vh + 12px));
+    padding: 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    transform: none;
+    text-align: left;
+  }
+
+  /* The caption is the first thing to give way at this size; the closed
+     control already names the provider. */
+  #command-dock .gev-voice-provider-field > span {
+    display: none;
+  }
+
+  #command-dock .gev-voice-provider-field[hidden] {
+    display: none;
+  }
+
+  #command-dock .gev-voice-provider-field select {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 0;
+    height: 22px;
+    padding: 0 6px;
+    font-size: 0.62rem;
+    text-align: left;
+    text-align-last: left;
+  }
+
+  /* Touch targets inside the sheets. */
+  .panel-collapsible:not(.collapsed) .data-toggle-row {
+    padding: 10px;
+  }
+
+  .panel-collapsible:not(.collapsed) .data-toggle-btn {
+    min-height: 30px;
+    padding: 5px 11px;
+  }
+
+  .panel-collapsible:not(.collapsed) .pp-toggle-btn {
+    min-height: 42px;
+  }
+
+  .panel-collapsible:not(.collapsed) .pp-slider {
+    height: 4px;
+  }
+
+  .panel-collapsible:not(.collapsed) .pp-slider::-webkit-slider-thumb {
+    width: 16px;
+    height: 16px;
+  }
+
+  .panel-collapsible:not(.collapsed) .pp-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+  }
+
+  .panel-collapsible:not(.collapsed) .style-btn {
+    min-width: 60px;
+    min-height: 52px;
+  }
+
+  /* ── One tab strip, not two chip rows ─────────
+     Both rails used to wrap their own row of identical chips: two rows that
+     read as one broken row, with Context — last in the second wrap — stranded
+     hundreds of pixels below its siblings. The strip (mobilePanelTabs.js)
+     owns all six; the rails keep only the panels, which are sheets when open
+     and invisible when closed. */
+  #left-panel-stack > .panel-collapsible.collapsed,
+  #right-context-rail > .panel-collapsible.collapsed,
+  /* Display's chip carries its own surface on a two-id rule above; this one
+     has to outrank it or it keeps drawing a second "AFFICHAGE" box below the
+     strip. */
+  #right-context-rail > #pp-toggles.collapsed {
+    display: none;
+  }
+
+  /* One button, one list. Six chips laid over the map — in two wrapped rows,
+     then in a 3×2 grid — cost the top of the screen before the globe drew
+     anything. The windows now live behind a single closed control: the map
+     keeps its air, and the list only covers it while it is open.
+
+     The control rides the globe action row (mobilePanelTabs.js prepends it
+     there), so it is one flex item of that row and `#top-center-actions
+     button` — the same 34px glass every other button in the row wears —
+     does the sizing. `position: relative` is what the list hangs from. */
+  .gev-panel-tabs {
+    position: relative;
+    display: block;
+    flex: 0 0 auto;
+    pointer-events: auto;
+  }
+
+  .gev-panel-tabs-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* The row's own pressed state is the accent ring the tilt button wears. */
+  #top-center-actions .gev-panel-tabs-toggle[aria-expanded='true'] {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 14px rgba(0, 212, 255, 0.18);
+  }
+
+  /* The row is a stacking context, so a list inside it cannot outrank an open
+     window's sheet on its own z-index; the row steps forward while it shows
+     the list (mobilePanelTabs.js toggles the class). It has to clear the rail
+     too — an open sheet lifts its whole rail to 240 — or the list opens behind
+     the window it is listing. */
+  #top-center-actions.panel-tabs-open {
+    z-index: 260;
+  }
+
+  /* Three bars, no webfont: see mobilePanelTabs.js for why. */
+  .gev-panel-tabs-glyph {
+    width: 16px;
+    height: 2px;
+    border-radius: 1px;
+    background: currentColor;
+    box-shadow:
+      0 -5px 0 currentColor,
+      0 5px 0 currentColor;
+  }
+
+  /* "Something is open": one dot instead of a highlighted chip row. */
+  .gev-panel-tabs-dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #00d4ff;
+    opacity: 0;
+  }
+
+  .gev-panel-tabs[data-open='true'] .gev-panel-tabs-dot {
+    opacity: 1;
+  }
+
+  .gev-panel-tabs-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 133;
+    box-sizing: border-box;
+    display: grid;
+    gap: 4px;
+    width: min(15rem, calc(100vw - 24px));
+    padding: 6px;
+    border: 1px solid rgba(0, 212, 255, 0.16);
+    border-radius: 14px;
+    background: var(--popover-glass);
+    backdrop-filter: var(--popover-glass-blur);
+    -webkit-backdrop-filter: var(--popover-glass-blur);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+  }
+
+  .gev-panel-tabs-menu[hidden] {
+    display: none;
+  }
+
+  /* Two ids: the row sizes every button it owns at 34px ("COUCHES DE DONNÉES"
+     is not a 34px glyph), and only this selector outranks that rule. The rows
+     are full-width list entries again, one line each. */
+  #top-center-actions .gev-panel-tabs-menu button {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    /* The row centres its glyphs; a list row starts at its own edge. */
+    justify-content: flex-start;
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    min-height: 40px;
+    margin: 0;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.8px;
+    text-align: left;
+    white-space: nowrap;
+    transform: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    cursor: pointer;
+  }
+
+  #top-center-actions .gev-panel-tabs-menu button:hover,
+  #top-center-actions .gev-panel-tabs-menu button:focus-visible {
+    background: rgba(255, 255, 255, 0.06);
+    transform: none;
+  }
+
+  /* The window whose sheet is on screen keeps a marker for when the list is
+     reopened — the sheet itself says which one it is. */
+  #top-center-actions .gev-panel-tabs-menu button[data-open='true'] {
+    color: var(--text-primary);
+    background: rgba(0, 212, 255, 0.14);
+    box-shadow: inset 2px 0 0 rgba(0, 212, 255, 0.75);
+  }
+
+  /* The sheet sits on the map, not in the rail, so it takes the dock's glass:
+     the HUD underneath must not read through the controls. */
+  #left-panel-stack > .panel-collapsible:not(.collapsed),
+  #right-context-rail > .panel-collapsible:not(.collapsed) {
+    background: var(--popover-glass);
+    backdrop-filter: var(--popover-glass-blur);
+    -webkit-backdrop-filter: var(--popover-glass-blur);
+  }
+
+  #left-panel-stack > .panel-collapsible:not(.collapsed) > div,
+  #right-context-rail > .panel-collapsible:not(.collapsed) > div {
+    background: transparent;
+  }
+}
+
+/* Phones narrower than 380px: the three-chip row gets tight. The Context
+   chip's radio launcher is the last thing that fits, and the same launcher
+   sits inside the sheet it opens, so it yields first. */
+@media (max-width: 380px) {
+  /* The mic takes a fixed 92px out of the row, which leaves each label 78px
+     at 320px: 'VISUAL PRESETS' needs 84px at the 9px dock size and would
+     ellipsise. The band is one step down rather than a clipped word. */
+  #command-dock .panel-title,
+  #command-dock .location-toolbar-label {
+    font-size: 8.5px;
+    letter-spacing: 0.25px;
+  }
+
+  #left-panel-stack .panel-title,
+  #right-context-rail .panel-title,
+  #right-context-rail .pp-header-label {
+    font-size: 9px;
+    letter-spacing: 0.8px;
+  }
+
+  #right-context-rail #context-radio-dock {
+    display: none;
+  }
+}

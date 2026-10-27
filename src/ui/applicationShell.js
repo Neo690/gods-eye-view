@@ -46,6 +46,9 @@ import {
   t,
 } from '../i18n/index.js';
 import { applyLocaleChoice, mountLocalePicker } from './localePicker.js';
+import { mountAlertCenter } from './alertCenter.js';
+import { CommandPalette } from './commandPalette.js';
+import { bindMapViewControls, flyToFix } from './mapViewControls.js';
 
 /**
  * Central UI orchestrator for the God's Eye View application.
@@ -579,6 +582,7 @@ export class StyleManager extends ShellFacade {
     this._applyRuntimeStaticHeaderText();
     this._initPanelChrome();
     this._initLocaleSelector();
+    this._initAlertCenter();
     this._sizeDisplayLabelColumn();
     this._initLeftPanelAdaptiveLayout();
     this._initRightPanelAdaptiveLayout();
@@ -589,6 +593,7 @@ export class StyleManager extends ShellFacade {
     this._initLocationBar();
     this._initShareButton();
     this._initCameraOrientationControls();
+    this._initMapViewControls();
     this._initClearSelectedLayersButton();
     this._initHUDToggle();
     this._initModels3dToggle();
@@ -711,6 +716,101 @@ export class StyleManager extends ShellFacade {
    */
   _initUI() {
     this._displayBindings._initUI();
+    this._initCommandPalette();
+  }
+
+  /**
+   * Mounts the Ctrl/Cmd+K palette (src/ui/commandPalette.js).
+   *
+   * Every row drives machinery that already exists — the layer manager's
+   * setEnabled, the panel chrome's collapse state, and the location bar's own
+   * searchAndFlyTo — so the palette cannot drift from the controls it mirrors.
+   * @returns {void}
+   */
+  _initCommandPalette() {
+    const root = globalThis.document?.getElementById?.('command-palette');
+    if (!root) return;
+    this._commandPalette?.destroy();
+    this._commandPalette = new CommandPalette({
+      root,
+      actions: {
+        getLayers: () => this._dataManager?.getAll?.() || [],
+        isLayerEnabled: (id) => this._dataManager?.isEnabled?.(id) === true,
+        setLayerEnabled: (id, enabled) =>
+          this._dataManager?.setEnabled?.(id, enabled, { origin: 'user' }),
+        getPanels: () => this._commandPalettePanels(),
+        openPanel: (id) => this._openPanelFromPalette(id),
+        geocode: (text, options) =>
+          this.placeSearch?.geocode?.(text, options) ??
+          Promise.resolve({ place: null }),
+        // The shared wrapper leaves `placeSearch` to the caller, exactly as the
+        // location bar and the voice commands supply it.
+        flyTo: (text) =>
+          this.services.searchAndFlyTo(this.viewer, text, {
+            placeSearch: this.placeSearch,
+          }),
+        toast: (text) => this._showToast(text),
+      },
+    });
+    this._commandPalette.mount();
+  }
+
+  /**
+   * The panels the palette can open, read from the DOM rather than restated.
+   *
+   * A panel's own title is already translated and already the words the
+   * operator sees on its header, so taking the label from there keeps the
+   * palette in step with a renamed panel and needs no second string table.
+   * Hidden panels are omitted: an entry that opens nothing is not a command.
+   * @returns {Array<{id: string, label: string}>}
+   */
+  _commandPalettePanels() {
+    const documentRef = globalThis.document;
+    if (!documentRef?.querySelectorAll) return [];
+    const panels = [];
+    for (const element of documentRef.querySelectorAll('[data-panel-id]')) {
+      if (element.hidden || !element.id) continue;
+      const title = element.querySelector('.panel-title')?.textContent?.trim();
+      if (title) panels.push({ id: element.id, label: title });
+    }
+    // Dock trays carry their label on the button that expands them.
+    for (const tray of documentRef.querySelectorAll(
+      '[data-dock-toggle-target]',
+    )) {
+      const id = tray.dataset.dockToggleTarget;
+      if (!id || panels.some((panel) => panel.id === id)) continue;
+      const title = tray
+        .querySelector('.panel-title, .location-toolbar-label')
+        ?.textContent?.trim();
+      if (title) panels.push({ id, label: title });
+    }
+    return panels;
+  }
+
+  /**
+   * Opens a panel the way its own button does, then brings it into view.
+   * @param {string} panelId Element id of the panel or dock tray.
+   * @returns {void}
+   */
+  _openPanelFromPalette(panelId) {
+    const documentRef = globalThis.document;
+    const panel = documentRef?.getElementById?.(panelId);
+    if (!panel) return;
+    const tray = documentRef.querySelector(
+      `[data-dock-toggle-target="${panelId}"]`,
+    );
+    if (tray) {
+      // The trays own hover and pin behaviour; clicking their own switch keeps
+      // one code path for open/closed instead of setting the class behind it.
+      if (tray.getAttribute('aria-expanded') !== 'true') tray.click?.();
+    } else {
+      // The layers rail is toggled by its `active` class, not by collapse.
+      if (panelId === 'data-panel') panel.classList.add('active');
+      this._panelChrome?.setPanelCollapsed?.(panelId, false, {
+        userInitiated: true,
+      });
+    }
+    panel.scrollIntoView?.({ block: 'nearest' });
   }
 
   /**
@@ -739,6 +839,45 @@ export class StyleManager extends ShellFacade {
       root,
       current: getLocale(),
       onSelect: (locale) => this._chooseLocale(locale),
+    });
+  }
+
+  /**
+   * Mounts the alert centre (src/ui/alertCenter.js): the HUD bell, the incident
+   * list and the toast. Its scan reads the analyst records of the layers that
+   * are ON — a layer that is off has no records, so its incidents age out
+   * rather than being reported from data the app never loaded.
+   * @returns {void}
+   */
+  _initAlertCenter() {
+    const root = globalThis.document?.getElementById?.('alert-center');
+    if (!root) return;
+    // Top of each family, not every contact: the scan clusters anyway.
+    const records = (layerId, cap) => {
+      const manager = this._dataManager;
+      if (!manager?.isEnabled?.(layerId)) return [];
+      const module = manager.layers?.get(layerId)?.module;
+      if (typeof module?.getAnalystRecords !== 'function') return [];
+      return module.getAnalystRecords(cap) || [];
+    };
+    const gnss = () => {
+      const manager = this._dataManager;
+      if (!manager?.isEnabled?.('gnss-integrity')) return null;
+      const stats = manager.layers?.get('gnss-integrity')?.module?.getStats?.();
+      if (!stats?.levels) return null;
+      return { levels: { ...stats.levels, lastUpdate: stats.lastUpdate } };
+    };
+    this._alertCenter = mountAlertCenter({
+      root,
+      provider: () => ({
+        flights: records('flights', 4000),
+        military: records('military', 4000),
+        earthquakes: records('earthquakes', 4000),
+        fires: records('local-firms', 6000),
+        cyclones: records('weather-cyclones', 200),
+        gnss: gnss(),
+      }),
+      showToast: (text) => this._showToast(text),
     });
   }
 
@@ -1601,6 +1740,30 @@ export class StyleManager extends ShellFacade {
     });
   }
 
+  /**
+   * Wire the right-edge zoom and device-position buttons
+   * (src/ui/mapViewControls.js). The locate button reads the phone's own GPS,
+   * which is what makes the view agree with the device.
+   * @returns {void}
+   */
+  _initMapViewControls() {
+    this._mapViewControls?.destroy();
+    this._mapViewControls = bindMapViewControls({
+      viewer: this.viewer,
+      elements: {
+        zoomIn: this._mapZoomInBtn,
+        zoomOut: this._mapZoomOutBtn,
+        locate: this._mapLocateBtn,
+      },
+      showToast: (message) => this._showToast(message),
+      // The fix arrives from outside the camera system, so it goes through the
+      // same explicit-navigation route as a searched place: that is what
+      // releases follow/orbit ownership and lets the flight actually land.
+      flyTo: (fix) =>
+        this.runImmediateLocationNavigation(() => flyToFix(this.viewer, fix)),
+    });
+  }
+
   // ── Share Button ─────────────────────────────
 
   /**
@@ -1706,13 +1869,18 @@ export class StyleManager extends ShellFacade {
       unregister();
     this._localePicker?.destroy();
     this._localePicker = null;
+    this._alertCenter?.destroy();
+    this._alertCenter = null;
     this._recording.destroy();
     this._panelChrome.destroy();
     this._feedback.destroy();
 
+    this._commandPalette?.destroy();
+    this._commandPalette = null;
     this._displayBindings.destroy();
     this._mapSourceControls?.destroy();
     this._cameraOrientationControls?.destroy();
+    this._mapViewControls?.destroy();
     this._clearLayersControl?.destroy();
     this._cctvControls?.destroy();
     this.services?.streetLevelLayer?.attachNavigation?.(null);

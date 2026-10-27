@@ -16,6 +16,7 @@ export const LAYER_NAME_KEYS = Object.freeze({
   flights: msg('Live Flights'),
   military: msg('Military Flights'),
   earthquakes: msg('Earthquakes (24h)'),
+  radiation: msg('Radiation'),
   satellites: msg('Satellites'),
   'rocket-launches': msg('Space Missions (30d)'),
   traffic: msg('Street Traffic'),
@@ -39,9 +40,13 @@ export const LAYER_NAME_KEYS = Object.freeze({
   'weather-satellite': msg('Satellite clouds'),
   'weather-lightning': msg('Lightning density'),
   'weather-cyclones': msg('Cyclone advisories'),
+  'windy-weather': msg('Local weather (Windy)'),
   'air-quality': msg('Air quality'),
   directions: msg('Directions'),
   'alpr-cameras': msg('ALPR Cameras'),
+  'cell-towers': msg('Radio Sites'),
+  'iot-sensors': msg('Connected Objects'),
+  'private-wifi': msg('Private Wi-Fi'),
 });
 
 /** The layer panel's own English names, where they differ from the module's. */

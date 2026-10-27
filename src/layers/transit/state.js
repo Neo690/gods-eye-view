@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium';
 import { createHistoryBudget } from '../../data/contactPlayback.js';
+import { readDefaultStorage, readHiddenFeeds } from './feedToggles.js';
 
 /**
  * One Transit layer's mutable scene state. Every field lives on the instance,
@@ -8,12 +9,21 @@ import { createHistoryBudget } from '../../data/contactPlayback.js';
  * @param {{services: object}} context
  * @returns {object}
  */
-export function createState({ services }) {
+export function createState({ services, storage = readDefaultStorage() }) {
   const { setOverlayEntries, setOverlaySourceVisible, clearOverlaySource } =
     services.overlays;
 
   const state = {};
   state._historyBudget = createHistoryBudget();
+  /** Where the network switches are remembered. */
+  state._storage = storage;
+  /**
+   * Networks switched off in the Layers row. Seeded before the first proximity
+   * check, so a hidden network is never polled once, not even on the frame the
+   * layer turns on.
+   * @type {Set<string>}
+   */
+  state._hiddenFeeds = readHiddenFeeds(storage);
 
   state.DEFAULT_OVERLAY_HOST = Object.freeze({
     setEntries: setOverlayEntries,
@@ -46,6 +56,9 @@ export function createState({ services }) {
 
   /** @type {(() => void)|null} */
   state._preRenderRemove = null;
+  /** `camera.moveEnd` arrival hook, so a flight's final view is inspected. */
+  /** @type {(() => void)|null} */
+  state._arrivalRemove = null;
   state._renderHeld = false;
   /** @type {Cesium.ScreenSpaceEventHandler|null} */
   state._clickHandler = null;

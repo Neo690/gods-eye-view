@@ -14,6 +14,8 @@ qa-shots/
 output/
 .gev-logs/
 .gev-cache/
+# ANFR radio-site extract built by `npm run towers:build` (63 MB upstream).
+data/anfr/
 # Browser QA gate evidence (screenshots, console and network dumps).
 qa-artifacts/
 # Playwright MCP session logs: browser consoles can carry tokens in URLs.
@@ -28,3 +30,35 @@ pinokio/.installed
 
 # Transient: a release interrupted mid-assembly (npm run changelog recovers it)
 changelog.d/.assembling/
+
+# Which CI build `npm run apk:install` last put on the local phone.
+.gev-apk-install.json
+
+# Android shell build output and the bundled web copy
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/assets/www/
+android/*.apk
+
+# Local signing key for CI builds (never committed)
+.signing/
+
+# Desktop shell build output: the staged payload copied into the installer, and
+# electron-builder's release directory.
+desktop/.payload/
+desktop/release/
+desktop/node_modules/
+
+# iOS shell: the bundle `npm run ios:payload` stages, Xcode's output, and the
+# project XcodeGen derives from ios/project.yml (the spec is the source of truth).
+# The folder itself stays in the repository: XcodeGen refuses a folder
+# reference to a path that does not exist, so a fresh clone must be able to
+# generate the project before the first `npm run ios:payload`.
+ios/GodsEyeView/www/*
+!ios/GodsEyeView/www/.gitkeep
+ios/GodsEyeView.xcodeproj/
+ios/build/
+ios/DerivedData/
+ios/*.ipa

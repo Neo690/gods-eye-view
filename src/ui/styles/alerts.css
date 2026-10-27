@@ -1,0 +1,324 @@
+/* ============================================================
+   Alert centre — the flag at the head of the top action row
+   (#top-center-actions) and the incident list it drops below it
+   (src/ui/alertCenter.js). That row's own rule already frames the
+   button as the same round glass as the map tools, so only the
+   states live here. Logical properties throughout, so a right-to-
+   left page mirrors the list.
+   ============================================================ */
+
+.alert-center {
+  position: relative;
+  display: flex;
+}
+
+/* The open list has to paint over the rail chips (z 130/240) and the corner
+   row (150), so the action row is lifted while — and only while — it is open.
+   alertCenter.js toggles the class with the popup. */
+#top-center-actions.alerts-open {
+  z-index: 250;
+}
+
+.alert-center-button {
+  position: relative;
+}
+
+/* An incident waiting turns the flag amber, a critical one red. The
+   #top-center-actions prefix is what outranks that row's button colour. */
+#top-center-actions .alert-center-button.has-alerts {
+  color: #ffd88a;
+  border-color: rgba(255, 196, 92, 0.65);
+}
+
+#top-center-actions .alert-center-button.has-critical {
+  color: #ff9c9c;
+  border-color: rgba(255, 96, 96, 0.75);
+  animation: alert-center-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes alert-center-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(255, 96, 96, 0);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(255, 96, 96, 0.45);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alert-center-button.has-critical {
+    animation: none;
+  }
+}
+
+.alert-center-bell {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* The count rides the corner of the round button. */
+.alert-center-badge {
+  position: absolute;
+  inset-block-start: -4px;
+  inset-inline-end: -4px;
+  min-width: 15px;
+  padding: 1px 3px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  color: #07131c;
+  background: #ffc45c;
+  border-radius: 999px;
+  box-shadow: 0 0 8px rgba(255, 196, 92, 0.5);
+}
+
+.alert-center-button.has-critical .alert-center-badge {
+  color: #200606;
+  background: #ff6b6b;
+  box-shadow: 0 0 8px rgba(255, 107, 107, 0.6);
+}
+
+/* Drops DOWN from the flag — the flag now sits at the top of the screen — and
+   scrolls its own list, so a busy world never pushes it off the viewport. */
+.alert-center-popup {
+  position: absolute;
+  inset-block-start: calc(100% + 0.45rem);
+  inset-block-end: auto;
+  inset-inline-start: 0;
+  inset-inline-end: auto;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(22rem, calc(100vw - 1.8rem));
+  max-height: min(26rem, calc(100dvh - 8rem));
+  padding: 0.55rem 0.6rem;
+  color: var(--text-primary);
+  /* The same glass as the rest of the chrome; the rows inside carry their own
+     scrim, so the list stays readable over bright imagery. */
+  background: var(--glass-bg);
+  border: 1px solid rgba(54, 220, 255, 0.42);
+  border-radius: 0.55rem;
+  box-shadow:
+    0 1rem 3rem rgba(0, 0, 0, 0.65),
+    0 0 2rem rgba(0, 212, 255, 0.08);
+  backdrop-filter: var(--panel-glass-blur);
+  -webkit-backdrop-filter: var(--panel-glass-blur);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* A dark trough, so the list does not paint a light UA scrollbar. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(54, 220, 255, 0.4) transparent;
+  z-index: 2;
+}
+
+/* A `display` of its own beats the `hidden` attribute's UA rule; the list must
+   stay shut until the flag is pressed. */
+.alert-center-popup[hidden] {
+  display: none;
+}
+
+.alert-center-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.15rem 0.2rem 0.35rem;
+}
+
+.alert-center-heading {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.14rem;
+  text-transform: uppercase;
+  color: rgba(85, 223, 245, 0.95);
+}
+
+#top-center-actions .alert-center-popup .alert-center-purge {
+  width: auto;
+  height: auto;
+  min-height: 22px;
+  margin: 0;
+  padding: 0.15rem 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.05rem;
+  text-transform: uppercase;
+  line-height: 1.2;
+  color: #ff9c9c;
+  background: rgba(255, 96, 96, 0.14);
+  border: 1px solid rgba(255, 96, 96, 0.38);
+  border-radius: 0.25rem;
+  cursor: pointer;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transform: none;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+#top-center-actions .alert-center-popup .alert-center-purge:hover,
+#top-center-actions .alert-center-popup .alert-center-purge:focus-visible {
+  color: #fff;
+  background: rgba(255, 96, 96, 0.32);
+  border-color: rgba(255, 96, 96, 0.7);
+  outline: none;
+  transform: none;
+}
+
+#top-center-actions .alert-center-popup .alert-center-purge:active {
+  transform: scale(0.96);
+}
+
+#top-center-actions .alert-center-popup .alert-center-purge[hidden] {
+  display: none;
+}
+
+.alert-center-note {
+  margin: 0 0 0.45rem;
+  padding: 0 0.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  line-height: 1.4;
+  color: rgba(198, 218, 226, 0.62);
+}
+
+.alert-center-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.alert-center-row {
+  display: grid;
+  grid-template-columns: 0.45rem 1fr auto;
+  gap: 0.45rem;
+  align-items: start;
+  padding: 0.45rem 0.45rem 0.45rem 0.5rem;
+  background: rgba(9, 22, 32, 0.72);
+  border: 1px solid rgba(54, 220, 255, 0.16);
+  border-radius: 0.4rem;
+}
+
+.alert-center-row[data-severity='critical'] {
+  border-color: rgba(255, 96, 96, 0.42);
+  background: rgba(38, 12, 16, 0.55);
+}
+
+.alert-center-severity {
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-block-start: 0.22rem;
+  background: #ffc45c;
+  border-radius: 50%;
+  box-shadow: 0 0 0.5rem rgba(255, 196, 92, 0.6);
+}
+
+.alert-center-row[data-severity='critical'] .alert-center-severity {
+  background: #ff6b6b;
+  box-shadow: 0 0 0.5rem rgba(255, 107, 107, 0.7);
+}
+
+.alert-center-body {
+  min-width: 0;
+}
+
+.alert-center-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  letter-spacing: 0.02rem;
+  color: #e6f6fb;
+}
+
+.alert-center-detail {
+  margin: 0.16rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  line-height: 1.35;
+  color: rgba(205, 232, 240, 0.78);
+}
+
+.alert-center-meta {
+  margin: 0.2rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.54rem;
+  letter-spacing: 0.04rem;
+  text-transform: uppercase;
+  color: rgba(160, 190, 202, 0.6);
+}
+
+/* The dismiss × is inside the top row's nav, whose rule would frame it as a
+   second round map tool; strip that back to a quiet glyph. */
+#top-center-actions .alert-center-popup .alert-center-dismiss {
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0 0.3rem;
+  font-size: 0.9rem;
+  line-height: 1;
+  color: rgba(198, 218, 226, 0.55);
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transform: none;
+}
+
+#top-center-actions .alert-center-popup .alert-center-dismiss:hover,
+#top-center-actions .alert-center-popup .alert-center-dismiss:focus-visible {
+  color: #ff9c9c;
+  background: rgba(255, 96, 96, 0.12);
+  outline: none;
+  transform: none;
+}
+
+.alert-center-empty {
+  margin: 0.2rem 0 0.1rem;
+  padding: 0 0.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  line-height: 1.4;
+  color: rgba(198, 218, 226, 0.7);
+}
+
+/* Phone: the list becomes a sheet across the screen, under the top row. */
+@media (max-width: 720px) {
+  .alert-center-popup {
+    position: fixed;
+    inset-inline: 10px;
+    inset-block-start: 54px;
+    inset-block-end: auto;
+    width: auto;
+    max-height: calc(100dvh - 190px);
+  }
+
+  .alert-center-title {
+    font-size: 0.72rem;
+  }
+
+  .alert-center-detail {
+    font-size: 0.64rem;
+  }
+
+  #top-center-actions .alert-center-popup .alert-center-dismiss {
+    min-width: 30px;
+    min-height: 30px;
+    font-size: 1.05rem;
+  }
+
+  #top-center-actions .alert-center-popup .alert-center-purge {
+    min-height: 28px;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.64rem;
+  }
+}

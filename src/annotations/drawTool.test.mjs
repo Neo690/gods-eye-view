@@ -102,8 +102,21 @@ test('the DISPLAY rail styles live in their current owner, not the shim', () => 
   // these rules lived in the root style.css. That file is an import shim now,
   // and putting rules back into it would silently undo the split.
   const shim = read('style.css');
-  assert.ok(
-    shim.split('\n').length < 40,
+  // Every non-blank line must be an import (or the comment above them), so a
+  // new component sheet can be added without reopening the door to rules.
+  const strayLines = shim
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(
+      (line) =>
+        line &&
+        !line.startsWith('@import') &&
+        !line.startsWith('/*') &&
+        !line.startsWith('*'),
+    );
+  assert.deepEqual(
+    strayLines,
+    [],
     'style.css is an import shim, not a stylesheet',
   );
   assert.doesNotMatch(

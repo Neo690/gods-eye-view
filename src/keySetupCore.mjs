@@ -98,6 +98,14 @@ export const KEY_SETUP_KEYS = Object.freeze([
     tier: 'free',
   }),
   Object.freeze({
+    id: 'windy',
+    title: 'WINDY', // i18n-ignore: provider product name
+    unlocks: msg('Live weather telemetry and GFS forecasts in tactical HUD'),
+    getUrl: 'https://api.windy.com/keys',
+    envVars: Object.freeze(['WINDY_API_KEY']),
+    tier: 'free',
+  }),
+  Object.freeze({
     id: 'cesium-ion',
     title: 'CESIUM ION', // i18n-ignore: provider product name
     unlocks: msg('Bing imagery map stacks + world terrain'),
@@ -342,10 +350,21 @@ export function admitKeySetupRequest({
       code: 'not-local-host',
     };
   }
-  if (
-    method === 'POST' &&
-    (origin === undefined || origin === null || origin === '')
-  ) {
+  // A browser always sends Origin on a cross-origin POST, so requiring the
+  // EXACT local Origin is what stops a foreign page from writing this
+  // machine's keys. Demanding an Origin on every POST as well also refused the
+  // packaged desktop shell, whose Chromium runs with --disable-web-security and
+  // therefore sends neither Origin nor any Sec-Fetch-* header: there the panel
+  // could only ever report "requires an exact local Origin" and no key could be
+  // saved at all. So the Origin is required to be exact WHEN PRESENT, and its
+  // absence is accepted only when nothing claims another site is involved — a
+  // page can neither omit Origin nor forge Sec-Fetch-Site, and the
+  // application/json requirement below is a non-simple content type that a
+  // cross-site caller cannot send without a preflight this server never allows.
+  const fetchSite = String(proxyHeaders?.['sec-fetch-site'] ?? '')
+    .trim()
+    .toLowerCase();
+  if (fetchSite !== '' && fetchSite !== 'same-origin' && fetchSite !== 'none') {
     return {
       ok: false,
       status: 403,
@@ -395,6 +414,22 @@ export function admitKeySetupRequest({
     };
   }
   return { ok: true };
+}
+
+/**
+ * The registry's own page for a key, or null. Provider Settings can ask this
+ * machine to open a key's sign-up page (`/api/setup/open-key`), and this
+ * allowlist is what keeps that opener from becoming a general "open any URL on
+ * this machine" primitive the server would hand to any local caller.
+ * @param {unknown} url
+ * @returns {?string} the registry's exact spelling, or null.
+ */
+export function keySetupKeyUrl(url) {
+  const wanted = String(url ?? '').trim();
+  if (!wanted) return null;
+  return KEY_SETUP_KEYS.some((entry) => entry.getUrl === wanted)
+    ? wanted
+    : null;
 }
 
 /** @returns {Set<string>} every env var the panel is allowed to write. */
@@ -491,6 +526,27 @@ export function keySetupStatus(env = {}) {
     setCount: keys.filter((key) => key.set).length,
     total: keys.length,
   };
+}
+
+/**
+ * Mark the entries THIS store holds, so a panel with no server of its own
+ * offers the same control the desktop server derives from its .env
+ * (server/standalone/key-setup.js): `managed: 'file'` means every env var of
+ * the entry was saved from this panel, so it can also be removed from it.
+ * A key that is only set by the app's built-in defaults deliberately stays
+ * unmarked — the panel may replace it, but it is not this store's to delete.
+ * Mutates and returns the status for the caller's convenience.
+ * @param {ReturnType<typeof keySetupStatus>} status
+ * @param {Record<string, string>} stored Values saved from the panel only.
+ */
+export function markStoredKeyManagement(status, stored = {}) {
+  for (const key of status?.keys || []) {
+    const held = key.envVars.every(
+      (name) => String(stored?.[name] ?? '').trim() !== '',
+    );
+    key.managed = held ? 'file' : null;
+  }
+  return status;
 }
 
 /**

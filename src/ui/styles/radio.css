@@ -1027,6 +1027,53 @@ html:not([lang='en']) .data-row-list-text {
   font-style: italic;
 }
 
+/* A switch list (one entry per transit network). The entries are peers, not
+   steps, so the counter is dropped and a track and knob carry the state the
+   way every other on/off control in the panel does. */
+.data-row-list-item.switch::before {
+  content: none;
+}
+
+.data-row-list-item.switch {
+  padding: 3px 4px;
+}
+
+.data-row-list-switch {
+  flex: none;
+  position: relative;
+  width: 18px;
+  height: 9px;
+  margin-left: auto;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--glass-border-hover);
+  transition: background-color var(--transition-fast);
+}
+
+.data-row-list-switch::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition:
+    transform var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.data-row-list-item.switch[data-checked='true'] .data-row-list-switch {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+.data-row-list-item.switch[data-checked='true'] .data-row-list-switch::after {
+  transform: translateX(9px);
+  background: var(--accent);
+}
+
 .data-toggle-controls-info {
   flex-basis: 100%;
   font-family: var(--font-mono);

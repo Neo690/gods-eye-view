@@ -145,7 +145,11 @@ html:not([lang='en'])
   --gev-provider-lift: 0px;
 }
 
-/* Provider choice belongs to the existing voice control, not a separate panel. */
+/* Provider choice belongs to the existing voice control, not a separate panel.
+   It is the one surface that belongs to the mic itself, so it hugs the top of
+   the dock and stays a single compact row: the strip it has to live in ends
+   at the Google/Cesium attribution line, which the platform terms require to
+   stay uncovered. A stacked label would eat that strip. */
 .gev-voice-provider-field {
   position: absolute;
   bottom: calc(100% + var(--gev-provider-lift, 0px));
@@ -153,11 +157,24 @@ html:not([lang='en'])
   left: 0;
   right: 0;
   display: grid;
-  gap: 4px;
-  padding: 8px 6px;
-  border: 1px solid var(--glass-border);
-  border-radius: 8px;
-  background: var(--bg-panel, #09121b);
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.35rem;
+  height: 1.75rem;
+  padding: 0 0.3rem;
+  border: 1px solid rgba(123, 189, 211, 0.32);
+  border-radius: 0.42rem;
+  /* Same recipe as the dock trays (`.dock-popover-content`): everything that
+     floats above the dock shares one glass, so the chooser reads as part of
+     the dock rather than a slab laid over the map. */
+  background: var(--popover-glass);
+  -webkit-backdrop-filter: var(--popover-glass-blur);
+  backdrop-filter: var(--popover-glass-blur);
+  box-shadow:
+    0 0.9rem 2.4rem rgba(0, 0, 0, 0.58),
+    0 0 1.5rem rgba(0, 212, 255, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.025) inset;
+  text-shadow: var(--popover-text-shadow);
   color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: 0.5rem;
@@ -170,13 +187,19 @@ html:not([lang='en'])
 .gev-voice-provider-field select {
   min-width: 0;
   width: 100%;
-  min-height: 30px;
+  height: 1.35rem;
+  padding: 0 0.25rem;
   color: var(--text-primary);
-  background: #09121b;
-  border: 1px solid var(--glass-border);
-  border-radius: 4px;
+  /* The popup itself is native and opaque; only the closed control is glass. */
+  background: rgba(9, 18, 27, 0.5);
+  border: 1px solid rgba(123, 189, 211, 0.22);
+  border-radius: 3px;
   font: inherit;
-  font-size: 0.65rem;
+  font-size: 0.62rem;
+}
+/* One row, no wrap: the strip is 33px tall at the narrowest phone. */
+.gev-voice-provider-field > span {
+  white-space: nowrap;
 }
 #gev-voice-control:hover .gev-voice-provider-field,
 #gev-voice-control:focus-within .gev-voice-provider-field {
@@ -192,38 +215,28 @@ html:not([lang='en'])
   .gev-voice-error-tray {
   bottom: calc(100% + 4.8rem + var(--gev-provider-lift));
 }
-#command-dock.dock-has-pinned-tray
-  #gev-voice-control[data-provider-choice='true'] {
-  --gev-provider-lift: calc(1.7rem + var(--dock-pinned-stack-height));
-}
-/* Pinned trays separate the chooser from its hover owner. Keep it reachable
-   across that gap without requiring keyboard focus to hold it open. */
+/* A pinned tray does not move the chooser: the chooser sits on the dock, well
+   below where any pinned tray starts, so the stack height is not its business.
+   Keep it reachable without keyboard focus holding it open all the same. */
 #command-dock.dock-has-pinned-tray .gev-voice-provider-field {
   opacity: 1;
   pointer-events: auto;
 }
 @media (max-width: 900px) {
-  /* The attribution clearance also creates a gap for mouse users in a
-     narrow window, so the raised chooser must not depend on root hover. */
+  /* Picking a provider also happens with a mouse in a narrow window, and the
+     chooser now sits close enough to the dock that a pinned tray can cover it:
+     keep it reachable without depending on root hover. */
   .gev-voice-provider-field {
     opacity: 1;
     pointer-events: auto;
   }
+  /* Two or three pixels off the dock top, so the field clears the mic ring
+     without climbing into the attribution band above it. A pinned tray rises
+     from 4rem above the dock and never reaches down this far, so the chooser
+     stays glued to the mic instead of chasing the stack height — it is the
+     one surface that belongs to the dock, not to the trays. */
   #command-dock #gev-voice-control[data-provider-choice='true'] {
-    --gev-provider-lift: 3rem;
-  }
-  #command-dock.dock-has-pinned-tray
-    #gev-voice-control[data-provider-choice='true'] {
-    --gev-provider-lift: calc(3.5rem + var(--dock-pinned-stack-height));
-  }
-}
-@media (max-width: 720px) {
-  #command-dock #gev-voice-control[data-provider-choice='true'] {
-    --gev-provider-lift: calc(2vh + 2.5rem);
-  }
-  #command-dock.dock-has-pinned-tray
-    #gev-voice-control[data-provider-choice='true'] {
-    --gev-provider-lift: calc(2vh + 3rem + var(--dock-pinned-stack-height));
+    --gev-provider-lift: 0.1rem;
   }
 }
 @media (hover: none) {

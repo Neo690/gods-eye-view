@@ -39,6 +39,7 @@ import {
 } from './hudLayouts.js';
 import { formatNumber, msg, t } from './i18n/index.js';
 import { localizeLayerName } from './ui/layerPanel.js';
+import { createHudWindowDrag } from './ui/hudWindowDrag.js';
 
 /** Color palettes keyed by shader mode; applied as CSS custom properties. */
 const HUD_COLORS = {
@@ -249,6 +250,9 @@ export class IntelHUD {
     this._passNum = 100 + Math.floor(Math.random() * 200);
 
     this._buildDOM();
+    // The three readouts can be pulled around by finger on a phone; the module
+    // owns the offset, the clamp and the memory of it (ui/hudWindowDrag.js).
+    this._windowDrag = createHudWindowDrag({ document });
     this.viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
     this._startTimers();
   }
@@ -293,21 +297,28 @@ export class IntelHUD {
         <div class="hud-bracket">┐</div>
       </div>
 
-      <div class="hud-corner hud-bottom-left">
-        <div class="hud-bracket">└</div>
-        <div class="hud-content">
-          <div id="hud-mgrs">MGRS: ---</div>
-          <div id="hud-latlon">--°--'--"N ---°--'--"W</div>
+      <!-- The two telemetry windows. The wrapper generates no box on a
+           desktop, so they keep their corner anchors; a phone stacks them on
+           the classification window's centre line instead (see
+           mobile-compact.css). -->
+      <div class="hud-bottom-center">
+        <div class="hud-corner hud-bottom-left">
+          <div class="hud-bracket">└</div>
+          <div class="hud-content">
+            <div id="hud-mgrs">MGRS: ---</div>
+            <div id="hud-latlon">--°--'--"N ---°--'--"W</div>
+          </div>
         </div>
-      </div>
 
-      <div class="hud-corner hud-bottom-right">
-        <div class="hud-content" style="text-align:right">
-          <div id="hud-gsd">GSD: --m  NIIRS: --</div>
-          <div id="hud-alt">ALT: --m   SUN: --° EL</div>
-          <div id="hud-ais-vessel" class="hud-ais-vessel">${t('AIS: --')}</div>
+        <div class="hud-corner hud-bottom-right">
+          <div class="hud-content" style="text-align:right">
+            <div id="hud-gsd">GSD: --m  NIIRS: --</div>
+            <div id="hud-alt">ALT: --m   SUN: --° EL</div>
+            <div id="hud-ais-vessel" class="hud-ais-vessel">${t('AIS: --')}</div>
+            <div id="hud-windy" class="hud-windy" style="display:none"></div>
+          </div>
+          <div class="hud-bracket">┘</div>
         </div>
-        <div class="hud-bracket">┘</div>
       </div>
 
       <div class="hud-edge hud-left-edge">
@@ -841,7 +852,11 @@ export class IntelHUD {
       });
       const data = response.data;
       if (revision !== this._summaryRevision) return;
-      if (isHudSummaryUnconfigured(response.status, data)) {
+      if (
+        response.status === 501 ||
+        response.status === 503 ||
+        isHudSummaryUnconfigured(response.status, data)
+      ) {
         this._setSummaryText(fallbackText, animate);
         return;
       }
@@ -1037,8 +1052,37 @@ export class IntelHUD {
     this._markSummaryDirty();
   }
 
+  /**
+   * Update the Windy weather mini-readout in the bottom-right HUD corner.
+   * Call with `null` to hide the element (e.g. when the layer is disabled).
+   * @param {object|null} data - Weather data from {@link createWindyWeatherLayer}.
+   */
+  setWindyWeather(data) {
+    const el = document.getElementById('hud-windy');
+    if (!el) return;
+    if (!data) {
+      el.style.display = 'none';
+      el.textContent = '';
+      return;
+    }
+    const tempStr =
+      data.tempC !== null && data.tempC !== undefined
+        ? `${data.tempC > 0 ? '+' : ''}${data.tempC}°C`
+        : null;
+    const windStr =
+      data.windKmh !== null && data.windKmh !== undefined
+        ? `${data.windKmh} km/h`
+        : null;
+    const parts = [tempStr, windStr].filter(Boolean);
+    // i18n-ignore: a thermometer glyph, not copy
+    el.textContent = parts.length ? `\uD83C\uDF21 ${parts.join(' \xB7 ')}` : '';
+    el.style.display = parts.length ? '' : 'none';
+  }
+
   /** Tear down all running intervals. Call when discarding the HUD instance. */
   destroy() {
+    this._windowDrag?.destroy();
+    this._windowDrag = null;
     clearInterval(this._updateInterval);
     clearInterval(this._recBlinkInterval);
     clearInterval(this._timestampInterval);

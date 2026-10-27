@@ -17,6 +17,7 @@ import {
 import {
   transitModeFor,
   transitModeResolved,
+  transitRouteStyle,
 } from '../../data/transitFeeds.js';
 import {
   attachFloorToPlace,
@@ -34,6 +35,18 @@ import {
  * the honest bound.
  */
 export const FUTURE_STAMP_TOLERANCE_MS = 10_000;
+
+/**
+ * Whether two resolved rail styles would draw the same pill and sprite. A
+ * null on both sides is every bus in every feed, and must not repaint.
+ * @param {object|null|undefined} a
+ * @param {object|null|undefined} b
+ * @returns {boolean}
+ */
+function sameRailStyle(a, b) {
+  if (!a || !b) return !a && !b;
+  return a.mode === b.mode && a.label === b.label && a.color === b.color;
+}
 /**
  * Consecutive out-of-order refusals after which the history is reset to the
  * incoming fix. A feed whose clock was corrected backwards would otherwise be
@@ -75,6 +88,12 @@ export function createIngestion({ state, services, parts, source }) {
     if (state._selectedKey === key) parts.selection.clearSelection();
     if (entry.marker) entry.markerCollection?.remove(entry.marker);
     entry.marker = null;
+    // The pill lives in the stationary collection, whatever the glyph's own
+    // collection was at the time: it never rides the animated one.
+    if (entry.lineBadge) {
+      state._markers.remove(entry.lineBadge);
+      entry.lineBadge = null;
+    }
     entry.detectContact = null;
     state._visible.delete(entry);
     parts.height.releaseVehicle(key, entry.heightCell);
@@ -227,6 +246,7 @@ export function createIngestion({ state, services, parts, source }) {
         record.routeId,
         record.id,
       );
+      const railStyle = transitRouteStyle(feed, record.routeId);
       // A stamp ahead of the fetch is a clock fault; the fetch time bounds it.
       const stamped = vehicleReportTimeMs(record, fetchedAt);
       const reportAt =
@@ -267,6 +287,13 @@ export function createIngestion({ state, services, parts, source }) {
         }
         if (entry.mode !== mode) parts.rendering.paintMode(entry, mode);
         entry.modeInferred = modeInferred;
+        // An operator can recolour a line (works, a diversion) and the feed
+        // carries it: repaint the sprite and the pill when it changes, never
+        // on every poll.
+        if (!sameRailStyle(entry.railStyle, railStyle)) {
+          entry.railStyle = railStyle;
+          parts.rendering.paintLineStyle(entry);
+        }
         updatePlayback(entry, now, monoNow);
         parts.rendering.schedulePlayback(entry);
         // Ground follows the vehicle, every poll: a mesh floor landing over a
@@ -318,8 +345,10 @@ export function createIngestion({ state, services, parts, source }) {
           key,
           feedId: feed.id,
           marker: null,
+          lineBadge: null,
           mode,
           modeInferred,
+          railStyle,
           heightM: prior === null ? 0 : prior,
           heightCell: height.cell,
           heightResolved: height.height !== null,

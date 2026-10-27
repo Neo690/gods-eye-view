@@ -39,6 +39,7 @@ export const CATALOG_SOURCE_CONTRACTS = Object.freeze({
   alpr: contract(['alpr-cameras'], ['fetch']),
   firms: contract(['local-firms'], ['getSnapshot']),
   wind: contract(['wind'], ['getSnapshot']),
+  'windy-weather': contract(['windy-weather'], ['getSnapshot']),
   weather: contract(
     ['weather-radar', 'weather-satellite', 'weather-lightning'],
     ['getSnapshot'],
@@ -48,6 +49,7 @@ export const CATALOG_SOURCE_CONTRACTS = Object.freeze({
   'fire-perimeters': contract(['fire-perimeters'], ['getSnapshot']),
   'air-quality': contract(['air-quality'], ['getSnapshot']),
   'gnss-integrity': contract(['gnss-integrity'], ['getSnapshot']),
+  radiation: contract(['radiation'], ['getSnapshot']),
   cables: contract(['telegeography-submarine-cables'], ['fetch']),
   transit: contract(['transit'], ['requestSnapshot', 'getHistory']),
 });

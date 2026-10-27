@@ -1,5 +1,22 @@
 # God's Eye View Current State
 
+The iOS shell in `ios/` runs the same `dist/` bundle the browser, the desktop
+app and the APK run; it is not a second implementation. `WKWebView` loads it
+from `http://127.0.0.1:47821`, a loopback origin the Secure Contexts standard
+treats as trustworthy, which is what makes geolocation, `getUserMedia`, workers
+and `localStorage` work — a `WKURLSchemeHandler` page is not a secure context —
+and which keeps `/api/*` same-origin. The port is fixed because Provider
+Settings keys live in the origin's `localStorage`. `LocalServer` serves the
+bundle out of `GodsEyeView/www` and routes `/api/*` to `ApiForwarder`, which
+replays the request against `BuildConfig.apiBase` (`GEV_API_BASE`, https only
+under ATS); with no base, `/api/*` answers a JSON 503 naming the missing
+configuration instead of a bare 404. `scripts/prepare-ios-payload.mjs` stages
+the build and writes that constant, refusing plain HTTP and credential-shaped
+files, and `ios/project.yml` is the XcodeGen spec that produces the project.
+`ios-app.yml` compiles the shell for the simulator on a macOS runner; no `.ipa`
+is published, because signing belongs to an Apple account rather than the
+repository.
+
 Analyst region queries resolve unique Natural Earth names offline without
 geocoding, so Gold Coast and Ivory Coast name the West African natural regions.
 Duplicate names require a geocoded containment anchor; when several entries for
@@ -1179,6 +1196,17 @@ preserved. Replacing or closing a POI row cancels its pending expansion frame;
 destruction releases listeners, pending searches and the orbit indicator.
 
 Contacts and mapped-site search feedback filter subject-window installation matches by surface distance from the current subject position, within the stated 100 km radius; the retained tile-fetch square is only a loading window.
+
+Every field whose `Enter` commits something carries an `enterkeyhint`, so a
+phone keyboard offers an action key: `search` for the location field, `done` for
+the drawing label and the FM frequency. Without one, Gboard's return key reaches
+the WebView as `keydown` `"Unidentified"` with keyCode 229, which an Enter
+handler cannot see: the keyboard closed, the typed value stayed in the field and
+nothing was committed. The hardware-Enter paths in `ui/locationControls.js`,
+`annotations/drawTool.js` and `ui/localSdrControls.js` are unchanged and still
+act on a real `Enter` keydown. Fields that commit on `blur` — the CCTV
+calibration chip, shot renaming — also commit when the keyboard's action key
+dismisses the field, so they need no hint.
 
 Search arrivals (location bar and voice) end above the rendered surface.
 Precise places without a detailed outline used to frame a 250 m landmark shot
@@ -3618,7 +3646,7 @@ its criteria cannot be silently ignored.
 | Traffic | Selectable TomTom / OpenStreetMap / Hybrid roads; optional TomTom flow (BYOK) | `src/data/traffic.js` | browser-direct OpenFreeMap tiles; `/api/tomtom` for flow | viewport-driven; capped tile cache |
 | CCTV                   | Austin + Caltrans (CA) + TfL London + Ontario 511 + Fintraffic (FI) + DriveBC (BC) + TxDOT (TX) + Estonia (Tallinn, Tarktee) + Live Traffic NSW + Open Calgary Open Data + Statens vegvesen (NO, stills + live HLS, Kartverket ground heights) + King County (WA) Open Data + WSDOT (WA) Open Data + NYC DOT TMC (opt-in) + City of Toronto RESCU + Catalonia (Servei Català de Trànsit) + Hong Kong Transport Department + FL511 (FL, opt-in) + Freeway Bureau, MOTC (Taiwan) + Street View fallback | `src/data/cctv.js`                                    | `/api/cctv`                                              | 10s (active)                                                                      |
 | Radio                  | Radio Browser (public-domain station directory)                                                                                                                                                 | `src/data/radio.js`                                   | `/api/radio/stations`, `/api/radio/click/:uuid`          | 45 min directory refresh                                                          |
-| Transit 🚌             | Operator GTFS-Realtime VehiclePositions (7 keyless regions, `src/data/transitFeeds.js`)                                                                                                         | `src/layers/transit/` via `src/app/layers/transit.js` | `/api/transit`                                           | 15s (poll + delayed playback)                                                     |
+| Transit 🚌             | Operator GTFS-Realtime VehiclePositions (34 keyless regions, `src/data/transitFeeds.js`)                                                                                                         | `src/layers/transit/` via `src/app/layers/transit.js` | `/api/transit`                                           | 15s (poll + delayed playback)                                                     |
 | Bikeshare 🚲           | GBFS (Lyft + BCycle + Social Bicycles + PBSC incl. Bike Share Toronto, Bike Itaú (Brazil), Bicing (Barcelona) and seven other Spanish cities + Urban Sharing, Entur, JCDecaux (Lillestrøm, Valencia, Seville) + nextbike (AMBici))                                                                                                                                        | `src/data/bikeshare.js`                               | `/api/gbfs`                                              | 60s                                                                               |
 | Directions 🧭          | OSRM on FOSSGIS servers (OpenStreetMap)                                                                                                                                                         | `src/data/directions.js`                              | `/api/route` (`steps=1`)                                 | on placement / mode change                                                        |
 | Datacenters ▣          | OSM extract (bundled)                                                                                                                                                                           | `src/data/localLayers.js`                             | —                                                        | static                                                                            |
@@ -3629,6 +3657,7 @@ its criteria cannot be silently ignored.
 | Wind 🌬                 | NOAA GFS 10 m wind (keyless, 0.25°→1° grid; animated particles)                                                                                                                                 | `src/data/wind.js`                                    | `/api/wind`                                              | 1 h (forecast cycle)                                                              |
 | GNSS Integrity 📡 (`gnss-integrity`) | adsb.lol point snapshot, low navigation accuracy binned per 0.5° cell (GEV NIC/NACp threshold + gpsjam.org formula and bands, keyless, ODbL) | `src/layers/gnss/` via `src/app/layers/gnss.js` | `/api/gnss-integrity` | camera-driven (600 ms debounce, minimum 2.5 s between reads) + 60s poll (server cache 60 s; 30 min rolling window) |
 | Fire Perimeters 🔥 | NIFC WFIGS current interagency perimeters (keyless, paged past the 2000-record cap); InciWeb catalog + incident page origin and update time checks for verified incident-page links | `src/layers/perimeters/` via `src/app/layers/perimeters.js` | `/api/fire-perimeters` + `/api/fire-perimeters/inciweb/*` | 5 min (server caches: catalog 1 h; publication 30 min) |
+| Radiation ☢ (`radiation`) | Ambient gamma dose rate: BfS ODL (Germany, hourly, keyless), Health Canada FPSN (keyless), plus Safecast, radmon.org and uRADMonitor volunteer Geiger counts converted to µSv/h and marked estimated — five networks in one aggregated snapshot, each row tagged with its network (uRADMonitor reads only the units of the account in `URADMONITOR_USER_ID`/`URADMONITOR_USER_HASH`, so it is skipped when those keys are unset) | `src/layers/radiation/` via `src/app/layers/radiation.js` | `/api/radiation` | 10 min (server cache 5 min; a failed network keeps serving its last snapshot for up to 1 h, flagged degraded) |
 
 GNSS Integrity samples a 250 nm circle around the Earth point under the screen
 centre. Camera reads debounce for 600 ms with a monotonic 2.5 s minimum gap;
@@ -4030,11 +4059,26 @@ Transit is off by default, and share links use token `j`. The movement panel ord
 places Transit directly after Street Traffic and before Bike Share. Cameras and
 utilities retain their own groups. The layer polls
 registered feeds near the camera every 15 seconds, below a 3,000 km altitude
-gate. Sixteen keyless regions are available: Boston, Austin, Minneapolis–St Paul,
-Helsinki, the Netherlands, Norway, South East Queensland, and nine in
+gate. Thirty-four keyless regions are available: Boston, Austin, Minneapolis–St Paul,
+Helsinki, the Netherlands, Norway, South East Queensland, nine in
 Ontario — Toronto (TTC surface vehicles; the subway publishes no
 positions), MiWay, Hamilton HSR, Durham Region, YRT/Viva, Guelph,
-Burlington, Barrie and Kingston. Mode silhouettes
+Burlington, Barrie and Kingston — and eighteen in France (Rennes, Dijon, Metz,
+Valence, Brest, Le Mans, Amiens, Vannes, Cannes, Nice, Montpellier, Rouen,
+Valenciennes, Angers, Tours, Le Havre, Lens–Béthune, Cherbourg-en-Cotentin),
+read through the transport.data.gouv.fr proxy or the producer's own endpoint
+under Licence Ouverte 2.0 or ODbL 1.0. Rail routes among them carry the mode
+the operator's own GTFS states for the route id the live feed publishes —
+trams in Dijon, Brest, Le Mans, Le Havre, Angers, Montpellier, Nice and
+Valenciennes, the metro in Rennes, and Rouen's branched tramway that the
+operator markets as "Métro" — while every other id keeps the fleet default.
+Tours publishes no route id at all, so its tram A stays a bus rather than
+being guessed from a line number, and Rouen's TEOR `T1`–`T5` stay buses because
+they are buses. The Transit row in the Layers panel lists every registered
+network with a switch: an off network is never polled, so two overlapping
+coverage circles (Cannes inside Nice's radius) no longer force a reader to
+watch both. The choice is local to the browser and deliberately out of the
+share format. Mode silhouettes
 identify buses, trams, subways, trains, ferries and unclassified vehicles.
 
 Retained transit history uses the same outlier quarantine as live observations and
@@ -4084,6 +4128,43 @@ The catalog and source tests pin that distinction and the MBTA / MassDOT credit.
 Epoch metadata grows as contexts arrive. Snapshot members are protected during
 ingestion, eviction uses receipt-ordered queues, and capacity loss is disclosed
 when history is recreated.
+
+**The standalone shell's relay.** The APK serves the bundle from
+`https://appassets.androidplatform.net`, so a layer's `fetch('/api/…')` lands on
+the asset store; `ApiForwarder` replays those calls against `GEV_API_BASE`, and
+the feeds that send no CORS headers are fetched through
+`GET /api/upstream?url=…` (`server/providers/upstream.js`), which the in-page
+API in `src/data/inAppApi.js` has always expected. It is not an open proxy: only
+the exact URLs the enabled transit registry publishes are relayable, plus one
+pinned origin-and-path for the floor lookup (`terrain.reearth.land/heights.json`,
+whose `points` query is its only variable) — without a ground floor a transit
+sprite is never drawn, so the transit layer needs both. Targets are https on
+the default port with no credentials and no fragment, redirects are refused
+rather than followed, the body is read against an 8 MiB cap and a 15 s deadline,
+and callers are throttled per IP (`GEV_RATELIMIT_UPSTREAM_PER_MIN`, default 120;
+explicit `0` disables). Bytes and the upstream `Content-Type` pass through, so
+the same route carries GTFS-RT protobuf and JSON. Any other URL answers 403
+without a network call — the point is that a request cannot name a host the
+catalogue never cleared.
+
+**Rail line labels.** A French tram or metro carries a small pill beside its
+glyph showing the line name the operator publishes (`route_short_name`, so
+Nice's line is "B" and Rouen's tramway is "Métro"), filled with the operator's
+own `route_color`; the glyph itself wears the same colour under the ordinary
+view, so one line reads as one colour. Le Havre publishes no `route_color`, so
+its two trams keep the mode colour and their pill stays neutral grey rather
+than inventing a livery. Text ink is the operator's
+`route_text_color` where it publishes one, and the WCAG luma split otherwise,
+which is what keeps Montpellier's yellow line 3 and Nice's yellow line B
+readable. The pill is a sibling billboard in the stationary sprite collection:
+it shares the glyph's point and is offset to its right in screen pixels, so it
+follows a glide for free, hides and shows with the glyph, disappears under
+NVG/FLIR/CRT presets where only silhouettes belong, and is removed with the
+vehicle. It never rotates. Buses get no pill: the table is keyed by the route
+ids each operator types 0 (tram) or 1 (metro) in its own `routes.txt`, and an id
+outside it falls through to the feed default (see `src/data/transitFeeds.js`).
+Only the ten French networks with a resolvable rail route are covered; Tours
+publishes no route id at all, so its tram A still renders as the feed default.
 
 **Surface and route limitations.** Heights are aligned to work with Google 3D
 tiles. Draped history is prepared on selection even while marker floors are unresolved;
@@ -6056,3 +6137,15 @@ when their footprints touch or contain one another, never across a seam toleranc
 - `scripts/qa-form-fields.mjs` exercises native selections, number validity,
   calibration commit/cancel and stale-camera/disposal guards against an installed
   controller with fixture ports, plus default/Cyber and narrow translated layouts.
+
+### Map view controls
+
+The thumb column offers stepped zoom and a device-position toggle. Zoom steps
+from the current camera height, so a press means the same at a city block and at
+the globe. The locate button watches the device position: the first fix flies
+there and rings it with the accuracy the platform reports, later fixes move the
+marker without moving the camera, and a second press stops the watch and clears
+the marker. The watch asks for a precise (satellite/GNSS) fix first; when the
+platform answers `POSITION_UNAVAILABLE` or times out, it rearms against the
+network provider (Wi-Fi and cell towers) instead of failing, and only a refused
+permission or a network failure reports "Location unavailable".

@@ -1,6 +1,10 @@
 import { normalizeRoadMode } from './roadModes.js';
 import * as Cesium from 'cesium';
-import { FLOW_BUCKET_COLORS, TRAFFIC_TIMING_ENABLED } from './policy.js';
+import {
+  FLOW_BUCKET_COLORS,
+  TRAFFIC_TIMING_ENABLED,
+  trafficWorkBudget,
+} from './policy.js';
 
 export function createState({ services }) {
   const layerState = {};
@@ -86,6 +90,22 @@ export function createState({ services }) {
   /** @type {number} User-adjustable speed multiplier (clamped 0.3–3.0) */
 
   layerState._speedScale = 1.0;
+
+  /**
+   * How much fleet and surface work this viewport may spend, read once when
+   * the layer is built: a phone renders a smaller fleet than a desktop console.
+   * @type {{maxDots: number, surfaceStations: number}}
+   */
+
+  layerState._budget = trafficWorkBudget();
+
+  /** @type {number} Dot ceiling for this viewport (`_budget.maxDots`). */
+
+  layerState._maxDots = layerState._budget.maxDots;
+
+  /** @type {number} Height stations one surface pass may sample. */
+
+  layerState._surfaceStations = layerState._budget.surfaceStations;
 
   /** @type {{lat:number,lon:number}|null} Center of last-fetched viewport for shift gating */
 

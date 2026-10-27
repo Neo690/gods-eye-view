@@ -15,6 +15,7 @@ import { radioBrowserProxy } from './radio.js';
 import { gbfsProxy } from './gbfs.js';
 import { localReceiversProxy } from './local-receivers.js';
 import { transitProxy } from './transit.js';
+import { upstreamRelayProxy } from './upstream.js';
 import { adsbLolProxy } from './aircraft/adsb-lol.js';
 import { aisLiveProxy } from './vessels/ais-live.js';
 import { trackBackfillProxies } from './aircraft/tracks.js';
@@ -26,8 +27,11 @@ import { keySetupEndpoint } from '../standalone/key-setup.js';
 import { weatherProxy } from './weather.js';
 import { firePerimetersProxy } from './firePerimeters.js';
 import { gnssIntegrityProxy } from './gnssIntegrity.js';
+import { radiationProxy } from './radiation.js';
 import { cycloneProxy } from './cyclones.js';
 import { windProxy } from './wind.js';
+import { iotSensorsProxy } from './iotSensors.js';
+import { cellTowersProxy } from './cellTowers.js';
 
 /**
  * Construct the local provider plugins in their established order.
@@ -44,6 +48,8 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     adsbdbProxy(),
     overpassProxy(),
     militaryInstallationsProxy(),
+    cellTowersProxy(),
+    iotSensorsProxy(),
     regionalBriefProxy(),
     geocodeProxy(),
     weatherEffectsProxy(),
@@ -52,6 +58,9 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     gbfsProxy(),
     localReceiversProxy(),
     transitProxy(),
+    // The standalone shell reads feeds through this relay; the server-side
+    // proxies above stay the browser's path.
+    upstreamRelayProxy(),
     adsbLolProxy(),
     aisLiveProxy(),
     trackBackfillProxies(),
@@ -64,6 +73,7 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     mapillaryProxy(),
     firePerimetersProxy(),
     gnssIntegrityProxy(),
+    radiationProxy(),
     keySetupEndpoint(),
   ];
 }

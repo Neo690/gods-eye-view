@@ -1,31 +1,30 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { writeFile, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { build, createServer, preview } from 'vite';
 import { localProviderPlugins } from '../../server/providers/local.js';
 import { apiNotFoundPlugin } from '../../server/standalone/api-not-found.js';
 import { makeFixtureRoot } from './fixtureRoot.mjs';
 
-test('data providers have both hooks; credential editing stays development-only', () => {
+test('every provider has both hooks; credential editing serves both servers and never a build', () => {
   const plugins = localProviderPlugins();
   assert.ok(plugins.some(({ name }) => name === 'fire-perimeters'));
   assert.ok(plugins.some(({ name }) => name === 'gnss-integrity'));
   for (const plugin of plugins) {
-    if (plugin.name === 'gev-key-setup') {
-      assert.equal(plugin.configurePreviewServer, undefined);
-      assert.equal(
-        plugin.apply({}, { command: 'serve', isPreview: true }),
-        false,
-      );
-      assert.equal(
-        plugin.apply({}, { command: 'serve', isPreview: false }),
-        true,
-      );
-      continue;
-    }
     assert.equal(typeof plugin.configureServer, 'function', plugin.name);
     assert.equal(typeof plugin.configurePreviewServer, 'function', plugin.name);
+    if (plugin.name !== 'gev-key-setup') continue;
+    // The packaged desktop app runs `vite preview`, so Provider Settings works
+    // there too; what keeps every other caller out is the admission gate below,
+    // not which hook installed the routes.
+    assert.equal(plugin.apply({}, { command: 'serve', isPreview: true }), true);
+    assert.equal(
+      plugin.apply({}, { command: 'serve', isPreview: false }),
+      true,
+    );
+    assert.equal(plugin.apply({}, { command: 'build' }), false);
   }
 });
 
@@ -116,7 +115,7 @@ test('real dev and built-preview servers serve provider JSON and terminate unkno
         ['/api/mapillary/status', 200],
         ['/api/mapillary/tiles/coverage/14/1/2', 503],
         ['/api/radio/unknown', 404],
-        ['/api/setup/status', isPreview ? 404 : 200],
+        ['/api/setup/status', 200],
         ['/api/setup/update', 404],
         ['/api/does-not-exist', 404],
         ['/api', 404],
@@ -139,25 +138,69 @@ test('real dev and built-preview servers serve provider JSON and terminate unkno
           assert.deepEqual(body, { configured: false }, route);
         if (route.startsWith('/api/mapillary/tiles'))
           assert.deepEqual(body, { error: 'no_key', keyRequired: true }, route);
-        if (
-          route === '/api/does-not-exist' ||
-          (isPreview && route.startsWith('/api/setup'))
-        ) {
+        if (route === '/api/does-not-exist') {
           assert.deepEqual(body, { error: 'Unknown API route' });
           assert.equal(response.headers.get('cache-control'), 'no-store');
+        }
+        if (route === '/api/setup/status') {
+          assert.ok(Array.isArray(body.keys) && body.keys.length, route);
+          assert.equal(typeof body.setCount, 'number', route);
         }
       }
       const tle = await fetch(origin + '/api/celestrak/invalid!');
       assert.equal(tle.status, 400);
       assert.equal(await tle.text(), 'invalid group');
       if (isPreview) {
-        const write = await fetch(origin + '/api/setup/keys', {
+        // The preview server serves Provider Settings now, because the packaged
+        // desktop app runs one. Its admission gate is the boundary, and these
+        // are the shapes a foreign page — or a relay in front of the server —
+        // presents. None of them may reach the store.
+        for (const [code, headers] of [
+          ['origin-required', { 'Sec-Fetch-Site': 'cross-site' }],
+          ['cross-origin', { Origin: 'https://evil.example' }],
+          ['proxied', { Origin: origin, 'X-Forwarded-For': '203.0.113.7' }],
+        ]) {
+          const write = await fetch(origin + '/api/setup/keys', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...headers },
+            body: JSON.stringify({ GOOGLE_MAPS_API_KEY: 'must-not-save' }),
+          });
+          assert.equal(write.status, 403, `preview setup/keys ${code}`);
+          assert.equal((await write.json()).code, code);
+          assert.equal(
+            existsSync(path.join(root, '.env')),
+            false,
+            `preview setup/keys ${code} wrote the store`,
+          );
+        }
+        // The packaged shell's Chromium runs with --disable-web-security, so
+        // this is the exact shape its panel sends: no Origin, no Sec-Fetch-*.
+        // The gate must admit it — refusing it is the desktop panel being
+        // unable to save anything at all — and an empty save is then refused a
+        // layer later by the writer, which is the honest probe here: it proves
+        // admission end to end without any store existing to write into. (The
+        // real write for this shape runs against a fixture store in
+        // localServices.test.mjs, where the store path is injected.)
+        const shellWrite = await fetch(origin + '/api/setup/keys', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ GOOGLE_MAPS_API_KEY: 'must-not-save' }),
+          body: JSON.stringify({}),
         });
-        assert.equal(write.status, 404);
-        assert.deepEqual(await write.json(), { error: 'Unknown API route' });
+        assert.equal(
+          shellWrite.status,
+          400,
+          'the shell-shaped POST is admitted rather than refused',
+        );
+        assert.equal((await shellWrite.json()).code, 'no-keys');
+        // The provider-link opener is registered here too, and refuses every
+        // page the registry does not name.
+        const opener = await fetch(origin + '/api/setup/open-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: 'https://evil.example/' }),
+        });
+        assert.equal(opener.status, 400, 'the opener refuses an unlisted page');
+        assert.equal((await opener.json()).code, 'not-allowlisted');
       }
       for (const route of ['/', '/application-route', '/apiary']) {
         const response = await fetch(origin + route);

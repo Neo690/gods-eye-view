@@ -1,0 +1,138 @@
+/* ── Desktop tabbed drawer ────────────────────────────────────────────────
+   Two rails of chips asked the operator to look in two places for one thing.
+   Above the phone breakpoint the six rail windows are listed once, on the left
+   edge (see src/ui/panelDrawer.js), and the collapsed chips the two rails used
+   to draw are gone: the drawer is the way in, the window still opens in its own
+   rail. Cockpit and embed views keep their own chrome. */
+
+.gev-panel-drawer {
+  display: none;
+}
+
+@media (min-width: 721px) {
+  /* Built by JS, so a page without the drawer keeps its chips. */
+  body.panel-drawer:not(.cockpit-mode):not(.ui-embed) .gev-panel-drawer {
+    position: fixed;
+    left: 8px;
+    /* The rails' own anchors: the drawer's list starts level with them and
+       stops above the credit band. */
+    top: var(--left-stack-safe-top, var(--left-stack-top, 26vh));
+    bottom: var(--left-stack-safe-bottom, 4vh);
+    z-index: 120;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    pointer-events: none;
+  }
+
+  body.panel-drawer:not(.cockpit-mode):not(.ui-embed) .gev-panel-drawer > * {
+    pointer-events: auto;
+  }
+
+  /* The list is the drawer; it scrolls rather than overflowing the edge. */
+  .gev-panel-drawer-list {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+  }
+
+  .gev-panel-drawer-list[hidden] {
+    display: none;
+  }
+
+  .gev-panel-drawer-list::-webkit-scrollbar {
+    width: 0;
+  }
+
+  /* A tab is a chip turned on its side: the label reads top to bottom so eight
+     characters cost a few pixels of width instead of a few hundred. */
+  .gev-panel-drawer-tab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    min-height: 34px;
+    padding: 8px 4px;
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    background: var(--glass-bg);
+    color: var(--text-dim, rgba(255, 255, 255, 0.72));
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition:
+      color var(--transition-fast),
+      border-color var(--transition-fast),
+      background var(--transition-fast);
+  }
+
+  .gev-panel-drawer-label {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    white-space: nowrap;
+  }
+
+  .gev-panel-drawer-tab:hover {
+    color: var(--text-bright, #fff);
+    border-color: var(--accent, #00d4ff);
+  }
+
+  /* The open window's tab is the drawer's own state readout: no second dot. */
+  .gev-panel-drawer-tab[data-open='true'] {
+    color: var(--accent, #00d4ff);
+    border-color: var(--accent, #00d4ff);
+    background: var(--accent-dim, rgba(0, 212, 255, 0.16));
+  }
+
+  .gev-panel-drawer-tab:focus-visible {
+    outline: 2px solid var(--accent, #00d4ff);
+    outline-offset: 1px;
+  }
+
+  /* Tucking the list away leaves a handle, not an empty column. */
+  .gev-panel-drawer-toggle {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    background: var(--glass-bg);
+    cursor: pointer;
+  }
+
+  .gev-panel-drawer-glyph {
+    display: block;
+    width: 8px;
+    height: 8px;
+    margin: 0 auto;
+    border-right: 1.5px solid var(--text-dim, rgba(255, 255, 255, 0.72));
+    border-bottom: 1.5px solid var(--text-dim, rgba(255, 255, 255, 0.72));
+    /* Open: the chevron points at the list it is holding. */
+    transform: rotate(45deg);
+    transition: transform var(--transition-fast);
+  }
+
+  .gev-panel-drawer-toggle[aria-expanded='false'] .gev-panel-drawer-glyph {
+    transform: rotate(-45deg);
+  }
+
+  /* ── One window at a time: the rails stop drawing collapsed chips ────────
+     Replaced by the drawer's list. The open window keeps its header and
+     collapse button, so a window can still be put away from its own chrome. */
+  body.panel-drawer:not(.cockpit-mode):not(.ui-embed)
+    #left-panel-stack
+    > .panel-collapsible.collapsed,
+  body.panel-drawer:not(.cockpit-mode):not(.ui-embed)
+    #right-context-rail
+    > .panel-collapsible.collapsed {
+    display: none;
+  }
+}

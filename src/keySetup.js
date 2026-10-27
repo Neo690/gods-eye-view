@@ -215,6 +215,28 @@ export function stripKeylessBasemapFromHash(hash) {
   }
 }
 
+/**
+ * Which of the values just sent belong to a browser-side key: the ones the
+ * BUILT bundle carries, so only a rebuild picks them up. Read from the server's
+ * own registry (the status payload's `clientExposed`, src/keySetupCore.mjs) so
+ * no second list of names can drift from it. Pure, exported for tests.
+ * @param {{keys?: Array<{title?: string, clientExposed?: boolean, envVars?: string[]}>}|null} status
+ * @param {Record<string, unknown>} updates The {ENV_VAR: value} map that was sent.
+ * @returns {string[]} Titles of the affected rows, in status order.
+ */
+export function clientExposedKeyTitles(status, updates) {
+  const names = new Set(Object.keys(updates || {}));
+  if (!names.size) return [];
+  return (status?.keys || [])
+    .filter(
+      (key) =>
+        key?.clientExposed &&
+        (key.envVars || []).some((name) => names.has(name)),
+    )
+    .map((key) => key.title)
+    .filter(Boolean);
+}
+
 const TIER_DOTS = Object.freeze({ metered: '🔴', paid: '🔴', free: '🟡' });
 
 function updateCloudVoiceAuthControl(auth, busy = false) {
@@ -285,6 +307,7 @@ function buildRow(documentRef, key) {
   }
   const get = documentRef.createElement('a');
   get.className = 'key-setup-get';
+  get.dataset.keySetupGet = 'true';
   get.href = key.getUrl;
   get.target = '_blank';
   get.rel = 'noopener noreferrer';
@@ -450,9 +473,8 @@ export async function initKeySetup({
       status: keySetupChipLabel(status),
     });
     chip.setAttribute('aria-label', chip.title);
-    // Fully powered is the owner's clean screen: the chip retires. The dialog
-    // stays reachable this session (and via ?setup=1) to swap or verify keys.
-    chip.hidden = status.setCount >= status.total;
+    // Always keep the Provider Settings chip reachable to manage keys
+    chip.hidden = false;
     if (!rowsHost) return;
     rowsHost.textContent = '';
     for (const key of status.keys || [])
@@ -499,6 +521,29 @@ export async function initKeySetup({
 
   const say = (text) => {
     if (statusLine) statusLine.textContent = text;
+  };
+
+  /**
+   * Open a provider's sign-up page. A shell that owns the page (the packaged
+   * desktop app) would render a `target="_blank"` link in a second window of
+   * its own, where the provider session holding the user's key does not exist,
+   * so the panel asks the local server to hand the page to the machine's
+   * browser instead. Everywhere else — the phone, a build with no server route
+   * — the request simply fails and the anchor's own behaviour stands.
+   */
+  const openKeyPage = async (url) => {
+    try {
+      const response = await doFetch('/api/setup/open-key', {
+        method: 'POST',
+        signal: lifetime.signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      if (response.ok) return;
+    } catch {
+      // Fall through to the platform's own handling below.
+    }
+    globalThis.open?.(url, '_blank', 'noopener,noreferrer');
   };
 
   const storeLabel = () =>
@@ -556,7 +601,29 @@ export async function initKeySetup({
           signal: lifetime.signal,
         });
       }
-      say(t(doneMessageKey, { store: storeLabel() }));
+      // A server that cannot restart itself says so (server/standalone/
+      // key-setup.js): its data sources read the key immediately, while any
+      // browser-side key it reports was baked into the bundle we are running
+      // and waits for a rebuild. Say which is which instead of promising a
+      // reload that will not come.
+      const baked = clientExposedKeyTitles(payload.status, updates);
+      if (payload.restarting === false) {
+        say(
+          baked.length
+            ? t(
+                'Applied to {store}. Active now; a rebuild is needed for {keys}.',
+                { store: storeLabel(), keys: baked.join(', ') },
+              )
+            : t('Applied to {store}. Active now.', { store: storeLabel() }),
+        );
+      } else {
+        say(t(doneMessageKey, { store: storeLabel() }));
+      }
+      if (payload.store === 'local storage') {
+        globalThis.setTimeout?.(() => {
+          globalThis.location?.reload?.();
+        }, 1500);
+      }
     } catch (error) {
       say(
         t('Save failed: {detail}', {
@@ -593,6 +660,12 @@ export async function initKeySetup({
   applyButton?.addEventListener('click', onApply);
   // Remove buttons are rendered per row; delegate so re-renders stay wired.
   rowsHost?.addEventListener('click', (event) => {
+    const keyLink = event.target?.closest?.('[data-key-setup-get]');
+    if (keyLink && status?.openKey && !disposed) {
+      event.preventDefault();
+      void openKeyPage(keyLink.href);
+      return;
+    }
     const authButton = event.target?.closest?.(
       '[data-cloud-voice-auth-toggle]',
     );

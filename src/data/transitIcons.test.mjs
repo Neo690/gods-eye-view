@@ -6,6 +6,8 @@ import {
   haloFrame,
   transitIcon,
   transitIconCacheSize,
+  transitLineBadge,
+  transitLineBadgeCacheSize,
 } from './transitIcons.js';
 
 const decode = (uri) =>
@@ -237,4 +239,43 @@ test('sensor raster halo stays dark across its screen-space band on a white roof
     );
     assert.ok(black.pass, JSON.stringify({ selected, black }));
   }
+});
+
+test('a line badge draws the operator colour, its line name, and readable ink', () => {
+  const tram = decode(transitLineBadge('T1', '#AB0672'));
+  assert.match(tram, /fill="#AB0672"/, "the operator's route_color fills it");
+  assert.match(tram, />T1</, 'the published short name is the text');
+  assert.match(tram, /fill="#FFFFFF"/, 'white text on a dark line');
+
+  // Luminance, not a guess: a yellow line gets black text so it stays legible.
+  const yellow = decode(transitLineBadge('3', '#C8D400'));
+  assert.match(yellow, /fill="#05080C"/, 'black text on a light line');
+  // An operator that publishes route_text_color overrides the derived ink.
+  const published = decode(
+    transitLineBadge('B', '#FFDD00', { ink: '#000000' }),
+  );
+  assert.match(published, /fill="#000000"/);
+
+  // No colour published is not a licence to invent one: the pill goes neutral.
+  const bare = decode(transitLineBadge('A', null));
+  assert.match(bare, /fill="#3A4450"/, 'no invented livery');
+  assert.equal(
+    transitLineBadge('', '#AB0672'),
+    null,
+    'a blank label draws nothing',
+  );
+  assert.equal(transitLineBadge(null, null), null);
+});
+
+test('the line badge cache is keyed per label, colour, ink and reused', () => {
+  const before = transitLineBadgeCacheSize();
+  const a = transitLineBadge('T2', '#0D65AE');
+  assert.equal(transitLineBadge('T2', '#0D65AE'), a, 'same pill, same URI');
+  assert.equal(transitLineBadgeCacheSize(), before + 1);
+  transitLineBadge('T2', '#0D65AE', { ink: '#000000' });
+  assert.equal(
+    transitLineBadgeCacheSize(),
+    before + 2,
+    'ink is part of the key',
+  );
 });

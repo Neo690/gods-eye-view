@@ -1,0 +1,37 @@
+# Hosting image for a small always-free instance (Render's 512 MB tier).
+#
+# `Dockerfile` runs `npm run dev`, which pre-bundles Cesium with esbuild on the
+# first request (measured at ~640 MB there) and is fine on a workstation or a
+# 2 GB VM. It is not fine on a 0.5 GB instance, so this image builds once at
+# image-build time and serves the result with `vite preview`, which still runs
+# every `/api/*` middleware through `configurePreviewServer`.
+#
+# Specs, secrets and the public hostname are supplied by the platform:
+#   PORT, GEV_ALLOWED_HOSTS, plus whatever provider keys the routes need.
+FROM node:24.14.0-slim@sha256:d8e448a56fc63242f70026718378bd4b00f8c82e78d20eefb199224a4d8e33d8
+
+ENV PUPPETEER_SKIP_DOWNLOAD=1
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+# Vite is a devDependency, and `NODE_ENV=production` makes npm skip those — so
+# the production flag goes on only after the build, never before it.
+RUN npm ci --no-audit --no-fund
+COPY . .
+RUN npm run build
+# Radio Sites (/api/cell-towers) filters an ANFR extract this checkout builds;
+# without it the route answers 503 on a hosted instance, because the 63 MB
+# archive it comes from is git-ignored on purpose. Building it here is what
+# makes the layer work from a phone, which never downloads the archive itself.
+# A failed download fails the build rather than shipping a server that claims
+# the layer but has no data to draw: the platform keeps the previous image up.
+RUN npm run towers:build
+
+ENV NODE_ENV=production
+
+# Bind every interface: a container that listens on loopback only answers
+# nothing. This does not widen the Host allowlist — GEV_ALLOWED_HOSTS does.
+ENV HOST=0.0.0.0
+ENV PORT=4173
+EXPOSE 4173
+CMD ["sh", "-c", "npx vite preview --port \"$PORT\" --host 0.0.0.0 --strictPort"]

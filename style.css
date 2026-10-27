@@ -28,9 +28,14 @@
 @import './src/ui/styles/first-run.css';
 @import './src/ui/styles/provider-settings.css';
 @import './src/ui/styles/locale-picker.css';
+@import './src/ui/styles/alerts.css';
+@import './src/ui/styles/map-tools.css';
+@import './src/ui/styles/command-palette.css';
 
 @import './src/ui/styles/weather.css';
 @import './src/ui/styles/panel-surfaces.css';
 @import './src/ui/styles/segmented-control.css';
 @import './src/ui/styles/cjk.css';
+@import './src/ui/styles/mobile-compact.css';
+@import './src/ui/styles/panel-drawer.css';
 @import './src/ui/styles/cyber.css';

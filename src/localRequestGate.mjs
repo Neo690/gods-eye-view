@@ -48,6 +48,24 @@ export function hasProxySignals(headers = {}) {
 }
 
 /**
+ * The hostname a Host header names, lower-case and without its port.
+ * @param {string|undefined|null} hostHeader e.g. `globe.example:443`
+ * @returns {string|null}
+ */
+function hostnameOf(hostHeader) {
+  const raw = String(hostHeader || '')
+    .trim()
+    .toLowerCase();
+  if (!raw) return null;
+  if (raw[0] === '[') {
+    const end = raw.indexOf(']');
+    return end > 0 ? raw.slice(0, end + 1) : null;
+  }
+  const colon = raw.indexOf(':');
+  return colon === -1 ? raw : raw.slice(0, colon);
+}
+
+/**
  * Compute a request's own authority (an origin string) from its protocol and
  * Host header. Unlike the credential-panel gate's localhost-restricted
  * `localAuthority`, this returns whatever Host the request actually carries —
@@ -76,7 +94,10 @@ function requestAuthority(hostHeader, protocol) {
  * to admit. Pure: no I/O, no globals.
  *
  * Policy, in order:
- *  1. any reverse-proxy / CDN signal header present (PROXY_SIGNALS) → 403;
+ *  1. any reverse-proxy / CDN signal header present (PROXY_SIGNALS) → 403,
+ *     unless this Host is one the operator deliberately published (see
+ *     `publishedHosts`): a hosted deployment always arrives through a relay,
+ *     so there the relay header says nothing about who called;
  *  2. `Sec-Fetch-Site` present and not `same-origin` / `none` → 403 (this is
  *     what blocks `<img src=...>` and cross-site navigation, which carry no
  *     Origin but do carry `Sec-Fetch-Site: cross-site`);
@@ -87,7 +108,8 @@ function requestAuthority(hostHeader, protocol) {
  *  4. otherwise ok. Non-browser loopback tools and the LAN opt-in (which may
  *     carry neither `Origin` nor `Sec-Fetch-Site`) pass here.
  *
- * @param {{hostHeader?: string, protocol?: string, origin?: string, secFetchSite?: string, proxyHeaders?: Record<string,string>}} req
+ * @param {{hostHeader?: string, protocol?: string, origin?: string, secFetchSite?: string, proxyHeaders?: Record<string,string>, publishedHosts?: readonly string[]}} req
+ * @param {readonly string[]} [req.publishedHosts] Hostnames (`GEV_ALLOWED_HOSTS`) this instance is published on behind a relay. A request for one of them is judged by its Origin and Sec-Fetch-Site alone, because the relay header is then the normal path, not a sign of a foreign caller.
  * @returns {{ok: true} | {ok: false, status: 403, error: string}}
  */
 export function admitSameSiteRequest({
@@ -96,15 +118,29 @@ export function admitSameSiteRequest({
   origin,
   secFetchSite,
   proxyHeaders = {},
+  publishedHosts = [],
 } = {}) {
   // (1) A request carrying reverse-proxy / CDN forwarding headers did not
-  // originate on this machine, whatever its socket says.
+  // originate on this machine, whatever its socket says — unless the operator
+  // published this very host behind that relay. The remaining checks still
+  // apply: an Origin must match this host exactly, and Sec-Fetch-Site must be
+  // same-origin or none, so only the site itself (and tools that send neither
+  // header) is admitted.
   if (hasProxySignals(proxyHeaders)) {
-    return {
-      ok: false,
-      status: 403,
-      error: 'Proxied requests are not accepted',
-    };
+    const hostname = hostnameOf(hostHeader);
+    const published = (publishedHosts || []).some(
+      (host) =>
+        String(host || '')
+          .trim()
+          .toLowerCase() === hostname,
+    );
+    if (!published) {
+      return {
+        ok: false,
+        status: 403,
+        error: 'Proxied requests are not accepted',
+      };
+    }
   }
   // (2) The browser tells us when a request is cross-site. `none` is a typed
   // URL / bookmark; `same-origin` is the app itself. Anything else (cross-site,

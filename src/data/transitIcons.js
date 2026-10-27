@@ -213,3 +213,75 @@ export function transitIcon(kind, px = FLEET_RASTER_PX, options = {}) {
   }
   return uri;
 }
+
+/** Screen size a line badge is authored for, and its raster size. */
+export const LINE_BADGE_SCREEN_PX = { width: 32, height: 18 };
+const LINE_BADGE_RASTER_PX = 64;
+const _badgeCache = new Map();
+
+/** Person-readable ink for a hex fill: the WCAG luma split, black or white. */
+export function badgeInkFor(color) {
+  const hex = String(color || '');
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return '#FFFFFF';
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const luma = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return luma > 0.42 ? '#05080C' : '#FFFFFF';
+}
+
+/**
+ * A rail line badge: the line's own short name on the operator's own colour.
+ *
+ * The glyph next to it stays the mode silhouette; this pill carries the thing
+ * a rider actually reads at a stop — "T1", "a", "Métro". Text is white or near
+ * black by luma rather than by guesswork, so Montpellier's yellow line 3 and
+ * Nice's yellow line B stay legible; an operator that publishes its own
+ * `route_text_color` overrides it.
+ *
+ * @param {string} label Line short name as published.
+ * @param {string|null} color Operator `route_color` (`#RRGGBB`), or null.
+ * @param {{ink?: string|null, px?: number}} [options]
+ * @returns {string|null} `data:image/svg+xml;base64,...`, or null with no label.
+ */
+export function transitLineBadge(label, color, options = {}) {
+  const text = String(label ?? '')
+    .trim()
+    .slice(0, 8);
+  if (!text) return null;
+  const fill = /^#[0-9a-f]{6}$/i.test(String(color || ''))
+    ? String(color).toUpperCase()
+    : '#3A4450';
+  const ink = /^#[0-9a-f]{6}$/i.test(String(options.ink || ''))
+    ? String(options.ink).toUpperCase()
+    : badgeInkFor(fill);
+  const px = options.px || LINE_BADGE_RASTER_PX;
+  const key = `${text}\0${fill}\0${ink}\0${px}`;
+  let uri = _badgeCache.get(key);
+  if (uri) return uri;
+  // Wide enough for "Métro" at this size without the pill becoming a slab;
+  // the raster is 2× the screen box so the text stays crisp when picked.
+  const w = 44;
+  const h = 24;
+  const escaped = text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${Math.round((px * h) / w)}" viewBox="0 0 ${w} ${h}">` +
+    `<rect x="0.75" y="0.75" width="${w - 1.5}" height="${h - 1.5}" rx="${h / 2 - 0.75}" ` +
+    `fill="${fill}" stroke="rgba(0,0,0,0.42)" stroke-width="1.5"/>` +
+    `<text x="${w / 2}" y="${h / 2}" fill="${ink}" text-anchor="middle" ` +
+    `dominant-baseline="central" font-family="ui-monospace,Menlo,Consolas,monospace" ` +
+    `font-size="${text.length > 4 ? 10 : 12.5}" font-weight="600" letter-spacing="0.4">${escaped}</text>` +
+    `</svg>`;
+  uri = 'data:image/svg+xml;base64,' + _b64(svg);
+  _badgeCache.set(key, uri);
+  return uri;
+}
+
+/** Number of line badges built so far — a bound a test can hold the cache to. */
+export function transitLineBadgeCacheSize() {
+  return _badgeCache.size;
+}

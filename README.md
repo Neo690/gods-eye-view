@@ -219,6 +219,75 @@ the container.
 
 </details>
 
+### Path 4 — Windows installer (Setup.exe)
+
+One installer that starts the app's own local server inside the installed
+copy, so a Windows machine needs no Node and no terminal after the download.
+
+1. Download
+   [`gods-eye-view-windows-setup.exe`](https://github.com/Neo690/gods-eye-view/releases/download/desktop-latest/gods-eye-view-windows-setup.exe).
+   The Windows release carries its own tag, so the Android download link keeps
+   working: only one release per repository can be "the latest".
+2. Run it. It installs for the current user only — no administrator prompt —
+   and creates Start menu and desktop shortcuts.
+3. Start **God's Eye View**. The window is the same app as the browser paths,
+   POWER UP → Provider Settings included: keys entered there are stored in the
+   installed copy's own `.env`.
+
+The installer carries no credentials — that is checked while its payload is
+staged, so an installer can never ship a key by accident. A fresh install
+starts keyless and adds whatever you want in the app. Uninstalling from "Apps &
+features" removes the application; the shell's log under
+`%APPDATA%\God's Eye View\logs` stays.
+
+**Building the installer yourself:**
+
+```bash
+npm install
+(cd desktop && npm install)
+npm run desktop:installer     # -> desktop/release/God's Eye View Setup <version>.exe
+```
+
+`--skip-build` reuses the current `dist/`, and `npm run unpacked` inside
+`desktop/` produces `desktop/release/win-unpacked` without an installer.
+`CESIUM_ION_TOKEN` and `GOOGLE_MAPS_API_KEY` in the environment are inlined
+into the bundle at build time, exactly as in the Android build; leaving them
+unset ships the keyless imagery. Provider and voice keys are not build inputs:
+those are entered in the app after installation.
+
+`desktop/main.js` is the whole shell. It starts `vite preview` from the
+installed payload on `127.0.0.1:8790` and opens a window on it; `GEV_DESKTOP_PORT`
+overrides the port, and `--verify` starts the server, asks `/api/setup/status`
+once and exits without opening a window.
+
+### Path 5 — iPhone app (iOS)
+
+The same bundle in a WKWebView, served from `http://127.0.0.1:47821` out of the
+app's own bundle. The loopback origin is deliberate: it is a secure context, so
+geolocation, the microphone, workers and storage all work, and `/api/*` stays
+same-origin the way `server/` expects. `ios/` holds a Swift shell plus the
+[XcodeGen](https://github.com/yonaskolb/XcodeGen) spec that generates the Xcode
+project.
+
+Building it needs a Mac with Xcode 15+ (iOS 16 target) and
+`brew install xcodegen`:
+
+```bash
+npm ci
+npm run build
+GEV_API_BASE=https://your-data-server npm run ios:payload   # optional, same variable as the APK
+cd ios && xcodegen generate && open GodsEyeView.xcodeproj
+```
+
+Pick your team under *Signing & Capabilities* to run it on a phone; a free
+Apple ID works but its profile expires after seven days. Full details — device
+install, permissions, what the shell provides — in
+[ios/README.md](ios/README.md).
+
+No `.ipa` is published from CI: an installable iOS build needs your Apple
+signing identity. The `iOS app` workflow compiles the shell on a macOS runner
+instead, so a broken Swift change fails the build rather than reaching a phone.
+
 ### Then power it up — in the app, not in a file
 
 Keys are upgrades, not prerequisites. When you want one, click the **POWER UP**
@@ -389,8 +458,10 @@ Twenty layers and map sources. **Eighteen have a keyless path.** Some offer addi
 | 🚲 **Bikeshare**            | Live station availability                                                                                                                                                                                                                                                                                                                                                           | GBFS                                    | 🟢                                                                                                  |
 | 🧭 **Directions**           | Click A and B on the globe for a street-following drive, walk or cycle route draped on the terrain with turn-by-turn steps — then FLY the camera along it. No key, no geocoder, no mic                                                                                                                                                                                              | OSRM on FOSSGIS servers (OpenStreetMap) | 🟢                                                                                                  |
 | 🔥 **Active Fires**         | Live NASA FIRMS detections, trailing 24h                                                                                                                                                                                                                                                                                                                                            | NASA FIRMS                              | 🟡                                                                                                  |
-| 🚀 **Space Missions**       | Rolling 30-day launches with payload, stage, and recovery detail                                                                                                                                                                                                                                                                                                                    | Launch Library 2                        | 🟢 (🔴 optional paid token raises the allowance)                                                         |
-| 🎖️ **Mapped Installations** | Viewport-bounded military-site context from community mapping — incomplete by nature, and labeled that way                                                                                                                                                                                                                                                                          | OpenStreetMap                           | 🟢                                                                                                  |
+| 🚀 **Space Missions**       | Rolling 30-day launches with payload, stage, and recovery detail                                                                                                                                                                                                                                                                                                                    | Launch Library 2                        | 🟢 (🔴 optional paid token raises the allowance)                                                         || 🎖️ **Mapped Installations** | Viewport-bounded military-site context from community mapping — incomplete by nature, and labeled that way                                                                                                                                                                                                                           | OpenStreetMap                           | 🟢                                                                                                  |
+| 📶 **Radio Sites**          | Antenna supports in view: physical site positions with the systems transmitting from them (5G NR, LTE, FM…). ANFR covers France from an extract you build once (`npm run towers:build`, 85 000+ sites, Licence Ouverte); OpenCelliD covers elsewhere with **estimated** cell positions and attribution | ANFR · OpenCelliD                | 🟢 ANFR (local extract) · 🟡 OpenCelliD key                                 |
+| 📟 **Connected Objects**    | Citizen sensor boxes in view (openSenseMap, published under PDDL 1.0) or LoRaWAN gateways listed by The Things Network's Packet Broker mapper. Positions a provider publishes, not measurements taken here — and never a complete inventory. Each provider is a chip in the row; the response names which one answered | openSenseMap · TTN       | 🟢                                                                                                  |
+| 📡 **Private Wi-Fi**        | Import one WiGLE CSV export you made yourself and the globe draws it: one point per network, at its strongest observation, Bluetooth and cell rows ignored. The file is read in the page and kept in that browser only — no upload path exists, the layer never enters a share link, and nothing is published to anyone's database | Your own WiGLE export                    | 🟢 your own file                                                                                     |
 | 🌬️ **Wind**                 | Animated 10 m forecast wind with an optional speed, temperature or pressure color field and a reading at map center                                                                                                                                                                                                                                                                 | NOAA GFS / ECMWF IFS                    | 🟢                                                                                                  |
 | 🌦️ **Observed Weather**     | Rain radar (contiguous US), Satellite clouds (GOES regional or global infrared, Clouds only or Full image) and Lightning density (Americas and Pacific) on one history timeline                                                                                                                                                                                                     | NOAA nowCOAST                           | 🟢                                                                                                  |
 | 🌀 **Cyclones**             | Advisory positions, forecast tracks and uncertainty cones for the Atlantic and eastern/central North Pacific                                                                                                                                                                                                                                                                        | NOAA NHC / CPHC                         | 🟢                                                                                                  |
@@ -398,6 +469,22 @@ Twenty layers and map sources. **Eighteen have a keyless path.** Some offer addi
 **Weather, keyless.** **Wind** animates 10 m forecast flow from NOAA GFS or ECMWF IFS, with an optional color field and a reading at map center. **Rain radar**, **Satellite clouds** and **Lightning density** are observations on one history timeline in the **WEATHER** panel (step back, **Play**, **Latest**); **Cyclone advisories** draw NHC and CPHC positions, forecast tracks and cones. On Google 3D Tiles the observed layers float above the city as translucent shells, sharpened around your view.
 
 In the app, **Data Layers** groups them as Movement, Cameras, Infrastructure, Events, Weather and Utilities.
+
+**Radio Sites, in one command.** ANFR publishes every French installation above
+5 W as monthly tables (63 MB per month, millions of rows), so the app reads a
+extract instead of the archive:
+
+```bash
+npm run towers:build                 # newest monthly archive -> data/anfr/cell-towers.json.gz
+npm run towers:build -- --bbox=-5,42,9,52   # one region
+npm run towers:build -- --max=50000         # cap the extract
+```
+
+It prints the sites kept and the systems found on them; the layer picks the file
+up on its next request, with no restart. The extract is git-ignored — data, not
+source. Without it the layer says **not configured** and points at this command;
+with `OPENCELLID_API_KEY` set, it answers worldwide from estimated cell
+positions instead (attribution required by CC BY-SA 4.0).
 
 **The basemap ladder — what each tier buys you:**
 
@@ -546,6 +633,45 @@ OAuth mode without a client pair, retains presence-only wording for a complete
 OAuth pair, and identifies selected Basic or auto mode without guessing which
 credentials runtime will accept. Basic and credentials-file modes remain
 advanced `dev-fresh.sh` configuration.
+
+### 📱 The keys the Android data server needs (Render)
+
+The phone hands the provider routes that need credentials server-side to a
+hosted copy of this server (`GEV_API_BASE`), so those keys belong to **that**
+service's environment — not to the APK, and not to the phone's Provider
+Settings, which can only light up what the app itself calls. The blueprint
+([render.yaml](render.yaml)) declares the names with `sync: false`; the values
+are pasted in **Render → your service → Environment** and never committed. A
+service that already exists keeps its own environment — the blueprint does not
+push later edits into it — so add each name of the tables below by hand once.
+
+| Variable | What it turns on in the server, and what that changes on the phone |
+| --- | --- |
+| `GEMINI_API_KEY` | 🎙️ Gemini Live voice — `/api/gemini/token` mints the ephemeral credential the session attaches, and only the server holds the permanent key, so the phone's voice needs it here. Unset, the app answers "Add a Gemini API key in Provider Settings" whatever the phone has stored. |
+| `FIRMS_MAP_KEY` | 🔥 Active fires for everything reading **the server** — a browser at the service URL, the desktop app. Unset, `/api/firms` answers `{"error":"no_key"}`. The phone's own fire layer reads the keyless NASA feed through the shell and draws either way. |
+| `OPENSKY_CLIENT_ID` + `OPENSKY_CLIENT_SECRET` | ✈️ Your own flight-polling allowance for the server. Without a pair the shared quota answers `429 OpenSky rate limited`; the phone then reads ADS-B from its own address instead of going empty. |
+| `OPENSKY_AUTH_MODE` | `auto` (set in the blueprint): OAuth if the pair exists, then Basic, then anonymous — a missing key degrades instead of failing. |
+
+Already declared there and worth confirming against your `.env`:
+`OPENAI_API_KEY`, `AISSTREAM_API_KEY`, `TOMTOM_API_KEY`,
+`GOOGLE_MAPS_SERVER_API_KEY`, `URADMONITOR_USER_ID`,
+`URADMONITOR_USER_HASH`. Saving a variable restarts the service; a free
+instance also sleeps after 15 minutes idle, so the first request after a pause
+spends about a minute waking up.
+
+Two routes answer outside a browser, so they are the quick check after saving:
+
+```bash
+curl -s https://<your-service>.onrender.com/api/firms | head -c 120   # not {"error":"no_key"}
+curl -s -o /dev/null -w '%{http_code}\n' https://<your-service>.onrender.com/api/flights  # 200, not 429
+```
+
+Voice is the one to check in the app itself: `/api/gemini/token` takes the same
+two callers as the rest of the server — a same-origin page on the service, and
+the phone's own replay, which carries no `Origin` — so press the microphone and
+watch the Gemini session start, or read the panel's "Gemini access was refused"
+message if the key is still missing. Cross-site requests are still refused
+there, and a host the instance is not published on admits neither caller.
 
 <details>
 <summary>Advanced setup: environment variables and macOS Keychain</summary>

@@ -8,6 +8,14 @@ const PANEL_LAYOUT_STORAGE_VERSION = 'v6';
  * the layout-reset notice and the documented key.
  */
 const PANEL_POSITION_STORAGE_VERSION = 'v8';
+/**
+ * Phones boot with both rails folded, whatever the last session left open: the
+ * rail is a chip strip over the map's top edge, and one restored sheet hides the
+ * globe on the first frame. The stored choice is left alone, so a wide window
+ * still restores it. Keep in step with `@media (max-width: 720px)` in
+ * src/ui/styles/mobile-compact.css.
+ */
+const FOLDED_RAIL_VIEWPORT = '(max-width: 720px)';
 /** Floating panels' stored positions and hint flag: nothing reads them now. */
 const RETIRED_PANEL_KEY_PREFIXES = [
   `godsEyeView.${PANEL_POSITION_STORAGE_VERSION}.panelPos.`,
@@ -74,6 +82,7 @@ export class PanelPositionControls {
     // to offer controls for things already happening, while competing with the
     // first-run mission card for the one first impression there is. A stored
     // choice still wins in both directions, so anyone who opens it keeps it.
+    if (stored !== null && this._startsFolded()) collapsed = true;
     if (panelId === 'pp-toggles' && stored === null) collapsed = true;
     panelEl.classList.toggle('collapsed', collapsed);
     // Bodies that expand themselves on first appearance must not override a
@@ -85,6 +94,15 @@ export class PanelPositionControls {
           ? 'default'
           : 'stored';
     this._syncPanelCollapseButton(panelEl);
+  }
+
+  /** True on a narrow viewport, where a restorable sheet would cover the map. */
+  _startsFolded() {
+    try {
+      return globalThis.matchMedia?.(FOLDED_RAIL_VIEWPORT)?.matches === true;
+    } catch {
+      return false;
+    }
   }
 
   _savePanelCollapsedState(panelId, collapsed) {

@@ -1,0 +1,42 @@
+<!-- Ctrl/Cmd+K palette (src/ui/commandPalette.js). The overlay starts hidden
+       and stays out of the tab order until the shortcut opens it: a command
+       palette nobody asked for must not be a stop in the page's focus walk. -->
+<div id="command-palette" class="command-palette" hidden aria-hidden="true">
+  <div class="command-palette-scrim"></div>
+  <div
+    class="command-palette-dialog"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="command-palette-title"
+  >
+    <h2 id="command-palette-title" class="command-palette-title" data-i18n>
+      COMMAND PALETTE
+    </h2>
+    <input
+      id="command-palette-input"
+      class="command-palette-input"
+      type="text"
+      role="combobox"
+      aria-expanded="true"
+      aria-controls="command-palette-results"
+      aria-autocomplete="list"
+      aria-labelledby="command-palette-title"
+      placeholder="Search layers, panels and places..."
+      data-i18n-placeholder
+      autocomplete="off"
+      spellcheck="false"
+      enterkeyhint="go"
+    />
+    <div
+      id="command-palette-results"
+      class="command-palette-results"
+      role="listbox"
+      aria-labelledby="command-palette-title"
+    ></div>
+    <p class="command-palette-hint">
+      <span data-i18n>Arrow keys to browse · Enter to run</span>
+      <span aria-hidden="true">·</span>
+      <span data-i18n>ESC to close</span>
+    </p>
+  </div>
+</div>

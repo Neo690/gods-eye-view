@@ -49,7 +49,13 @@ const refusals = () => [
   }),
   admitKeySetupRequest({ ...local, remoteAddress: '192.168.1.20' }),
   admitKeySetupRequest({ ...local, hostHeader: 'workstation.local:4173' }),
-  admitKeySetupRequest({ ...local, origin: undefined }),
+  // A missing Origin is only refused when something claims another site: the
+  // packaged desktop shell sends neither Origin nor Sec-Fetch-*.
+  admitKeySetupRequest({
+    ...local,
+    origin: undefined,
+    proxyHeaders: { 'sec-fetch-site': 'cross-site' },
+  }),
   admitKeySetupRequest({ ...local, origin: 'not a url' }),
   admitKeySetupRequest({ ...local, origin: 'https://evil.example' }),
   admitKeySetupRequest({ ...local, contentType: 'text/plain' }),
@@ -90,6 +96,16 @@ test('in English the panel shows exactly the server sentence', () => {
   setLocale('en');
   for (const refusal of refusals())
     assert.equal(saveRefusalText(refusal, 400), refusal.error);
+});
+
+test('a POST with no Origin and no cross-site claim answers the desktop shell', () => {
+  // The packaged Windows app runs Chromium with --disable-web-security, so it
+  // sends neither Origin nor Sec-Fetch-*; refusing it would leave the installer
+  // unable to save any key at all.
+  assert.deepEqual(
+    admitKeySetupRequest({ ...local, origin: undefined }),
+    { ok: true },
+  );
 });
 
 test('an unknown code or a bare error falls back to the server text or the status', () => {
