@@ -56,7 +56,11 @@ test('a switch list is a ul of role=switch entries and its click reaches the lay
   });
   try {
     panel.mount(f.container);
-    const list = f.find((node) => node.classList?.contains('data-row-list'));
+    // The row owns two list containers; the switches are the `list` one, so
+    // select the sequence class rather than whichever node comes first.
+    const list = f.find((node) =>
+      node.classList?.contains('data-row-list--sequence'),
+    );
     assert.ok(list, 'the row carries a list');
     // A set of peers is a <ul>; only a sequence is an <ol>.
     assert.equal(list.tagName, 'UL');

@@ -119,6 +119,7 @@ function harness({ hidden = false, selected = true, noChips = false } = {}) {
     _lifetime: { frame() {} },
     _panelLayout: { _leftStackPreferredPanelId: null, _rightStackPreferredPanelId: null },
     ...methods,
+    _applyRailAccordion() {},
     _savePanelCollapsedState(...args) { saves.push(args); },
     _scheduleLeftPanelLayout() {}, _scheduleRightPanelLayout() {},
     shareLinkManager: {
