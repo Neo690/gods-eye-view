@@ -34,6 +34,12 @@ export const INCIDENT_LAYER = Object.freeze({
   cyclone: 'weather-cyclones',
   military: 'military',
   gnss: 'gnss-integrity',
+  // Zone rules report under the layer of the contact they caught — flights,
+  // military or ais-live-vessels — so the incident carries its own `layerId`
+  // and these three entries only name the family.
+  'zone-entry': 'flights',
+  'zone-exit': 'flights',
+  'zone-parking': 'flights',
 });
 
 /**
@@ -393,7 +399,41 @@ function scanGnss(levels, { limits }) {
 const SEVERITY_RANK = Object.freeze({ critical: 0, warning: 1 });
 
 /**
- * Scan every watched source once.
+ * Order a mixed list of incidents the way the alert centre lists them: one per
+ * id, most severe first, then most recent, then by id so two scans with the
+ * same facts produce the same order.
+ *
+ * Shared with the zone watcher (src/data/zoneWatch.js), so a zone alert and a
+ * scan alert are ranked against each other rather than concatenated.
+ *
+ * @param {Array<object>} incidents
+ * @param {{limits?: object}} [options]
+ * @returns {Array<object>} At most `limits.maxIncidents` incidents.
+ */
+export function rankIncidents(
+  incidents = [],
+  { limits = INCIDENT_LIMITS } = {},
+) {
+  const unique = [
+    ...new Map(
+      incidents
+        .filter((incident) => incident?.id)
+        .map((incident) => [incident.id, incident]),
+    ).values(),
+  ];
+  unique.sort(
+    (a, b) =>
+      (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9) ||
+      (b.atMs ?? 0) - (a.atMs ?? 0) ||
+      String(a.id).localeCompare(String(b.id)),
+  );
+  return unique.slice(0, limits.maxIncidents);
+}
+
+/**
+ * Scan every watched source once. Zone rules are judged by the watcher
+ * (src/data/zoneWatch.js), which knows how long a contact has been where; both
+ * lists are ranked together by `rankIncidents`.
  * @param {object} [source]
  * @param {Array<object>} [source.flights]     flights analyst records
  * @param {Array<object>} [source.military]    military analyst records
@@ -417,14 +457,5 @@ export function scanIncidents(
     ...scanMilitary(source.military, scope),
     ...scanGnss(source.gnss?.levels, scope),
   ];
-  const unique = [
-    ...new Map(incidents.map((incident) => [incident.id, incident])).values(),
-  ];
-  unique.sort(
-    (a, b) =>
-      (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9) ||
-      (b.atMs ?? 0) - (a.atMs ?? 0) ||
-      String(a.id).localeCompare(String(b.id)),
-  );
-  return unique.slice(0, limits.maxIncidents);
+  return rankIncidents(incidents, { limits });
 }

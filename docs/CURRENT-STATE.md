@@ -1,5 +1,25 @@
 # God's Eye View Current State
 
+Zone rules give the alert centre a circle on the ground to watch: an entry, an
+exit, or a stay. `src/data/zoneRules.js` holds the model — a centre, a radius
+between 0.25 and 500 km, one of the three kinds, and a watch list of ICAO24
+addresses or MMSIs — `src/data/zoneWatch.js` decides when to report, and
+`src/ui/alertCenter.js` owns the editor and the storage. An empty watch list
+means every contact, because a rule is a zone first and a watch list second; a
+listed identifier is what the operator singled out, so the watcher reports those
+as critical and everything else as a warning. The detector keeps one membership
+record per rule and contact and reports only edges: a contact first seen inside
+is an entry, a contact that goes silent is not an exit (an exit means it was seen
+outside the ring), and parking needs a real dwell, inside and stationary for ten
+minutes, from a contact that reports a speed at all. An incident id carries the
+instant of its transition, so dismissing one hides that alert rather than muting
+the contact for the rest of the day. Zone incidents are ranked against the scan's
+own by the shared `rankIncidents` in `src/data/incidentScan.js` rather than
+concatenated, and each carries the layer of the contact it caught. The editor is
+a collapsed section of the alert centre holding at most 24 rules of 50
+identifiers each, and a rule that lists vessels reports while the AIS layer is
+on, because the scan reads the records of the layers that are on.
+
 The iOS shell in `ios/` runs the same `dist/` bundle the browser, the desktop
 app and the APK run; it is not a second implementation. `WKWebView` loads it
 from `http://127.0.0.1:47821`, a loopback origin the Secure Contexts standard
