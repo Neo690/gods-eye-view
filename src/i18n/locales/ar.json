@@ -3234,5 +3234,9 @@
   "Radio Sites": "مواقع الراديو",
   "Connected Objects": "أجهزة متصلة",
   "Hide the window list": "إخفاء قائمة النوافذ",
-  "Show the window list": "إظهار قائمة النوافذ"
+  "Show the window list": "إظهار قائمة النوافذ",
+  "CONUS radar reflectivity": "انعكاسية رادار CONUS",
+  "Global satellite infrared": "الأشعة تحت الحمراء الساتلية العالمية",
+  "GOES regional satellite infrared": "الأشعة تحت الحمراء الساتلية الإقليمية GOES",
+  "Windy error": "خطأ Windy"
 }

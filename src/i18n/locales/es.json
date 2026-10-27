@@ -3033,5 +3033,9 @@
   "Radio Sites": "Sitios de radio",
   "Connected Objects": "Objetos conectados",
   "Hide the window list": "Ocultar la lista de ventanas",
-  "Show the window list": "Mostrar la lista de ventanas"
+  "Show the window list": "Mostrar la lista de ventanas",
+  "CONUS radar reflectivity": "Reflectividad radar CONUS",
+  "Global satellite infrared": "Infrarrojo satelital global",
+  "GOES regional satellite infrared": "Infrarrojo satelital regional GOES",
+  "Windy error": "Error de Windy"
 }

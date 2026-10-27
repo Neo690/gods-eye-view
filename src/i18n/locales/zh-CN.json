@@ -2899,5 +2899,9 @@
   "Radio Sites": "无线电站点",
   "Connected Objects": "联网设备",
   "Hide the window list": "隐藏窗口列表",
-  "Show the window list": "显示窗口列表"
+  "Show the window list": "显示窗口列表",
+  "CONUS radar reflectivity": "美国本土雷达反射率",
+  "Global satellite infrared": "全球卫星红外影像",
+  "GOES regional satellite infrared": "GOES 区域卫星红外影像",
+  "Windy error": "Windy 错误"
 }

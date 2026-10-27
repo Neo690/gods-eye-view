@@ -1074,6 +1074,7 @@ export class IntelHUD {
         ? `${data.windKmh} km/h`
         : null;
     const parts = [tempStr, windStr].filter(Boolean);
+    // i18n-ignore: a thermometer glyph, not copy
     el.textContent = parts.length ? `\uD83C\uDF21 ${parts.join(' \xB7 ')}` : '';
     el.style.display = parts.length ? '' : 'none';
   }

@@ -124,7 +124,7 @@ export function createWindyWeatherLayer({
       onWeatherUpdate?.(data);
     } catch (err) {
       if (controller.signal.aborted) return;
-      error = err.message || 'Windy error';
+      error = err.message || msg('Windy error');
       data = null;
     } finally {
       if (!controller.signal.aborted) {

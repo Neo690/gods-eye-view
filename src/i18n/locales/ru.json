@@ -3100,5 +3100,9 @@
   "Radio Sites": "Радиосайты",
   "Connected Objects": "Подключённые устройства",
   "Hide the window list": "Скрыть список окон",
-  "Show the window list": "Показать список окон"
+  "Show the window list": "Показать список окон",
+  "CONUS radar reflectivity": "Радиолокационная отражаемость CONUS",
+  "Global satellite infrared": "Глобальный спутниковый инфракрасный снимок",
+  "GOES regional satellite infrared": "Региональный спутниковый инфракрасный снимок GOES",
+  "Windy error": "Ошибка Windy"
 }

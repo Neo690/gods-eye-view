@@ -18,6 +18,7 @@ import {
   normalizeGnssAircraft,
 } from '../layers/gnss/records.js';
 import { normalizeFirePerimeterSnapshot } from '../layers/perimeters/records.js';
+import { msg } from '../i18n/marker.js';
 import {
   MAX_STATIONS as RADIATION_MAX_STATIONS,
   SAFECAST_MAX_AGE_MS,
@@ -334,7 +335,7 @@ const WEATHER_SPECS = {
     service: 'weather_radar',
     layer: 'conus_base_reflectivity_mosaic',
     style: 'weather_radar_base_reflectivity',
-    title: 'CONUS radar reflectivity',
+    title: msg('CONUS radar reflectivity'),
     coverage:
       'Contiguous United States; gaps do not establish absence of precipitation.',
     description:
@@ -347,7 +348,7 @@ const WEATHER_SPECS = {
     service: 'satellite',
     layer: 'global_longwave_imagery_mosaic',
     style: 'reflectance',
-    title: 'Global satellite infrared',
+    title: msg('Global satellite infrared'),
     coverage:
       'Global mosaic with incomplete polar coverage; nominal coverage 60°S–60°N.',
     description:
@@ -360,7 +361,7 @@ const WEATHER_SPECS = {
     service: 'satellite',
     layer: 'goes_longwave_imagery',
     style: 'goes-lir',
-    title: 'GOES regional satellite infrared',
+    title: msg('GOES regional satellite infrared'),
     coverage:
       'GOES East/West regional North American coverage; not a global image.',
     description:
@@ -373,7 +374,7 @@ const WEATHER_SPECS = {
     service: 'lightning_detection',
     layer: 'ldn_lightning_strike_density',
     style: 'lightning_density',
-    title: 'Lightning density · 15 min',
+    title: msg('Lightning density · 15 min'),
     coverage:
       'Pacific and Americas: 110°E across the dateline to 0°, 25°S–80°N; not global coverage.',
     description:
