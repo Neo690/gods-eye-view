@@ -2998,5 +2998,11 @@
   "Local weather (Windy)": "Météo locale (Windy)",
   "Local weather forecast": "Prévision météo locale",
   "Enable to load": "Activer pour charger",
-  "GFS point forecast for the map centre. Refreshed automatically every 5 minutes or when the camera moves more than 5 km. Source: Windy.com / NOAA GFS.": "Prévision ponctuelle GFS pour le centre de la carte. Actualisée automatiquement toutes les 5 minutes ou quand la caméra se déplace de plus de 5 km. Source : Windy.com / NOAA GFS."
+  "GFS point forecast for the map centre. Refreshed automatically every 5 minutes or when the camera moves more than 5 km. Source: Windy.com / NOAA GFS.": "Prévision ponctuelle GFS pour le centre de la carte. Actualisée automatiquement toutes les 5 minutes ou quand la caméra se déplace de plus de 5 km. Source : Windy.com / NOAA GFS.",
+  "COMMAND PALETTE": "PALETTE DE COMMANDES",
+  "Search layers, panels and places...": "Rechercher couches, panneaux et lieux...",
+  "Arrow keys to browse · Enter to run": "Flèches pour parcourir · Entrée pour exécuter",
+  "No matching command": "Aucune commande correspondante",
+  "PANELS": "PANNEAUX",
+  "Command failed": "Échec de la commande"
 }

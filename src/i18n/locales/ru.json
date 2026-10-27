@@ -3061,5 +3061,11 @@
   "Storm": "Буря",
   "Radiation networks": "Сети радиации",
   "Stations: {count}": "Станций: {count}",
-  "Needs an API key": "Требуется ключ API"
+  "Needs an API key": "Требуется ключ API",
+  "COMMAND PALETTE": "ПАНЕЛЬ КОМАНД",
+  "Search layers, panels and places...": "Поиск слоёв, панелей и мест...",
+  "Arrow keys to browse · Enter to run": "Стрелки — просмотр · Enter — выполнить",
+  "No matching command": "Подходящих команд нет",
+  "PANELS": "ПАНЕЛИ",
+  "Command failed": "Команда не выполнена"
 }

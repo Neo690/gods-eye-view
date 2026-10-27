@@ -3195,5 +3195,11 @@
   "Storm": "عاصفة",
   "Radiation networks": "شبكات الإشعاع",
   "Stations: {count}": "المحطات: {count}",
-  "Needs an API key": "مفتاح API مطلوب"
+  "Needs an API key": "مفتاح API مطلوب",
+  "COMMAND PALETTE": "لوحة الأوامر",
+  "Search layers, panels and places...": "ابحث في الطبقات واللوحات والأماكن...",
+  "Arrow keys to browse · Enter to run": "الأسهم للتنقل · Enter للتنفيذ",
+  "No matching command": "لا يوجد أمر مطابق",
+  "PANELS": "اللوحات",
+  "Command failed": "فشل تنفيذ الأمر"
 }

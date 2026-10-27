@@ -2860,5 +2860,11 @@
   "Storm": "风暴",
   "Radiation networks": "辐射网络",
   "Stations: {count}": "站点: {count}",
-  "Needs an API key": "需要 API 密钥"
+  "Needs an API key": "需要 API 密钥",
+  "COMMAND PALETTE": "命令面板",
+  "Search layers, panels and places...": "搜索图层、面板和地点...",
+  "Arrow keys to browse · Enter to run": "方向键浏览 · 回车执行",
+  "No matching command": "没有匹配的命令",
+  "PANELS": "面板",
+  "Command failed": "命令执行失败"
 }

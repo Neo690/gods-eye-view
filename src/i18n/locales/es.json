@@ -2994,5 +2994,11 @@
   "Storm": "Tormenta",
   "Radiation networks": "Redes de radiación",
   "Stations: {count}": "Estaciones: {count}",
-  "Needs an API key": "Requiere una clave API"
+  "Needs an API key": "Requiere una clave API",
+  "COMMAND PALETTE": "PALETA DE COMANDOS",
+  "Search layers, panels and places...": "Buscar capas, paneles y lugares...",
+  "Arrow keys to browse · Enter to run": "Flechas para navegar · Intro para ejecutar",
+  "No matching command": "Ningún comando coincide",
+  "PANELS": "PANELES",
+  "Command failed": "El comando falló"
 }
