@@ -19,6 +19,13 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
 RUN npm run build
+# Radio Sites (/api/cell-towers) filters an ANFR extract this checkout builds;
+# without it the route answers 503 on a hosted instance, because the 63 MB
+# archive it comes from is git-ignored on purpose. Building it here is what
+# makes the layer work from a phone, which never downloads the archive itself.
+# A failed download fails the build rather than shipping a server that claims
+# the layer but has no data to draw: the platform keeps the previous image up.
+RUN npm run towers:build
 
 ENV NODE_ENV=production
 
