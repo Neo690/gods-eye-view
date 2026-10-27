@@ -8,10 +8,13 @@
   <uses-feature android:name="android.hardware.location" android:required="false" />
   <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
+  <!-- The provider keys the app stores live in its own data, so a device
+       backup would carry them off the phone: backup stays off. -->
   <application
     android:label="@string/app_name"
     android:icon="@mipmap/ic_launcher"
     android:roundIcon="@mipmap/ic_launcher"
+    android:allowBackup="false"
     android:supportsRtl="true"
     android:hardwareAccelerated="true"
     android:usesCleartextTraffic="true"

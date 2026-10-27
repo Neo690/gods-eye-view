@@ -43,7 +43,19 @@ android {
         storePassword ciStorePassword
         keyAlias ciKeyAlias
         keyPassword ciKeyPassword
+        // v2 and v3 together. Every Android since 7.0 checks v2, so it stays on;
+        // v3 is what makes a *rotated* key able to update this install instead
+        // of requiring an uninstall, which would take the provider keys stored
+        // on the phone with it. AGP enables v3 for neither scheme by default.
+        enableV2Signing true
+        enableV3Signing true
       }
+    }
+    // A release build with no CI key falls back to this config, so it has to
+    // carry the same schemes as one that used the real key.
+    debug {
+      enableV2Signing true
+      enableV3Signing true
     }
   }
 
