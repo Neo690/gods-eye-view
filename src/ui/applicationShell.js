@@ -770,13 +770,13 @@ export class StyleManager extends ShellFacade {
     const panels = [];
     for (const element of documentRef.querySelectorAll('[data-panel-id]')) {
       if (element.hidden || !element.id) continue;
-      const title = element
-        .querySelector('.panel-title')
-        ?.textContent?.trim();
+      const title = element.querySelector('.panel-title')?.textContent?.trim();
       if (title) panels.push({ id: element.id, label: title });
     }
     // Dock trays carry their label on the button that expands them.
-    for (const tray of documentRef.querySelectorAll('[data-dock-toggle-target]')) {
+    for (const tray of documentRef.querySelectorAll(
+      '[data-dock-toggle-target]',
+    )) {
       const id = tray.dataset.dockToggleTarget;
       if (!id || panels.some((panel) => panel.id === id)) continue;
       const title = tray

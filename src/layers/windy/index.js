@@ -74,7 +74,10 @@ export function createWindyWeatherLayer({
         );
         const ray = viewerRef.camera.getPickRay(windowPosition);
         if (ray && viewerRef.scene?.globe) {
-          const targetCartesian = viewerRef.scene.globe.pick(ray, viewerRef.scene);
+          const targetCartesian = viewerRef.scene.globe.pick(
+            ray,
+            viewerRef.scene,
+          );
           if (targetCartesian) {
             const carto = Cesium.Cartographic.fromCartesian(targetCartesian);
             return {

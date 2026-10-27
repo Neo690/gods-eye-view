@@ -1065,12 +1065,14 @@ export class IntelHUD {
       el.textContent = '';
       return;
     }
-    const tempStr = data.tempC !== null && data.tempC !== undefined
-      ? `${data.tempC > 0 ? '+' : ''}${data.tempC}°C`
-      : null;
-    const windStr = data.windKmh !== null && data.windKmh !== undefined
-      ? `${data.windKmh} km/h`
-      : null;
+    const tempStr =
+      data.tempC !== null && data.tempC !== undefined
+        ? `${data.tempC > 0 ? '+' : ''}${data.tempC}°C`
+        : null;
+    const windStr =
+      data.windKmh !== null && data.windKmh !== undefined
+        ? `${data.windKmh} km/h`
+        : null;
     const parts = [tempStr, windStr].filter(Boolean);
     el.textContent = parts.length ? `\uD83C\uDF21 ${parts.join(' \xB7 ')}` : '';
     el.style.display = parts.length ? '' : 'none';
