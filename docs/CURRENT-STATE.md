@@ -33,9 +33,14 @@ under ATS); with no base, `/api/*` answers a JSON 503 naming the missing
 configuration instead of a bare 404. `scripts/prepare-ios-payload.mjs` stages
 the build and writes that constant, refusing plain HTTP and credential-shaped
 files, and `ios/project.yml` is the XcodeGen spec that produces the project.
-`ios-app.yml` compiles the shell for the simulator on a macOS runner; no `.ipa`
-is published, because signing belongs to an Apple account rather than the
-repository.
+`ios-app.yml` compiles the shell for the simulator on a macOS runner, and — when
+the Apple signing secrets are present, meaning an identity, an ad-hoc profile
+and a team id — archives the app, exports an ad-hoc `.ipa`, verifies the console,
+the bundle identifier, the signature and the embedded profile, and publishes it
+as `gods-eye-view.ipa` in an `ios-latest` release deliberately kept out of the
+"latest" slot the APK download link depends on. With no signing identity that
+second job is skipped rather than failed, because signing belongs to an Apple
+account rather than to the repository.
 
 Analyst region queries resolve unique Natural Earth names offline without
 geocoding, so Gold Coast and Ivory Coast name the West African natural regions.
