@@ -37,6 +37,11 @@ const OPEN_SENSE_MAP_LIMIT = 20;
 const MAX_SPAN_DEG = 6;
 const MAX_TTN_RADIUS_M = 100_000;
 const TIMEOUT_MS = 15_000;
+// openSenseMap answers a city bbox in ~0.3 s once its own cache is warm and in
+// ~11 s on the first call of the hour (measured), which is the state a sleeping
+// host wakes into. One immediate second attempt costs nothing when the first
+// one worked and turns that cold call into the warm answer.
+const ATTEMPTS = 2;
 // openSenseMap and the TTN mapper are volunteer services: name the client so
 // they can reach its operator instead of blocking an anonymous datacentre IP.
 const USER_AGENT = 'GodsEyeView/0.2 (+https://github.com/Neo690/gods-eye-view)';
@@ -150,6 +155,16 @@ async function fetchJson(url, { fetchImpl, signal }) {
   return JSON.parse(text);
 }
 
+/** A failure that says nothing about the data, so it is worth asking again. */
+export function worthRetrying(error) {
+  if (error?.name === 'AbortError' || error?.name === 'TimeoutError')
+    return true;
+  const status = Number(error?.status);
+  if (Number.isFinite(status)) return status >= 500;
+  // undici reports a reset connection as a TypeError, with no status at all.
+  return error instanceof TypeError;
+}
+
 /**
  * One upstream read, mapped to the route's point shape.
  * @param {string} source
@@ -200,6 +215,44 @@ export function iotSensorsProxy({
 } = {}) {
   const cache = new Map();
 
+  /** One read with its own deadline, so a retry gets a fresh budget. */
+  async function attemptRead(source, view, signal) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    const onAbort = () => controller.abort(signal.reason);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    try {
+      return await readUpstream(source, view, {
+        fetchImpl,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    }
+  }
+
+  /**
+   * Read once, and once more when the first try says nothing about the data.
+   *
+   * A deadline or a connection reset is the host's problem, not the provider's
+   * answer, so it is worth a second call. A 4xx is the provider answering, and
+   * repeating it — a rate limit above all — would only deepen the refusal.
+   */
+  async function readWithRetry(source, view, signal) {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await attemptRead(source, view, signal);
+      } catch (error) {
+        if (signal?.aborted || !worthRetrying(error) || attempt >= ATTEMPTS)
+          throw error;
+        console.warn(
+          `[iot-sensors] ${source} attempt ${attempt} failed (${error?.message || error}); retrying`,
+        );
+      }
+    }
+  }
+
   async function acquire(source, view, signal) {
     const key = [
       source,
@@ -211,15 +264,8 @@ export function iotSensorsProxy({
     const cached = cache.get(key);
     if (cached && now() - cached.savedAt < CACHE_MS)
       return { ...cached, ageMs: now() - cached.savedAt, stale: false };
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    const onAbort = () => controller.abort(signal.reason);
-    signal?.addEventListener('abort', onAbort, { once: true });
     try {
-      const read = await readUpstream(source, view, {
-        fetchImpl,
-        signal: controller.signal,
-      });
+      const read = await readWithRetry(source, view, signal);
       const entry = { ...read, savedAt: now() };
       cache.set(key, entry);
       while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
@@ -232,9 +278,6 @@ export function iotSensorsProxy({
       if (cached && now() - cached.savedAt < STALE_MAX_MS)
         return { ...cached, ageMs: now() - cached.savedAt, stale: true };
       throw error;
-    } finally {
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
     }
   }
 

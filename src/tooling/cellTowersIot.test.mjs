@@ -15,6 +15,7 @@ import {
   mapOpenSenseBox,
   mapTtnGateway,
   viewToRadius,
+  worthRetrying,
 } from '../../server/providers/iotSensors.js';
 import {
   buildSites,
@@ -306,6 +307,73 @@ test('an upstream failure becomes a 502 the panel can explain', async () => {
   const answer = await call(provider, `/?${view}`);
   assert.equal(answer.status, 502);
   assert.equal(answer.body.error, 'iot_upstream_unavailable');
+});
+
+/** The failure the deadline produces, without waiting for the deadline. */
+function abortError(message = 'This operation was aborted') {
+  return Object.assign(new Error(message), { name: 'AbortError' });
+}
+
+const ONE_BOX = [
+  { _id: 'box-1', currentLocation: { coordinates: [13.4, 52.5] } },
+];
+
+test('a cold timeout is retried once and gets the warm answer', async () => {
+  let calls = 0;
+  const provider = iotSensorsProxy({
+    fetchImpl: async () => {
+      calls += 1;
+      // openSenseMap measured at ~11 s cold and ~0.3 s warm: the first call of
+      // a woken host is exactly the one that runs out of budget.
+      if (calls === 1) throw abortError();
+      return new Response(JSON.stringify(ONE_BOX), { status: 200 });
+    },
+  });
+  const answer = await call(provider, `/?${view}`);
+  assert.equal(answer.status, 200);
+  assert.equal(answer.body.points.length, 1);
+  assert.equal(calls, 2, 'the second attempt is the one that answered');
+});
+
+test('a rate limit is an answer, so it is not retried', async () => {
+  let calls = 0;
+  const provider = iotSensorsProxy({
+    fetchImpl: async () => {
+      calls += 1;
+      return new Response('slow down', { status: 429 });
+    },
+  });
+  const answer = await call(provider, `/?${view}`);
+  assert.equal(answer.status, 502);
+  assert.equal(answer.body.upstreamStatus, 429);
+  assert.equal(calls, 1, 'repeating a refusal only deepens it');
+  assert.equal(worthRetrying({ status: 429 }), false);
+  assert.equal(worthRetrying({ status: 404 }), false);
+  assert.equal(worthRetrying({ status: 503 }), true);
+  assert.equal(worthRetrying(abortError()), true);
+  assert.equal(worthRetrying(new TypeError('fetch failed')), true);
+});
+
+test('a view read once keeps drawing its stale copy when both tries fail', async () => {
+  let clock = 1_000_000;
+  let fail = false;
+  const provider = iotSensorsProxy({
+    now: () => clock,
+    fetchImpl: async () => {
+      if (fail) throw abortError();
+      return new Response(JSON.stringify(ONE_BOX), { status: 200 });
+    },
+  });
+  const first = await call(provider, `/?${view}`);
+  assert.equal(first.status, 200);
+  assert.equal(first.body.stale, false);
+  clock += 61_000; // past the cache window, inside the staleness window.
+  fail = true;
+  const second = await call(provider, `/?${view}`);
+  assert.equal(second.status, 200);
+  assert.equal(second.body.stale, true);
+  assert.equal(second.body.points.length, 1);
+  assert.equal(second.body.ageMs, 61_000);
 });
 
 const SUPPORT_HEADER =
