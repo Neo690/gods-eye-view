@@ -1,4 +1,8 @@
-import { msg, t } from '../i18n/index.js';
+import { t } from '../i18n/index.js';
+import {
+  PANEL_WINDOW_NARROW_MEDIA,
+  PANEL_WINDOW_SPECS,
+} from './panelWindows.js';
 
 /**
  * The rail windows a phone reaches through one disclosure, in reading order.
@@ -11,24 +15,13 @@ import { msg, t } from '../i18n/index.js';
  * instead of out of it. One closed button owns them now: the globe keeps the
  * top of the screen, and the list only appears when it is asked for.
  *
- * The labels are the panels' own English source strings, so `t()` resolves
- * them exactly as it does the chip titles. A locale switch reloads the page,
- * so the list is rebuilt with the right labels. Each label is wrapped in
- * `msg()` because the literal ships as a key rather than as page text: it is
- * translated at `t(spec.label)`, two lines below, and the wrapper is what tells
- * `npm run i18n` so.
+ * The list itself is shared with the desktop drawer (`panelWindows.js`), so a
+ * renamed window cannot be offered on one screen and missing from the other.
  */
-export const MOBILE_PANEL_TAB_SPECS = Object.freeze([
-  Object.freeze({ id: 'data-panel', label: msg('DATA LAYERS') }),
-  Object.freeze({ id: 'scene-panel', label: msg('SCENES') }),
-  Object.freeze({ id: 'pp-toggles', label: msg('DISPLAY') }),
-  Object.freeze({ id: 'cctv-panel', label: msg('CCTV') }),
-  Object.freeze({ id: 'street-level-panel', label: msg('STREET LEVEL') }),
-  Object.freeze({ id: 'global-context-panel', label: msg('CONTEXT') }),
-]);
+export const MOBILE_PANEL_TAB_SPECS = PANEL_WINDOW_SPECS;
 
 /** The one breakpoint the disclosure exists at; above it the rails keep their chips. */
-export const MOBILE_PANEL_TAB_MEDIA = '(max-width: 720px)';
+export const MOBILE_PANEL_TAB_MEDIA = PANEL_WINDOW_NARROW_MEDIA;
 
 /**
  * Build the panel disclosure above the map, or return null when the document

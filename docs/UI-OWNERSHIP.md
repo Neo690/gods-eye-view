@@ -10,7 +10,7 @@ scene playback and voice. It delegates; new behavior belongs with its owner.
 | `locationNavigation.js` | Destination lookup/selection, orbit, world jumps and globe-reset completion |
 | `cockpitCoordinator.js` | Cockpit entry/rollback, readouts and the single Display portal |
 | `visualSettings.js` | Effects, detection overrides, visual restoration and render-loop lifetime |
-| `panelChrome.js` | Disclosure, docking, layout and Cockpit panel restoration |
+| `panelChrome.js` | Disclosure, docking, layout, the desktop window drawer and its one-window-at-a-time rule, and Cockpit panel restoration |
 | `aircraftDisplay.js` | Shared commercial/military 3D display preferences and controls |
 | `layerBindings.js` | Data-manager attachment, selected-tracker adoption and camera-entry listeners |
 | `displayBindings.js` | Keyboard/display subscriptions and frame-rate monitor lifetime |
