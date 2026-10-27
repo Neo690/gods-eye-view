@@ -177,8 +177,11 @@ export function resolveAdb({
   // The SDK copies are checked first: a `platform-tools` directory is the
   // project's own install, while a bare `adb` is only a guess that the shell
   // will resolve (and the caller reports when it cannot).
+  // Join with the target platform's rules, not the host's: CI runs these
+  // checks on Linux while the SDK paths it resolves are Windows ones.
+  const join = platform === 'win32' ? path.win32.join : path.posix.join;
   const sdkCandidates = roots.map((root) =>
-    path.normalize(path.join(root, 'platform-tools', `adb${suffix}`)),
+    join(root, 'platform-tools', `adb${suffix}`),
   );
   const found = sdkCandidates.find((candidate) => exists(candidate));
   return { adb: found || 'adb', looked: [...sdkCandidates, 'adb'] };
