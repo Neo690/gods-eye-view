@@ -23,6 +23,8 @@ import {
   SCOPE_TERMINUS_FAR_M,
   SCOPE_TERMINUS_NEAR_M,
   SCOPE_TERMINUS_QUANTUM,
+  SCOPE_DESKTOP_MAX_ALPHA,
+  scopeOutsideAlphaScale,
   _resetScopeMaskForTest,
 } from './scopeMask.js';
 import { KEYHOLE_OUTER_RADIUS } from './celestialRing.js';
@@ -334,8 +336,29 @@ test('an override pins the terminus and null restores the ramp', () => {
   }
 });
 
-test('the hard-crop (feather 0) path honors the same terminus alpha', () => {
+test('a wide viewport keeps the map readable instead of blacking it out', () => {
   const dom = stubScopeMaskDom({ width: 1000, height: 800, dpr: 1 });
+  try {
+    installScopeMask({ container: dom.container });
+    // Zoomed right in, which is where the ramp used to reach solid black.
+    updateScopeTerminusForHeight(SCOPE_TERMINUS_NEAR_M);
+    const stops = dom.gradientStops();
+    assert.equal(
+      stops.at(-1).color,
+      `rgba(5,5,8,${SCOPE_TERMINUS_ALPHA_NEAR * SCOPE_DESKTOP_MAX_ALPHA})`,
+      'the desktop edge is a tint, not a curtain',
+    );
+    assert.equal(scopeOutsideAlphaScale(1000), SCOPE_DESKTOP_MAX_ALPHA);
+    assert.equal(scopeOutsideAlphaScale(640), 1, 'the phone keeps its keyhole');
+  } finally {
+    destroyScopeMask();
+    dom.restore();
+  }
+});
+
+test('the hard-crop (feather 0) path honors the same terminus alpha', () => {
+  // Phone width: the desktop ceiling is asserted separately below.
+  const dom = stubScopeMaskDom({ width: 640, height: 800, dpr: 1 });
   try {
     installScopeMask({ container: dom.container });
     updateScopeTerminusForHeight(SCOPE_TERMINUS_FAR_M + 5_000_000); // true full-globe view

@@ -41,6 +41,18 @@ import { getKeyholeGeometry } from './celestialRing.js';
 /** Matches the page background the emergent scope faded into. */
 const SCOPE_OUTSIDE_COLOR = { r: 5, g: 5, b: 8 };
 /**
+ * Above this CSS width the mask must not black out the map.
+ *
+ * A phone screen shows a keyhole and nothing else worth reading; a desktop
+ * window is the opposite — the operator is looking at a wide map and the
+ * opaque outside hid everything but the circle. So the ramp above still runs
+ * (it drives the painted edge), and its terminus is CAPPED on a wide viewport:
+ * the signature edge stays, the blackout does not.
+ */
+export const SCOPE_DESKTOP_MIN_WIDTH = 900;
+/** Terminus ceiling on a wide viewport: a tint, not a curtain. */
+export const SCOPE_DESKTOP_MAX_ALPHA = 0.22;
+/**
  * Default edge feather as a fraction of the keyhole radius.
  *
  * 0.11 since 2026-08-24 (owner final lock; 0.08 on 08-23, hard-crop 0 on
@@ -360,6 +372,18 @@ export function scopeMaskGeometry(width, height, featherRatio = _featherRatio) {
   };
 }
 
+/**
+ * The factor a painted terminus is multiplied by at this viewport width.
+ * Pure — unit-tested directly.
+ * @param {number} width - Viewport CSS width.
+ * @returns {number} 1 (unchanged) or the desktop ceiling.
+ */
+export function scopeOutsideAlphaScale(width) {
+  const w = Number(width);
+  if (!Number.isFinite(w) || w < SCOPE_DESKTOP_MIN_WIDTH) return 1;
+  return SCOPE_DESKTOP_MAX_ALPHA;
+}
+
 function draw() {
   if (_coalescingPaint) {
     _paintDirty = true;
@@ -394,13 +418,16 @@ function draw() {
   const geo = scopeMaskGeometry(width, height, _featherRatio);
   if (!geo) return;
   const { r, g, b } = SCOPE_OUTSIDE_COLOR;
+  // Wide viewports get the edge without the curtain (see
+  // SCOPE_DESKTOP_MIN_WIDTH): the map underneath stays readable.
+  const outsideAlpha = _terminusAlpha * scopeOutsideAlphaScale(width);
   if (geo.outerR - geo.innerR < 1) {
     // Zero/near-zero feather: a radial gradient with equal radii is
     // DEGENERATE in Canvas2D (Chromium paints nothing — browser
     // finding). Draw the hard crop explicitly: rect minus circle, evenodd.
     // The hard crop honors the same altitude terminus — a hard edge at city
     // scale must be fully opaque too, not 6% translucent.
-    ctx.fillStyle = `rgba(${r},${g},${b},${_terminusAlpha})`;
+    ctx.fillStyle = `rgba(${r},${g},${b},${outsideAlpha})`;
     ctx.beginPath();
     ctx.rect(0, 0, width, height);
     ctx.arc(geo.centerX, geo.centerY, Math.max(1, geo.innerR), 0, Math.PI * 2);
@@ -417,7 +444,7 @@ function draw() {
     geo.outerR,
   );
   gradient.addColorStop(0, `rgba(${r},${g},${b},0)`);
-  gradient.addColorStop(1, `rgba(${r},${g},${b},${_terminusAlpha})`);
+  gradient.addColorStop(1, `rgba(${r},${g},${b},${outsideAlpha})`);
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, width, height);
   _painted = true;
