@@ -1,7 +1,7 @@
 // src/layers/windy/source.js
-import { getApiKey } from '../../data/storedApiKeys.js';
 
-const FALLBACK_WINDY_KEY = '3Z8AiagNSo2KgCDX3qZcwqRKqLpQcv9I';
+/** Baked key, so the layer works before the user saves one of their own. */
+export const FALLBACK_WINDY_KEY = '3Z8AiagNSo2KgCDX3qZcwqRKqLpQcv9I';
 const WINDY_FORECAST_URL = 'https://api.windy.com/api/point-forecast/v2';
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const MOVE_THRESHOLD_KM = 5;
@@ -19,7 +19,9 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 }
 
 export function createWindySource({
-  apiKey = getApiKey('WINDY_API_KEY', FALLBACK_WINDY_KEY),
+  // A portable source never reads storage: the composition root resolves the
+  // saved key and passes it in.
+  apiKey = FALLBACK_WINDY_KEY,
   fetchImpl = (...args) => globalThis.fetch(...args),
   timeoutMs = 15_000,
 } = {}) {
@@ -78,23 +80,31 @@ export function createWindySource({
         let minDiff = Infinity;
         for (let i = 0; i < ts.length; i++) {
           const diff = Math.abs(ts[i] - now);
-          if (diff < minDiff) { minDiff = diff; idx = i; }
+          if (diff < minDiff) {
+            minDiff = diff;
+            idx = i;
+          }
         }
 
         const tempC = temps[idx] !== undefined ? temps[idx] - 273.15 : null;
-        const windMs = us[idx] !== undefined && vs[idx] !== undefined
-          ? Math.hypot(us[idx], vs[idx])
-          : null;
+        const windMs =
+          us[idx] !== undefined && vs[idx] !== undefined
+            ? Math.hypot(us[idx], vs[idx])
+            : null;
         const windKmh = windMs !== null ? windMs * 3.6 : null;
         const gustMs = gusts[idx] !== undefined ? gusts[idx] : null;
         const gustKmh = gustMs !== null ? gustMs * 3.6 : null;
-        const pressureHpa = pressures[idx] !== undefined ? pressures[idx] / 100 : null;
+        const pressureHpa =
+          pressures[idx] !== undefined ? pressures[idx] / 100 : null;
         const humidity = rhs[idx] !== undefined ? rhs[idx] : null;
 
         // Wind direction in degrees (meteorological: direction FROM)
         const u = us[idx] || 0;
         const v = vs[idx] || 0;
-        const windDeg = u === 0 && v === 0 ? null : (Math.atan2(u, v) * 180 / Math.PI + 360) % 360;
+        const windDeg =
+          u === 0 && v === 0
+            ? null
+            : ((Math.atan2(u, v) * 180) / Math.PI + 360) % 360;
 
         const data = {
           lat,
@@ -116,6 +126,8 @@ export function createWindySource({
         signal?.removeEventListener('abort', abort);
       }
     },
-    clearCache() { cache = null; },
+    clearCache() {
+      cache = null;
+    },
   };
 }

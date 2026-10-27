@@ -19,9 +19,13 @@ import { createWeatherSource } from '../layers/weather/source.js';
 import { createCycloneSource } from '../layers/cyclones/source.js';
 import { createWindSource } from '../layers/wind/source.js';
 import { createFirmsSource } from '../layers/firms/source.js';
-import { createWindySource } from '../layers/windy/source.js';
+import {
+  createWindySource,
+  FALLBACK_WINDY_KEY,
+} from '../layers/windy/source.js';
 import { createMapillarySource } from '../layers/streetLevel/providers/mapillary/source.js';
 import { createReferenceSources } from '../sources/reference.js';
+import { getApiKey } from '../data/storedApiKeys.js';
 export { createReferenceSources as createStandaloneReferenceSources } from '../sources/reference.js';
 
 /**
@@ -126,7 +130,10 @@ export function createStandaloneLayerSources(overrides = {}) {
     wind: createWindSource(),
     weather: createWeatherSource(),
     cyclones: createCycloneSource(),
-    'windy-weather': createWindySource(),
+    'windy-weather': createWindySource({
+      // Resolved here because a portable source cannot read Provider Settings.
+      apiKey: getApiKey('WINDY_API_KEY', FALLBACK_WINDY_KEY),
+    }),
     mapillary: createMapillarySource({
       token: import.meta.env?.MAPILLARY_CLIENT_TOKEN || '',
     }),
