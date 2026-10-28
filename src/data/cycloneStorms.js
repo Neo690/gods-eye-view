@@ -67,6 +67,12 @@ function number(value, min, max) {
   return Number.isFinite(n) && n >= min && n <= max ? n : null;
 }
 
+// CurrentStorms.json reports movementSpeed in miles per hour (intensity is in
+// knots); convert so `speedKt` means what it says, as the server does.
+function knotsFromMph(mph) {
+  return mph === null ? null : Math.round(mph * 0.868976);
+}
+
 function iso(value, now) {
   if (
     typeof value !== 'string' ||
@@ -154,7 +160,7 @@ export function parseCycloneStatus(payload, now = Date.now()) {
       pressureHpa: number(raw.pressure, 800, 1100),
       movement: {
         directionDegrees: number(raw.movementDir, 0, 360),
-        speedKt: number(raw.movementSpeed, 0, 200),
+        speedKt: knotsFromMph(number(raw.movementSpeed, 0, 200)),
       },
       advisoryUrl: officialLink(forecast.url),
       outlookUrl: raw.id.startsWith('al')

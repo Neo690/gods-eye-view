@@ -23,6 +23,7 @@ import {
   createWindySource,
   FALLBACK_WINDY_KEY,
 } from '../layers/windy/source.js';
+import { createGhostMapsSource } from '../layers/ghostMaps/source.js';
 import { createMapillarySource } from '../layers/streetLevel/providers/mapillary/source.js';
 import { createReferenceSources } from '../sources/reference.js';
 import { getApiKey } from '../data/storedApiKeys.js';
@@ -127,6 +128,7 @@ export function createStandaloneLayerSources(overrides = {}) {
     launches: createLaunchSource(),
     alpr: createAlprTileSource(),
     firms: createFirmsSource(),
+    's2-ghostmaps': createGhostMapsSource(),
     wind: createWindSource(),
     weather: createWeatherSource(),
     cyclones: createCycloneSource(),
