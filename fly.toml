@@ -1,0 +1,31 @@
+# fly.toml app configuration file generated for gev-data-4cfd3d-drifting-branch-8797 on 2026-10-23T23:56:48+02:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'gev-data-4cfd3d-drifting-branch-8797'
+primary_region = 'cdg'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+# The phone asks for a tile or a brief while panning, not on a timer: a
+# stopped machine costs 20 s to wake, which reads as a broken layer. Keep one
+# machine up permanently instead. This is a deliberate, billed choice — drop it
+# back to 'stop' / 0 if the instance is only used now and then.
+[http_service]
+  internal_port = 4173
+  force_https = true
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+# The container runs `npm run dev` (see Dockerfile), and Vite's dependency
+# pre-bundling of Cesium peaks well above the 1 GB the generator picks: at that
+# size the kernel killed esbuild (RSS 639 MB) during first-start optimisation.
+[[vm]]
+  memory = '2gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 2048
