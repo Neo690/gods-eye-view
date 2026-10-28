@@ -7,7 +7,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { setLocale } from '../i18n/index.js';
-import { ZONE_RULES_STORAGE_KEY } from '../data/zoneRules.js';
+import {
+  ZONE_RULE_LIMITS,
+  ZONE_RULES_STORAGE_KEY,
+} from '../data/zoneRules.js';
 import { mountAlertCenter } from './alertCenter.js';
 
 const NOW = Date.UTC(2026, 9, 27, 12, 0, 0);
@@ -267,6 +270,27 @@ test('a zone added through the form reaches storage and the next scan reports it
     (node) => node.className === 'alert-center-zones-summary',
   );
   assert.equal(summary.textContent, 'Zone rules (1)');
+});
+
+test('the radius field imposes no step the browser could refuse', () => {
+  // Constraint validation runs before `submit` fires, so a step the field's own
+  // default fails stops the editor before the module can answer: with `min`
+  // 0.25 and a step of 0.5, 5 km, 120 km and 5.1 km were all refused as step
+  // mismatches, and "Add a zone" did nothing at all — no rule, no message. The
+  // bounds belong to validateZoneRule, which states them in the app's language,
+  // which is the reading the latitude and longitude fields already take.
+  // (Every other test here dispatches `submit` directly, which is why the
+  // browser's own refusal could not show up in them.)
+  setLocale('en');
+  const { root } = mount();
+  const radius = find(root, byPlaceholder('Radius (km)'));
+  assert.equal(radius.step, 'any');
+  assert.equal(Number(radius.min), ZONE_RULE_LIMITS.minRadiusKm);
+  assert.equal(Number(radius.max), ZONE_RULE_LIMITS.maxRadiusKm);
+  const offered = Number(radius.value);
+  assert.equal(offered, ZONE_RULE_LIMITS.defaultRadiusKm);
+  assert.ok(offered >= ZONE_RULE_LIMITS.minRadiusKm);
+  assert.ok(offered <= ZONE_RULE_LIMITS.maxRadiusKm);
 });
 
 test('a zone alert is listed in the panel, named after the identifier it caught', () => {

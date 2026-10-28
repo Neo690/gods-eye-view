@@ -395,7 +395,14 @@ function buildMarkup(doc, ids) {
     ariaLabel: t('Radius (km)'),
     min: ZONE_RULE_LIMITS.minRadiusKm,
     max: ZONE_RULE_LIMITS.maxRadiusKm,
-    step: 0.5,
+    // No step of its own, for the same reason the latitude and longitude
+    // fields below take none: a step is measured from `min`, so `min: 0.25`
+    // with a step of 0.5 left the panel's own default of 5 km, and 120, and
+    // 5.1, out of the browser's legal values. Constraint validation runs
+    // before `submit` and stops it dead, so pressing "Add a zone" did nothing
+    // and said nothing — the module's own bounds check never ran. The bounds
+    // belong to validateZoneRule, which reports them in the app's language.
+    step: 'any',
     value: ZONE_RULE_LIMITS.defaultRadiusKm,
   });
   const latInput = input({
