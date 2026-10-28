@@ -62,3 +62,9 @@ ios/GodsEyeView.xcodeproj/
 ios/build/
 ios/DerivedData/
 ios/*.ipa
+# xtool packs the built .app here (`cd ios && xtool dev`), and SwiftPM keeps
+# its scratch and module cache in .build/ beside the package manifest.
+ios/xtool/
+ios/.build/
+# xtool writes a build-server description here for editors
+ios/.bsp/

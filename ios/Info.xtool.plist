@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The Info.plist xtool merges into the app it packs. `xtool.yml` points at it
+  with `infoPath`.
+
+  Why not `GodsEyeView/Info.plist`: that file is the Xcode target's, and it names
+  its executable, identifier, module and versions through $(...) build settings.
+  Only Xcode's build pipeline expands those. xtool merges a plist verbatim, so a
+  bundle built from the Xcode file would carry CFBundleExecutable set to the
+  literal string "$(EXECUTABLE_NAME)" and a scene delegate class of
+  "$(PRODUCT_MODULE_NAME).SceneDelegate" — an app that installs and then shows a
+  black window.
+
+  So this file holds only keys that mean the same in both worlds: the
+  permissions strings, the loopback ATS exception, the marketing version, and
+  the scene and status-bar behaviour. Everything else (identifier, executable,
+  name, build number, platform, device family) comes from xtool's own defaults,
+  which it derives from `xtool.yml` and Package.swift.
+
+  Keep the two files in step: a key that matters at runtime (a permission string,
+  the ATS exception) belongs in both, or the app behaves one way under Xcode and
+  another under xtool.
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>God's Eye View</string>
+	<!-- xtool has no marketing version to read, so it writes `1.0.0`; the Xcode
+	     spec declares MARKETING_VERSION `1.0`. Pinning it here is what makes the
+	     two builds report the same version to TestFlight, the App Store and
+	     anything that reads CFBundleShortVersionString. The build number already
+	     agrees (`1` on both paths), so it is left to xtool. -->
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<!-- The page is served from 127.0.0.1: the loopback origin is what gives it
+	     a secure context, and ATS must allow that local connection explicitly. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<!-- Named explicitly as well: recent iOS already exempts loopback from
+		     ATS, but the exception states the one plain-HTTP host the app may
+		     load, so no later change can quietly widen it. -->
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>127.0.0.1</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<false/>
+			</dict>
+			<key>localhost</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<false/>
+			</dict>
+		</dict>
+	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>The console centres the map on your position and follows it while you move.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>The console's voice controls listen for your spoken commands.</string>
+	<!-- Without a scene manifest UIKit never asks AppDelegate for a scene and
+	     the app launches to a black window: SceneDelegate is what starts the
+	     loopback origin before the first page load.
+
+	     SwiftPM names the module after the target, so the class is
+	     `GodsEyeView.SceneDelegate` — the value Xcode's
+	     `$(PRODUCT_MODULE_NAME).SceneDelegate` expands to. -->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>GodsEyeView.SceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleLightContent</string>
+	<key>UIUserInterfaceStyle</key>
+	<string>Dark</string>
+	<key>UIRequiresFullScreen</key>
+	<false/>
+</dict>
+</plist>
