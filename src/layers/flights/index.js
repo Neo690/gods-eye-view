@@ -6,6 +6,7 @@ import { createTracking } from './tracking.js';
 import { createController } from './controller.js';
 import { createEnrichment } from './enrichment.js';
 import { createIngestion } from './ingestion.js';
+import { createDensity } from './density.js';
 import { createLifecycle } from './lifecycle.js';
 import { createEvidence } from './evidence.js';
 import { createTesting } from './testing.js';
@@ -51,6 +52,14 @@ export function createCivilFlightLayer({
     },
     applyPendingTrackingRestore: () =>
       parts.tracking._applyPendingTrackingRestore(),
+  });
+  // Density mode's timer: it drives the same ingestion with `dense: true`, so
+  // there is one snapshot pipeline, not two.
+  parts.density = createDensity({
+    feed: flightState.feed,
+    refresh: (viewer, options) =>
+      parts.ingestion.methods.update(viewer, options),
+    getViewer: () => flightState._viewer,
   });
 
   Object.assign(

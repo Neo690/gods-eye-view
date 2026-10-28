@@ -26,6 +26,7 @@ export function bindDisplayControls({ elements, actions }) {
     ['sonarButton', 'toggleSonar'],
     ['detectionButton', 'cycleDetection'],
     ['modelsButton', 'toggleModels'],
+    ['densityButton', 'toggleDensity'],
   ])
     listen(elements[name], 'click', action);
   for (const [name, action] of [

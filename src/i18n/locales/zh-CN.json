@@ -2936,5 +2936,6 @@
   "Zone rules ({count})": "区域规则（{count}）",
   "The map is not ready yet": "地图尚未就绪",
   "That is as many zones as the panel keeps ({max})": "面板最多保留 {max} 个区域",
-  "Not an ICAO24 or an MMSI: {list}": "既不是 ICAO24 也不是 MMSI：{list}"
+  "Not an ICAO24 or an MMSI: {list}": "既不是 ICAO24 也不是 MMSI：{list}",
+  "Density — refetch the 250 nm around the view every 5 seconds (spends a volunteer feed's rate limit)": "密度 — 每 5 秒刷新视野周边 250 海里（消耗志愿者数据源的配额）"
 }

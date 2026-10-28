@@ -60,6 +60,24 @@ function feedSource(response, fallback) {
     : fallback;
 }
 
+/**
+ * A density patch is the viewport's own 250 nm traffic, refetched every few
+ * seconds; once it is older than a few polls it is no longer "live motion",
+ * so it is reported stale (the layer then says so) rather than coasting a
+ * silently frozen patch.
+ */
+const DENSITY_PATCH_STALE_MS = 15_000;
+
+/** Query string for a flights read; lat/lon are sent only as a pair. */
+function flightQuery(query = {}) {
+  const params = new URLSearchParams();
+  if (Number.isFinite(query.latitude) && Number.isFinite(query.longitude)) {
+    params.set('lat', query.latitude.toFixed(4));
+    params.set('lon', query.longitude.toFixed(4));
+  }
+  return params;
+}
+
 /** The flights feed (/api/flights); no request starts during construction. */
 export function createFlightSource({
   fetchImpl = defaultFetch,
@@ -69,11 +87,7 @@ export function createFlightSource({
     // i18n-ignore: feed source name, replaced by the provider from each snapshot and reported to AI tools
     label: 'Flights',
     async getSnapshot(query = {}, { signal } = {}) {
-      const params = new URLSearchParams();
-      if (Number.isFinite(query.latitude) && Number.isFinite(query.longitude)) {
-        params.set('lat', query.latitude.toFixed(4));
-        params.set('lon', query.longitude.toFixed(4));
-      }
+      const params = flightQuery(query);
       const { response, payload } = await readResponse(
         fetchImpl,
         `/api/flights${params.size ? '?' + params : ''}`,
@@ -91,6 +105,41 @@ export function createFlightSource({
             header(response, 'x-flight-coverage') ||
             'worldwide upstream snapshot',
           now: now(),
+        }),
+        status: response.status,
+      };
+    },
+    /**
+     * One viewport-scoped density patch: the 250 nm around the camera, served
+     * by the local proxy from a keyless volunteer network. Separate from
+     * {@link getSnapshot} because it answers a different question — the same
+     * sky in a small window, a few seconds old, instead of the whole world one
+     * poll behind — and the layer polls it on its own timer.
+     * @param {{latitude?:number, longitude?:number}} [query] View anchor.
+     * @param {{signal?: AbortSignal}} [options]
+     */
+    async getDenseSnapshot(query = {}, { signal } = {}) {
+      const params = flightQuery(query);
+      params.set('density', '1');
+      const { response, payload } = await readResponse(
+        fetchImpl,
+        `/api/flights?${params}`,
+        { signal },
+        'Flights',
+      );
+      if (!response.ok) throw httpError(response, 'Flights');
+      const observedAtMs = epoch(payload?.time, 1000);
+      const ageMs =
+        observedAtMs == null ? null : Math.max(0, now() - observedAtMs);
+      return {
+        ...openSkySnapshot(payload, {
+          source: header(response, 'x-flight-source') || 'adsb.lol',
+          coverage:
+            header(response, 'x-flight-coverage') || '250nm regional density',
+          now: now(),
+          // A patch that stopped refreshing is not current motion, whatever
+          // the proxy labelled it.
+          stale: ageMs == null || ageMs > DENSITY_PATCH_STALE_MS,
         }),
         status: response.status,
       };

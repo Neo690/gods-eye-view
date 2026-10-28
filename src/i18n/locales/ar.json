@@ -3271,5 +3271,6 @@
   "Zone rules ({count})": "قواعد المناطق ({count})",
   "The map is not ready yet": "الخريطة ليست جاهزة بعد",
   "That is as many zones as the panel keeps ({max})": "لا تحتفظ اللوحة بأكثر من {max} منطقة",
-  "Not an ICAO24 or an MMSI: {list}": "ليس ICAO24 ولا MMSI: {list}"
+  "Not an ICAO24 or an MMSI: {list}": "ليس ICAO24 ولا MMSI: {list}",
+  "Density — refetch the 250 nm around the view every 5 seconds (spends a volunteer feed's rate limit)": "الكثافة — إعادة جلب 250 ميلًا بحريًا حول العرض كل 5 ثوانٍ (يستهلك حصة مصدر تطوعي)"
 }

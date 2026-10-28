@@ -17,7 +17,7 @@ import {
 } from '../../data/modelVisualAnchor.js';
 import {
   FOCUS_EVIDENCE_DEV,
-  RENDER_DELAY_SEC,
+  renderDelaySec,
   TRACKED_MODEL_MAX_PX,
   TRACKED_MODEL_MIN_PX,
   TRACKED_BILLBOARD_SCALE_BY_DISTANCE,
@@ -151,7 +151,7 @@ export function createMotion({
     // two KNOWN fixes whenever possible (see RENDER_DELAY_SEC rationale).
     const renderTime = Cesium.JulianDate.addSeconds(
       Cesium.JulianDate.now(),
-      -RENDER_DELAY_SEC,
+      -renderDelaySec(flightState),
       flightState._scratchRenderTime,
     );
 
@@ -308,7 +308,7 @@ export function createMotion({
     if (!history || history.length === 0) return true;
     const renderTime = Cesium.JulianDate.addSeconds(
       Cesium.JulianDate.now(),
-      -RENDER_DELAY_SEC,
+      -renderDelaySec(flightState),
       flightState._scratchWarmupTime,
     );
     return Cesium.JulianDate.lessThan(renderTime, history[0].time);

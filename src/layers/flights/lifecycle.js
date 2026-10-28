@@ -186,10 +186,16 @@ export function createLifecycle({
           () => {
             flightState._lastCamPoseSig = '';
             flightState._lastFleetTickMs = 0;
+            // A settled view no longer needs to wait out the rest of the patch
+            // interval: density mode reads the new centre now (1/s at most).
+            parts.density.nudge();
           },
         );
       }
       restoreSpriteOrderOnEnable('flights', viewer);
+      // A stored session or a share link can carry density mode on; the timer
+      // belongs to the visible layer, so it starts here and stops in disable().
+      if (flightState._densityEnabled) parts.density.start();
     },
 
     /**
@@ -198,6 +204,9 @@ export function createLifecycle({
      * @param {Cesium.Viewer} viewer
      */
     disable(viewer) {
+      // The density timer must not outlive the layer it polls for; the layer's
+      // own `density` param turns it back on when the layer comes back.
+      parts.density.stop();
       parts.controller._abortActiveUpdates();
       parts.tracking._cancelPendingTrackingRestore();
       if (flightState._billboardCollection)
@@ -240,6 +249,7 @@ export function createLifecycle({
      * @param {Cesium.Viewer} viewer
      */
     destroy(viewer) {
+      parts.density.destroy();
       flightState.lifetime.abort();
       flightState._enrichActive = 0;
       flightState._enrichLastDispatchMs = 0;

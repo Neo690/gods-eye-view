@@ -25,6 +25,14 @@ export class ShellFacade {
     this._aircraftDisplay._models3dEnabled = value;
   }
 
+  get _densityEnabled() {
+    return this._aircraftDisplay._densityEnabled;
+  }
+
+  set _densityEnabled(value) {
+    this._aircraftDisplay._densityEnabled = value;
+  }
+
   get _models3dMode() {
     return this._aircraftDisplay._models3dMode;
   }
@@ -1367,6 +1375,19 @@ export class ShellFacade {
 
   _initModels3dToggle(...args) {
     return this._aircraftDisplay._initModels3dToggle(...args);
+  }
+
+  /** One density toggle drives the flights layer's 5 s regional refresh. */
+  _initDensityToggle(...args) {
+    return this._aircraftDisplay._initDensityToggle(...args);
+  }
+
+  _setDensityEnabled(...args) {
+    return this._aircraftDisplay._setDensityEnabled(...args);
+  }
+
+  _syncDensityButtonState(...args) {
+    return this._aircraftDisplay._syncDensityButtonState(...args);
   }
 
   _setModels3dEnabled(...args) {

@@ -13,7 +13,13 @@ export function createIngestion({
   applyPendingTrackingRestore,
 }) {
   const methods = {
-    async update(viewer, { signal = null } = {}) {
+    /**
+     * One acquisition pass. `dense` reads the viewport's 250 nm patch instead of
+     * the worldwide snapshot (see density.js); the two share every step after
+     * the fetch so records, retention and tracking behave identically.
+     * @returns {Promise<boolean>} True when a snapshot was applied.
+     */
+    async update(viewer, { signal = null, dense = false } = {}) {
       const nowMs = Date.now();
       const trackingRefreshEpoch = ++feed._trackingRefreshEpoch;
       feed._lastTrackingRefreshOutcome = {
@@ -23,9 +29,12 @@ export function createIngestion({
         source: feed._lastSource,
         coverage: feed._lastCoverage,
       };
-      if (feed._retryAt && nowMs < feed._retryAt) {
+      // The backoff belongs to the worldwide poll's own upstream. A density
+      // patch reads a different service, so it is not held back by it — which
+      // is what keeps the layer populated while OpenSky is rate limited.
+      if (!dense && feed._retryAt && nowMs < feed._retryAt) {
         feed._backoff = true;
-        return;
+        return false;
       }
 
       const resourceController = new AbortController();
@@ -35,9 +44,20 @@ export function createIngestion({
         : resourceController.signal;
       try {
         updateSignal.throwIfAborted();
-        const snapshot = await feed._source.getSnapshot(getQuery(viewer), {
-          signal: updateSignal,
-        });
+        if (dense && typeof feed._source.getDenseSnapshot !== 'function') {
+          // Same name the live-source contract uses, without importing it: the
+          // layer stays independent of the source package it is handed.
+          const unsupported = new Error('Density source unavailable');
+          unsupported.name = 'LiveSourceError';
+          throw unsupported;
+        }
+        const snapshot = dense
+          ? await feed._source.getDenseSnapshot(getQuery(viewer), {
+              signal: updateSignal,
+            })
+          : await feed._source.getSnapshot(getQuery(viewer), {
+              signal: updateSignal,
+            });
         updateSignal.throwIfAborted();
         feed._lastStatus = snapshot.status ?? 200;
         const sourceEpochMs = snapshot.observedAtMs;
@@ -51,14 +71,19 @@ export function createIngestion({
             ? msg('Source snapshot time unavailable')
             : `Source snapshot ${Math.max(2, Math.round(sourceAgeMs / 60_000))} min old`
           : null;
-        feed._lastSource = snapshot.source;
-        feed._lastCoverage = snapshot.coverage;
-        setSourceLabel(feed._lastSource);
+        // While density mode is live it owns the row's provenance: the 30 s
+        // worldwide snapshot still merges its records, but it must not relabel
+        // the layer as "one poll behind the world" when what the viewer is
+        // watching is a 5 s regional patch — nor push "last update" backwards
+        // to the older worldwide epoch.
+        if (dense || !feed._densityLive) {
+          feed._lastSource = snapshot.source;
+          feed._lastCoverage = snapshot.coverage;
+          setSourceLabel(feed._lastSource);
+          feed._lastUpdate = sourceEpochMs;
+        }
         const accepted = applySnapshot(snapshot, viewer);
         feed._count = accepted.count;
-        // Freshness belongs to the source snapshot, not the moment this browser
-        // received a cached 200 response.
-        feed._lastUpdate = sourceEpochMs;
         feed._lastTrackingRefreshOutcome = {
           epoch: trackingRefreshEpoch,
           status: 'accepted',
@@ -68,9 +93,17 @@ export function createIngestion({
         };
         console.log(`[Data:Flights] Updated: ${feed._count} aircraft`);
         applyPendingTrackingRestore();
+        return true;
       } catch (e) {
         if (updateSignal.aborted || e?.name === 'AbortError') {
           throw new DOMException('Flights update aborted', 'AbortError');
+        }
+        if (dense) {
+          // A failed patch is not the layer failing: the ordinary poll still
+          // owns the row's health, error text and backoff. density.js counts
+          // these failures, exposes them in its status and backs off.
+          console.warn('[Data:Flights] Density fetch error:', e);
+          return false;
         }
         console.warn('[Data:Flights] Fetch error:', e);
         feed._backoff = true;

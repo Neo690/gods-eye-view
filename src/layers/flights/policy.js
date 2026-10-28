@@ -155,6 +155,29 @@ export const TRAIL_MAX_POINTS = 400;
 
 export const RENDER_DELAY_SEC = 30;
 
+/** @constant {number} Display latency in seconds while density mode is on:
+ *  one density patch interval, not one worldwide poll. The delay exists so the
+ *  fleet interpolates BETWEEN two known fixes rather than extrapolating ahead
+ *  and snapping back; it must therefore equal the interval the fixes arrive on,
+ *  or a 5 s patch would still be shown 30 s late. */
+
+export const DENSITY_RENDER_DELAY_SEC = 5;
+
+/**
+ * The display latency this layer should render at right now.
+ *
+ * Density mode writes `_renderDelaySec` on the layer state; everything else
+ * leaves it at RENDER_DELAY_SEC. Reading it through one function keeps the
+ * dead-reckoning clock and the trail's seed time in step — they must agree, or
+ * the trail head detaches from the icon.
+ * @param {object} [state] Flight layer state.
+ * @returns {number} Seconds to render behind real time.
+ */
+export function renderDelaySec(state) {
+  const value = state?._renderDelaySec;
+  return Number.isFinite(value) && value > 0 ? value : RENDER_DELAY_SEC;
+}
+
 /** @constant {number} Polls an aircraft may miss before removal (transient OpenSky dropouts). */
 
 // --- Landed-plane fast cull (owner field report 2026-07-02: "phantom" planes

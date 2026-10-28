@@ -583,3 +583,193 @@ test('track backfill proxy returns 502 on an oversized upstream body and caches 
   assert.equal(res2.statusCode, 502);
   assert.equal(callCount, 1);
 });
+
+test('density mode answers from the 250 nm patch and never reads the worldwide snapshot', async (t) => {
+  environment(t, {
+    OPENSKY_CLIENT_ID: undefined,
+    OPENSKY_CLIENT_SECRET: undefined,
+    OPENSKY_AUTH_MODE: 'anon',
+  });
+  t.mock.method(console, 'warn', () => {});
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    calls.push(url);
+    if (url.includes('/lat/'))
+      return Response.json({
+        now: Date.now() / 1000,
+        ac: [{ hex: 'abc123', lat: 30, lon: -97, alt_baro: 9000 }],
+      });
+    if (url.includes('/states/'))
+      return Response.json({ time: Math.floor(Date.now() / 1000), states: [] });
+    throw Error(`Unexpected URL: ${url}`);
+  });
+  const fresh = await import(
+    `../../server/providers/aircraft/opensky.js?density=provenance`
+  );
+  const request = install(fresh.openSkyProxy());
+  const response = await request('/api/flights', '?density=1&lat=30&lon=-97');
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers['x-density-cache'], 'MISS');
+  assert.equal(response.headers['x-flight-source'], 'adsb.lol');
+  assert.equal(response.headers['x-feed-source'], 'adsb.lol');
+  assert.match(response.headers['x-flight-coverage'], /250nm/);
+  assert.equal(JSON.parse(response.body).states[0][0], 'abc123');
+  assert.equal(
+    calls.filter((url) => url.includes('/states/')).length,
+    0,
+    'density mode spends no OpenSky credits',
+  );
+});
+
+test('density patches are cached for 5 s and share one read per second across anchors', async (t) => {
+  environment(t, {
+    OPENSKY_CLIENT_ID: undefined,
+    OPENSKY_CLIENT_SECRET: undefined,
+    OPENSKY_AUTH_MODE: 'anon',
+  });
+  t.mock.method(console, 'warn', () => {});
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  let reads = 0;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (!url.includes('/lat/')) throw Error(`Unexpected URL: ${url}`);
+    reads += 1;
+    return Response.json({
+      now: now / 1000,
+      ac: [{ hex: 'abc123', lat: 30, lon: -97, alt_baro: 9000 }],
+    });
+  });
+  const fresh = await import(
+    `../../server/providers/aircraft/opensky.js?density=budget`
+  );
+  const request = install(fresh.openSkyProxy());
+
+  assert.equal(
+    (await request('/api/flights', '?density=1&lat=30&lon=-97')).headers[
+      'x-density-cache'
+    ],
+    'MISS',
+  );
+  assert.equal(
+    (await request('/api/flights', '?density=1&lat=30&lon=-97')).headers[
+      'x-density-cache'
+    ],
+    'HIT',
+  );
+  assert.equal(reads, 1, 'the 5 s cache answered the repeat');
+
+  now += 5000;
+  assert.equal(
+    (await request('/api/flights', '?density=1&lat=30&lon=-97')).headers[
+      'x-density-cache'
+    ],
+    'MISS',
+  );
+  assert.equal(reads, 2);
+
+  // A viewer jumping to a new anchor 200 ms later gets the last good patch
+  // rather than a second upstream read: one read per second, shared.
+  now += 200;
+  const jumped = await request('/api/flights', '?density=1&lat=31.5&lon=-96.5');
+  assert.equal(jumped.statusCode, 200);
+  assert.equal(jumped.headers['x-density-cache'], 'STALE');
+  assert.equal(jumped.headers['x-density-retry-after-seconds'], '1');
+  assert.equal(reads, 2, 'the budget refused the extra read');
+});
+
+test('a refused density read backs off, then recovers on its own', async (t) => {
+  environment(t, {
+    OPENSKY_CLIENT_ID: undefined,
+    OPENSKY_CLIENT_SECRET: undefined,
+    OPENSKY_AUTH_MODE: 'anon',
+  });
+  t.mock.method(console, 'warn', () => {});
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  let refuse = true;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (!url.includes('/lat/')) throw Error(`Unexpected URL: ${url}`);
+    if (refuse) return new Response('', { status: 429 });
+    return Response.json({
+      now: now / 1000,
+      ac: [{ hex: 'abc123', lat: 30, lon: -97, alt_baro: 9000 }],
+    });
+  });
+  const fresh = await import(
+    `../../server/providers/aircraft/opensky.js?density=backoff`
+  );
+  const request = install(fresh.openSkyProxy());
+
+  const failed = await request('/api/flights', '?density=1&lat=30&lon=-97');
+  assert.equal(failed.statusCode, 503);
+  assert.equal(failed.headers['x-density-cache'], 'FAILED');
+  assert.equal(failed.headers['x-density-retry-after-seconds'], '5');
+
+  now += 1000;
+  const cooling = await request('/api/flights', '?density=1&lat=30&lon=-97');
+  assert.equal(cooling.statusCode, 503);
+  assert.equal(cooling.headers['x-density-cache'], 'COOLDOWN');
+
+  // Past the cooldown the next read succeeds and clears it.
+  now += 5000;
+  refuse = false;
+  const recovered = await request('/api/flights', '?density=1&lat=30&lon=-97');
+  assert.equal(recovered.statusCode, 200);
+  assert.equal(recovered.headers['x-density-cache'], 'MISS');
+});
+
+test('with no patch ever read, density falls back to the cached worldwide snapshot', async (t) => {
+  environment(t, {
+    OPENSKY_CLIENT_ID: undefined,
+    OPENSKY_CLIENT_SECRET: undefined,
+    OPENSKY_AUTH_MODE: 'anon',
+  });
+  t.mock.method(console, 'warn', () => {});
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (url.includes('/states/'))
+      return Response.json({
+        time: Math.floor(now / 1000),
+        states: [['abc123', 'TEST', 'US', 0, 0, -97, 30, 9000]],
+      });
+    if (url.includes('/lat/')) return new Response('', { status: 500 });
+    throw Error(`Unexpected URL: ${url}`);
+  });
+  const fresh = await import(
+    `../../server/providers/aircraft/opensky.js?density=fallback`
+  );
+  const request = install(fresh.openSkyProxy());
+
+  // Prime the worldwide cache with an ordinary poll, then fail the patch read.
+  assert.equal(
+    (await request('/api/flights', '?lat=30&lon=-97')).statusCode,
+    200,
+  );
+  const response = await request('/api/flights', '?density=1&lat=30&lon=-97');
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers['x-density-cache'], 'FALLBACK-GLOBAL');
+  assert.equal(response.headers['x-flight-source'], 'OpenSky Network');
+  assert.equal(JSON.parse(response.body).states[0][0], 'abc123');
+});
+
+test('density mode without a view anchor is a client error, not an upstream read', async (t) => {
+  environment(t, {
+    OPENSKY_CLIENT_ID: undefined,
+    OPENSKY_CLIENT_SECRET: undefined,
+    OPENSKY_AUTH_MODE: 'anon',
+  });
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    calls += 1;
+    return Response.json({});
+  });
+  const fresh = await import(
+    `../../server/providers/aircraft/opensky.js?density=anchor`
+  );
+  const request = install(fresh.openSkyProxy());
+  const response = await request('/api/flights', '?density=1');
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.headers['x-density-cache'], 'BAD-ANCHOR');
+  assert.equal(calls, 0);
+});

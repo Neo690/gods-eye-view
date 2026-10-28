@@ -20,7 +20,7 @@ import {
   TRACKED_MODEL_MAX_LOAD_FAILS,
   TRACKED_MODEL_RETRY_BACKOFF_MS,
   TRAIL_MAX_POINTS,
-  RENDER_DELAY_SEC,
+  renderDelaySec,
   TRAIL_COLOR,
   CYAN_TRANSPARENT,
 } from './policy.js';
@@ -383,7 +383,7 @@ export function createTracking({
     // as they age past the delay.
     const seedRenderTime = Cesium.JulianDate.addSeconds(
       Cesium.JulianDate.now(),
-      -RENDER_DELAY_SEC,
+      -renderDelaySec(flightState),
       flightState._scratchWarmupTime,
     );
     for (const fix of history) {
