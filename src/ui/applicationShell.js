@@ -463,6 +463,7 @@ export class StyleManager extends ShellFacade {
       elements: {
         _models3dBtn: this._models3dBtn,
         _models3dModeRow: this._models3dModeRow,
+        _densityBtn: this._densityBtn,
       },
       readDataManager: () => this._dataManager,
       layout: () => this._layoutRightPanels(),
@@ -530,6 +531,7 @@ export class StyleManager extends ShellFacade {
         _detectionOpacitySlider: this._detectionOpacitySlider,
         _celestialBtn: this._celestialBtn,
         _models3dBtn: this._models3dBtn,
+        _densityBtn: this._densityBtn,
         _scopeFeatherValue: this._scopeFeatherValue,
         _sharpenSliderValue: this._sharpenSliderValue,
         _detectionDensityValue: this._detectionDensityValue,
@@ -560,6 +562,9 @@ export class StyleManager extends ShellFacade {
         _setModels3dEnabled: (...args) => this._setModels3dEnabled(...args),
         _syncModels3dModeRow: (...args) => this._syncModels3dModeRow(...args),
         _setModels3dMode: (...args) => this._setModels3dMode(...args),
+        _setDensityEnabled: (...args) => this._setDensityEnabled(...args),
+        _syncDensityButtonState: (...args) =>
+          this._syncDensityButtonState(...args),
       },
       readState: () => ({
         shareLinkManager: this.shareLinkManager,
@@ -569,6 +574,7 @@ export class StyleManager extends ShellFacade {
         celestialRing: this.celestialRing,
         celestialRingEnabled: this.celestialRingEnabled,
         _models3dEnabled: this._models3dEnabled,
+        _densityEnabled: this._densityEnabled,
         _models3dModeBtns: this._models3dModeBtns,
         _detectionAllocationBtns: this._detectionAllocationBtns,
       }),
@@ -597,6 +603,7 @@ export class StyleManager extends ShellFacade {
     this._initClearSelectedLayersButton();
     this._initHUDToggle();
     this._initModels3dToggle();
+    this._initDensityToggle();
     this._applyGlobalPostDefaults();
     this._initOrbit();
     this._initRecordingOverlay();

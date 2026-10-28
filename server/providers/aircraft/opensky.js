@@ -385,6 +385,246 @@ async function serveAdsbLolPointFallback(req, res, requestedMode, reason) {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Density mode: a 5 s viewport-scoped refresh for the Flights layer.
+//
+// The layer's ordinary poll is one worldwide OpenSky snapshot every 30 s, and
+// the whole fleet renders one poll interval behind it. A viewer who wants the
+// motion to look live (the reason adsb.lol/adsb.fi/globe frontends feel busier)
+// needs a second, cheap read: the 250 nm patch around the view centre, every
+// 5 s, from a keyless volunteer network. This path serves exactly that and
+// nothing else changed about the ordinary route.
+//
+// The upstream is a volunteer service, so the budget is deliberate and shared
+// across every viewer of this server: at most one upstream read per second
+// (DENSITY_MIN_GAP_MS), a 5 s cache per 0.25° anchor, a doubling cooldown after
+// a failure, and three fallbacks in order — this anchor's cached patch, the
+// most recent patch from any anchor, then the cached worldwide OpenSky body.
+// A viewer moving the camera therefore never multiplies upstream traffic: the
+// anchor rounds to 0.25°, so panning inside a small area is one request.
+const DENSITY_CACHE_MS = 5000;
+const DENSITY_MIN_GAP_MS = 1000;
+const DENSITY_BACKOFF_BASE_MS = 5000;
+const DENSITY_BACKOFF_MAX_MS = 60_000;
+const DENSITY_CACHE_MAX = 16;
+const DENSITY_TIMEOUT_MS = 8000;
+const DENSITY_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+const DENSITY_USER_AGENT = 'gods-eye-view-density/1.0';
+/** Cached 250 nm patches, keyed by a 0.25° view anchor. */
+const _densityCache = new Map();
+/** Per-anchor single-flight map, so two viewers on one anchor share a read. */
+const _densityInFlight = new Map();
+/** Most recent good patch from ANY anchor — the second fallback. */
+let _densityLastGood = null;
+/** Epoch-ms before which no new upstream read may start (the 1 req/s gate). */
+let _densityNextReadAt = 0;
+/** Epoch-ms before which the upstream has already refused us (backoff). */
+let _densityCooldownUntil = 0;
+/** Consecutive upstream failures, which is what the backoff doubles. */
+let _densityFailures = 0;
+
+/** Does this request ask for the density patch? */
+function densityRequested(req) {
+  const incoming = new URL(req?.url || '', 'http://localhost');
+  const value = String(incoming.searchParams.get('density') || '').trim();
+  return value === '1' || value.toLowerCase() === 'true';
+}
+
+/**
+ * Read this anchor's fresh patch, or explain why it could not be read.
+ *
+ * The order matters for a volunteer upstream: the budget gate is checked
+ * before any fetch, so a camera sweep can never spend more than one read per
+ * second no matter how many requests arrive; a cached patch keeps answering
+ * during a cooldown; and only a cold anchor with no budget left reports
+ * `budget` rather than hammering upstream.
+ *
+ * @param {{latitude:number,longitude:number}} anchor View centre.
+ * @param {number} now Epoch-ms of this request.
+ * @returns {Promise<{record: object|null, cacheStatus: string, retryAfterMs?: number}>}
+ */
+async function readDensityPatch(anchor, now) {
+  const roundedLat = Math.round(anchor.latitude * 4) / 4;
+  const roundedLon = Math.round(anchor.longitude * 4) / 4;
+  const cacheKey = `${roundedLat.toFixed(2)},${roundedLon.toFixed(2)}`;
+  const cached = _densityCache.get(cacheKey);
+  if (cached && now - cached.cachedAt < DENSITY_CACHE_MS)
+    return { record: cached, cacheStatus: 'HIT' };
+  if (now < _densityCooldownUntil)
+    return {
+      record: cached || _densityLastGood,
+      cacheStatus: cached || _densityLastGood ? 'STALE' : 'COOLDOWN',
+      retryAfterMs: _densityCooldownUntil - now,
+    };
+  if (now < _densityNextReadAt)
+    return {
+      record: cached || _densityLastGood,
+      cacheStatus: cached || _densityLastGood ? 'STALE' : 'BUDGET',
+      retryAfterMs: _densityNextReadAt - now,
+    };
+  _densityNextReadAt = now + DENSITY_MIN_GAP_MS;
+
+  const request = coalesceProxyRequest(_densityInFlight, cacheKey, async () => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), DENSITY_TIMEOUT_MS);
+    try {
+      const upstream = await fetch(
+        `https://api.adsb.lol/v2/lat/${roundedLat}/lon/${roundedLon}/dist/${ADSBLOL_POINT_RADIUS_NM}`,
+        {
+          headers: {
+            Accept: 'application/json',
+            'User-Agent': DENSITY_USER_AGENT,
+          },
+          signal: controller.signal,
+        },
+      );
+      if (!upstream.ok) {
+        const error = new Error(`upstream HTTP ${upstream.status}`);
+        error.status = upstream.status;
+        // A refusal that names its own retry window is believed; anything
+        // else falls back to the doubling cooldown below.
+        const retryAfter = Number(
+          upstream.headers.get('retry-after') ||
+            upstream.headers.get('x-ratelimit-reset'),
+        );
+        if (Number.isFinite(retryAfter) && retryAfter > 0)
+          error.retryAfterMs = Math.min(
+            retryAfter * 1000,
+            DENSITY_BACKOFF_MAX_MS,
+          );
+        void upstream.body?.cancel().catch(() => {});
+        throw error;
+      }
+      const payload = await readResponseJsonCapped(
+        upstream,
+        DENSITY_MAX_RESPONSE_BYTES,
+      );
+      const normalized = normalizeAdsbLolPointResponse(payload);
+      const record = {
+        body: JSON.stringify(normalized),
+        cachedAt: Date.now(),
+        count: normalized.states.length,
+        anchor: cacheKey,
+      };
+      _densityCache.delete(cacheKey);
+      _densityCache.set(cacheKey, record);
+      while (_densityCache.size > DENSITY_CACHE_MAX)
+        _densityCache.delete(_densityCache.keys().next().value);
+      _densityLastGood = record;
+      _densityFailures = 0;
+      _densityCooldownUntil = 0;
+      return record;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  });
+  try {
+    const record = await request.promise;
+    return {
+      record,
+      cacheStatus: request.shared ? 'INFLIGHT' : 'MISS',
+    };
+  } catch (error) {
+    _densityFailures += 1;
+    const backoff = Math.min(
+      error?.retryAfterMs ??
+        DENSITY_BACKOFF_BASE_MS * 2 ** Math.min(_densityFailures - 1, 8),
+      DENSITY_BACKOFF_MAX_MS,
+    );
+    _densityCooldownUntil = Date.now() + backoff;
+    if (!request.shared && error?.name !== 'AbortError') {
+      console.warn(
+        '[Flights Density] upstream failed, backing off',
+        `${Math.round(backoff / 1000)}s:`,
+        error?.message || error,
+      );
+    }
+    return {
+      record: cached || _densityLastGood,
+      cacheStatus: cached || _densityLastGood ? 'STALE' : 'FAILED',
+      retryAfterMs: backoff,
+    };
+  }
+}
+
+/**
+ * Answer `/api/flights?density=1` from the 250 nm patch, falling back rather
+ * than failing.
+ *
+ * Fallbacks, in order: this anchor's patch (fresh or cached), the last good
+ * patch from any anchor, then the cached worldwide OpenSky body so the layer
+ * keeps rendering, and only then a 503. Every answer says which of those it is
+ * in `X-Density-Cache`, so the client can report provenance honestly instead
+ * of presenting a stale patch as live.
+ *
+ * @param {import('node:http').IncomingMessage} req
+ * @param {import('node:http').ServerResponse} res
+ * @returns {Promise<boolean>} True when the request was answered here.
+ */
+async function serveDensityPatch(req, res) {
+  const anchor = adsbLolFallbackAnchor(req);
+  if (!anchor) {
+    res.writeHead(400, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      'X-Density-Cache': 'BAD-ANCHOR',
+    });
+    res.end(
+      JSON.stringify({
+        error: 'Density mode needs a numeric lat and lon view anchor.',
+      }),
+    );
+    return true;
+  }
+  const result = await readDensityPatch(anchor, Date.now());
+  const headers = {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store',
+    'X-Density-Cache': result.cacheStatus,
+  };
+  if (Number.isFinite(result.retryAfterMs))
+    headers['X-Density-Retry-After-Seconds'] = String(
+      Math.max(1, Math.round(result.retryAfterMs / 1000)),
+    );
+  if (result.record) {
+    res.writeHead(200, {
+      ...headers,
+      'X-Feed-Source': 'adsb.lol',
+      'X-Flight-Source': 'adsb.lol',
+      'X-Flight-Coverage': `${ADSBLOL_POINT_RADIUS_NM}nm regional density`,
+      'X-Flight-Count': String(result.record.count),
+    });
+    res.end(result.record.body);
+    return true;
+  }
+  // Nothing regional has ever been read: the cached worldwide snapshot is a
+  // coarser answer, but it is a real one, and it keeps the layer alive.
+  if (_openskyCacheBody) {
+    res.writeHead(200, {
+      ...headers,
+      'X-Density-Cache': 'FALLBACK-GLOBAL',
+      'X-Feed-Source': 'OpenSky Network',
+      'X-Flight-Source': 'OpenSky Network',
+      'X-Flight-Coverage': 'worldwide upstream snapshot (density fallback)',
+    });
+    res.end(_openskyCacheBody);
+    return true;
+  }
+  // Nothing at all to serve. The reason stays in X-Density-Cache (FAILED,
+  // COOLDOWN or BUDGET) so a cold start can be told apart from a refusal,
+  // rather than collapsing every case into one word.
+  res.writeHead(503, {
+    ...headers,
+    'Retry-After': '5',
+  });
+  res.end(
+    JSON.stringify({
+      error: 'No regional density patch available yet.',
+    }),
+  );
+  return true;
+}
+
 function openSkySourceEpochMs(body) {
   try {
     const seconds = Number(JSON.parse(body)?.time);
@@ -423,6 +663,12 @@ export function openSkyProxy() {
         // This mount also matches its /track route, served by its own handler.
         if (new URL(req.url || '/', 'http://localhost').pathname !== '/')
           return next();
+        // Density mode is its own answer: it never reads the worldwide
+        // snapshot, and its budget must not consume OpenSky credits.
+        if (densityRequested(req)) {
+          await serveDensityPatch(req, res);
+          return;
+        }
         res.setHeader('X-Feed-Source', 'OpenSky Network');
         const requestedMode = normalizeOpenSkyAuthMode(
           process.env.OPENSKY_AUTH_MODE,

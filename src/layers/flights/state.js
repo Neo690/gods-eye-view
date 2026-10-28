@@ -1,7 +1,7 @@
 import { FlightRecords } from './records.js';
 import { createFlightFeed } from './ingestion.js';
 import * as Cesium from 'cesium';
-import { ENRICH_AMBIENT_BUDGET_CEIL } from './policy.js';
+import { ENRICH_AMBIENT_BUDGET_CEIL, RENDER_DELAY_SEC } from './policy.js';
 
 export function createFlightState({ source, services }) {
   const { createGroundSnap } = services.groundSnap;
@@ -66,6 +66,14 @@ export function createFlightState({ source, services }) {
   flightState._models3dEnabled = true;
 
   flightState._models3dMode = 'proximity';
+
+  /** Display latency in seconds. One worldwide poll interval by default; the
+   *  layer's `density` param drops it to the patch interval (see policy.js). */
+  flightState._renderDelaySec = RENDER_DELAY_SEC;
+
+  /** Density mode (5 s regional patch). Off by default: it spends a volunteer
+   *  network's rate limit, so only an operator turns it on. */
+  flightState._densityEnabled = false;
   // 'proximity' = nearest MODEL_MAX in view; 'all' = every in-view plane (≤ MODEL_MAX_ALL)
 
   flightState._lastModelCapWarnMs = 0;

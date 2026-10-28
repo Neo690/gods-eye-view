@@ -41,6 +41,9 @@ export class DisplayBindings {
   get _models3dEnabled() {
     return this.readState()._models3dEnabled;
   }
+  get _densityEnabled() {
+    return this.readState()._densityEnabled === true;
+  }
   get _models3dModeBtns() {
     return this.readState()._models3dModeBtns;
   }
@@ -119,6 +122,7 @@ export class DisplayBindings {
         celestialButton: this._celestialBtn,
         modelsButton: this._models3dBtn,
         modelModeButtons: this._models3dBtn ? this._models3dModeBtns : [],
+        densityButton: this._densityBtn,
       },
       actions: {
         setStyle: (style) => this.setStyle(style, { userInitiated: true }),
@@ -215,6 +219,7 @@ export class DisplayBindings {
           this._setModels3dEnabled(!this._models3dEnabled);
           this._syncModels3dModeRow();
         },
+        toggleDensity: () => this._setDensityEnabled(!this._densityEnabled),
         setModelsMode: (mode) => this._setModels3dMode(mode),
       },
     });

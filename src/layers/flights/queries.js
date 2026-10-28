@@ -14,6 +14,9 @@ import {
   LANDED_SPEED_MAX_MPS,
   FOCUS_EVIDENCE_DEV,
   FLEET_DR_INTERVAL_MS,
+  DENSITY_RENDER_DELAY_SEC,
+  RENDER_DELAY_SEC,
+  renderDelaySec,
 } from './policy.js';
 import { emergencyBroadcastPhrase } from '../../data/aircraftEmergency.js';
 
@@ -363,6 +366,24 @@ export function createQueries({
         // own conversions, so this never touches the ordinary fleet.
         parts.tracking._refreshTr3bForStyle();
       }
+      if (
+        typeof params.density === 'boolean' &&
+        params.density !== flightState._densityEnabled
+      ) {
+        flightState._densityEnabled = params.density;
+        // The display delay follows the cadence: leaving it at 30 s would show
+        // 5 s patches one worldwide poll late, which is the whole thing the
+        // mode exists to remove.
+        flightState._renderDelaySec = params.density
+          ? DENSITY_RENDER_DELAY_SEC
+          : RENDER_DELAY_SEC;
+        // The timer belongs to the VISIBLE layer; enable()/disable() own the
+        // off-screen case so a hidden layer never polls on its own.
+        if (flightState._billboardCollection?.show) {
+          if (params.density) parts.density.start();
+          else parts.density.stop();
+        }
+      }
       if (Object.hasOwn(params, 'selectedFlightsTrackingId')) {
         const requested = _normalizeTrackedIcao(
           params.selectedFlightsTrackingId,
@@ -393,7 +414,22 @@ export function createQueries({
         models3d: flightState._models3dEnabled,
         models3dMode: flightState._models3dMode,
         irBoost: flightState._irBoost,
+        density: flightState._densityEnabled,
         selectedFlightsTrackingId: flightState._trackedIcao,
+      };
+    },
+
+    /**
+     * The density timer's own state: whether it is polling, how many patches it
+     * has applied, its current delay, and whether it has stood down to a slow
+     * retry. Exposed so the panel, voice and tests read the same truth.
+     */
+    getDensityStatus() {
+      return {
+        ...parts.density.getStatus(),
+        // The delay the fleet is actually rendering at, so a caller can see the
+        // mode's effect rather than infer it from the cadence.
+        renderDelaySec: renderDelaySec(flightState),
       };
     },
 

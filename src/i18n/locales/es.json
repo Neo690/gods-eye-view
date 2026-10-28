@@ -3070,5 +3070,6 @@
   "Zone rules ({count})": "Reglas de zona ({count})",
   "The map is not ready yet": "El mapa aún no está listo",
   "That is as many zones as the panel keeps ({max})": "El panel no guarda más de {max} zonas",
-  "Not an ICAO24 or an MMSI: {list}": "Ni un ICAO24 ni un MMSI: {list}"
+  "Not an ICAO24 or an MMSI: {list}": "Ni un ICAO24 ni un MMSI: {list}",
+  "Density — refetch the 250 nm around the view every 5 seconds (spends a volunteer feed's rate limit)": "Densidad — recarga los 250 nm alrededor de la vista cada 5 segundos (consume la cuota de una fuente voluntaria)"
 }

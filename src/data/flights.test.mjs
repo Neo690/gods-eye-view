@@ -2349,3 +2349,17 @@ test('display floor: two contacts on the same cell get their own outputs', () =>
   );
   assert.ok(Math.abs(_floorCarto(a).height - _floorCarto(b).height) < 0.05);
 });
+
+test('density is a layer param: it arms the mode and shortens the display delay', () => {
+  assert.equal(flightsLayer.getParams().density, false);
+  assert.equal(flightsLayer.getDensityStatus().renderDelaySec, 30);
+  assert.equal(flightsLayer.setParams({ density: true }), true);
+  assert.equal(flightsLayer.getParams().density, true);
+  assert.equal(flightsLayer.getDensityStatus().renderDelaySec, 5);
+  // This harness has no viewer, so setParams must not arm a timer: enable()
+  // starts it with a visible layer, disable() stops it.
+  assert.equal(flightsLayer.getDensityStatus().polling, false);
+  flightsLayer.setParams({ density: false });
+  assert.equal(flightsLayer.getParams().density, false);
+  assert.equal(flightsLayer.getDensityStatus().renderDelaySec, 30);
+});

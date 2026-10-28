@@ -3137,5 +3137,6 @@
   "Zone rules ({count})": "Правила зон ({count})",
   "The map is not ready yet": "Карта ещё не готова",
   "That is as many zones as the panel keeps ({max})": "Панель хранит не более {max} зон",
-  "Not an ICAO24 or an MMSI: {list}": "Ни ICAO24, ни MMSI: {list}"
+  "Not an ICAO24 or an MMSI: {list}": "Ни ICAO24, ни MMSI: {list}",
+  "Density — refetch the 250 nm around the view every 5 seconds (spends a volunteer feed's rate limit)": "Плотность — обновление 250 морских миль вокруг вида каждые 5 секунд (расходует лимит волонтёрского источника)"
 }
