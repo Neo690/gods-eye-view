@@ -96,11 +96,68 @@ time and keeps the WebView's storage, so provider keys survive.
 - Console output is mirrored to the device log — open Console.app and filter on
   `GodsEyeView`.
 
-## Not published from CI, unlike the APK
+## Published from CI, once it is given an identity
 
-`.github/workflows/ios-app.yml` compiles the shell for the simulator on a macOS
-runner: that proves the Swift, the project spec and the staged bundle build
-together. It deliberately publishes nothing — an installable `.ipa` needs an
-Apple signing identity and provisioning profile, which belong to an account, not
-to the repository. Add those as secrets and a paid macOS runner if an automatic
-`.ipa` is wanted later.
+`.github/workflows/ios-app.yml` has two jobs. The first compiles the shell for
+the simulator on a macOS runner, which proves the Swift, the project spec and the
+staged bundle build together; that needs nothing but the repository. The second
+archives the app, exports an **ad-hoc** `.ipa`, checks it, and publishes it as
+`gods-eye-view.ipa` in a rolling `ios-latest` release, the way `apk-latest`
+carries the APK.
+
+The packaging job cannot sign anything on its own, because an installable iOS
+app is signed by an Apple account. It looks for the signing material in the
+repository secrets and, when it is absent, prints a notice and skips instead of
+failing a push that could not have one. Add these under *Settings → Secrets and
+variables → Actions*:
+
+| Secret | What it holds |
+| --- | --- |
+| `APPLE_CERTIFICATE_P12_BASE64` | your signing identity, exported as a `.p12`, base64-encoded |
+| `APPLE_CERTIFICATE_PASSWORD` | the password you gave that `.p12` |
+| `APPLE_PROVISIONING_PROFILE_BASE64` | the ad-hoc `.mobileprovision`, base64-encoded |
+| `APPLE_TEAM_ID` | your ten-character team identifier |
+| `APPLE_SIGNING_CERTIFICATE` | optional; `Apple Distribution` by default |
+
+Ad-hoc means the app installs on the devices the profile names and no others.
+They do not have to be connected to the runner, but they do have to be in the
+profile when it is created, so register every phone you care about at
+[developer.apple.com](https://developer.apple.com) first. Ad-hoc export also
+needs a paid Apple Developer Program membership: a free Apple ID produces a
+development identity, which is a different export method — change `method` in
+`ExportOptions.plist` inside the workflow to `development` if that is what you
+have.
+
+Producing each value:
+
+```bash
+# the identity: Keychain Access → My Certificates → your Apple Distribution
+# certificate → Export… as a .p12, then
+base64 -i cert.p12 | tr -d '\n'
+
+# the profile: developer.apple.com → Profiles → your Ad Hoc profile → Download
+base64 -i profile.mobileprovision | tr -d '\n'
+
+# the team id: "Apple Team ID" on your developer account's membership page
+```
+
+The workflow refuses, with the reason, a profile that does not belong to
+`com.godseye.view` under your team, one that has expired, and one that names no
+devices — so a release cannot carry an `.ipa` nobody can install. It then checks
+the exported app itself: the console is inside it, the bundle identifier is the
+one the profile covers, the signature names your team, and the profile embedded
+in the app is the one you supplied. Signing material lives only in a throwaway
+keychain on the runner and is deleted at the end of the job.
+
+To get the published `.ipa` onto a phone:
+
+- **From a Mac:** open Finder, select the device, drag `gods-eye-view.ipa` onto
+  it.
+- **From Windows:** the file is signed for devices but not by *your* Apple ID,
+  so re-sign it first — Sideloadly or AltStore does that, and the WebView's
+  storage survives, so provider keys already on the phone are kept.
+- **Rebuilding the same commit:** run the `iOS app` workflow from *Actions → Run
+  workflow*. Editing CI or a document publishes nothing by itself.
+
+The ad-hoc profile expires, and so does the app built on it; the release notes
+carry that date, and the fix is to publish again with a fresh profile.
