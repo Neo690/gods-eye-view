@@ -15,6 +15,10 @@
  *   npm run apk:seed-keys -- --from=.env      a specific file
  *   node scripts/seed-phone-keys.mjs --serial=R58M --port=9333
  *   node scripts/seed-phone-keys.mjs --dry-run          names only, writes nothing
+ *   node scripts/seed-phone-keys.mjs --check            what the phone has, reads only
+ *
+ * `--check` reports which providers the app has configured and changes nothing:
+ * it reads the panel's own status route and sends no save. It needs no `.env`.
  *
  * The phone has to be the one adb sees, with the app running — this starts it
  * if it is not. Run `npm run apk:install` first when the build is older than
@@ -66,6 +70,7 @@ export const KNOWN_FLAGS = new Set([
   'port',
   'adb',
   'dry-run',
+  'check',
   'help',
 ]);
 
@@ -198,6 +203,7 @@ export function providerSummary(status) {
     lit: keys.filter((entry) => entry?.set).length,
     total: keys.length,
     on: keys.filter((entry) => entry?.set).map((entry) => entry.id),
+    off: keys.filter((entry) => !entry?.set).map((entry) => entry.id),
   };
 }
 
@@ -266,12 +272,43 @@ export function saveOutcome(payload) {
   };
 }
 
+/**
+ * The expression a check evaluates: read the panel's own status and hand it
+ * back untouched. It issues one GET and never posts, so nothing about the
+ * phone's configuration can change because a check ran.
+ * @returns {string}
+ */
+export function checkExpression() {
+  return `(async () => {
+  const response = await fetch(${JSON.stringify(STATUS_ROUTE)}, { cache: 'no-store' });
+  const body = await response.json().catch(() => null);
+  return JSON.stringify({ status: response.status, body });
+})()`;
+}
+
+/**
+ * What the app's status says, reduced to which providers are configured. The
+ * payload carries provider ids and presence, never a value, so the result is
+ * safe to print.
+ * @param {unknown} payload Parsed evaluate result.
+ */
+export function checkOutcome(payload) {
+  const status = payload?.status;
+  const keys = statusKeys(payload?.body);
+  if (status !== 200 || !keys.length)
+    return {
+      ok: false,
+      reason: `the app answered ${status ?? 'nothing'} for its provider status`,
+    };
+  return { ok: true, ...providerSummary(payload.body) };
+}
+
 /** Usage text: a command explains itself where it is typed. */
 export function usage() {
   return [
     "Replays this machine's provider keys into the app on the phone.",
     '',
-    '  npm run apk:seed-keys [-- --from=<file>] [--serial=<id>] [--port=<n>] [--dry-run]',
+    '  npm run apk:seed-keys [-- --from=<file>] [--serial=<id>] [--port=<n>] [--dry-run] [--check]',
     '',
     '  --from=<file>   .env to read; default: the installed desktop app, then',
     '                  ./.env, then ./.env.deploy',
@@ -279,6 +316,8 @@ export function usage() {
     '  --port=<n>      local port for the WebView socket (default 9333)',
     '  --adb=<path>    adb binary, when it is not on PATH',
     '  --dry-run       say which names would be written, write nothing',
+    '  --check         read the phone and name the configured providers; writes',
+    '                  nothing and reads no .env',
     '  --help          this text',
   ].join('\n');
 }
@@ -290,6 +329,24 @@ function runCommand(adb, args) {
     status: result.status ?? 1,
     stdout: result.stdout ?? '',
     stderr: result.stderr ?? (result.error ? String(result.error.message) : ''),
+  };
+}
+
+/**
+ * The one device this run targets, with the adb worth using. The caller gets
+ * the reason rather than an exception, so both the check and the save can
+ * report it the same way.
+ * @param {{adb?: string|boolean, serial?: string|boolean}} options
+ * @returns {{adb: string, serial: string|null, error: string|null}}
+ */
+function resolveTarget(options) {
+  const resolved = resolveAdb({
+    explicit: typeof options.adb === 'string' ? options.adb : undefined,
+  });
+  const devices = runCommand(resolved.adb, ['devices']);
+  return {
+    adb: resolved.adb,
+    ...pickDevice(devices.stdout, { serial: options.serial }),
   };
 }
 
@@ -483,6 +540,55 @@ export async function seedPhoneKeys({
 }
 
 /**
+ * Read the app on the phone and report which providers are configured. It
+ * writes nothing: the expression it evaluates only reads the status route, and
+ * the single adb call it leaves behind undoes the forward it added.
+ * @param {object} input
+ * @param {string} [input.adb]
+ * @param {string} input.serial
+ * @param {number} [input.port]
+ * @param {Function} [input.run]
+ * @param {Function} [input.fetchImpl]
+ * @param {(ms: number) => Promise<void>} [input.wait]
+ * @param {(line: string) => void} [input.log]
+ * @param {Function} [input.attach] Device attachment, injectable for tests.
+ * @param {Function} [input.evaluate] Page evaluation, injectable for tests.
+ * @returns {Promise<{ok: boolean, reason?: string, lit?: number, total?: number, on?: string[], off?: string[]}>}
+ */
+export async function checkPhoneKeys({
+  adb = 'adb',
+  serial,
+  port = DEFAULT_DEBUG_PORT,
+  run = runCommand,
+  fetchImpl = globalThis.fetch,
+  wait = delay,
+  log = console.log,
+  attach = attachToApp,
+  evaluate = evaluateOver,
+} = {}) {
+  const { socket, forward } = await attach({
+    adb,
+    serial,
+    port,
+    run,
+    fetchImpl,
+    wait,
+    log,
+  });
+  try {
+    return checkOutcome(JSON.parse(await evaluate(socket, checkExpression())));
+  } finally {
+    run(adb, ['-s', serial, 'forward', '--remove', `tcp:${port}`]);
+    void forward;
+    try {
+      socket.close();
+    } catch {
+      /* the page may already have reloaded */
+    }
+  }
+}
+
+/**
  * Read a `.env`, keep the names the app knows, and report what a save would do.
  * @param {object} input
  * @param {string} input.file
@@ -507,6 +613,33 @@ export async function main(argv = process.argv.slice(2)) {
   if (options.help) {
     console.log(usage());
     return 0;
+  }
+  if (options.check) {
+    // A check reports the device's own state: it reads no `.env` and writes
+    // nothing to the phone.
+    const target = resolveTarget(options);
+    if (target.error) {
+      console.error(target.error);
+      return 2;
+    }
+    try {
+      const result = await checkPhoneKeys({
+        adb: target.adb,
+        serial: target.serial,
+        port: Number(options.port) || DEFAULT_DEBUG_PORT,
+      });
+      if (!result.ok) {
+        console.error(result.reason);
+        return 1;
+      }
+      console.log(`${result.lit}/${result.total} providers on`);
+      console.log(`on:  ${result.on.join(', ') || 'none'}`);
+      console.log(`off: ${result.off.join(', ') || 'none'}`);
+      return 0;
+    } catch (error) {
+      console.error(error.message);
+      return 1;
+    }
   }
 
   const known = knownKeySetupEnvVars();
@@ -558,20 +691,16 @@ export async function main(argv = process.argv.slice(2)) {
     return 1;
   }
 
-  const resolved = resolveAdb({
-    explicit: typeof options.adb === 'string' ? options.adb : undefined,
-  });
-  const devices = runCommand(resolved.adb, ['devices']);
-  const picked = pickDevice(devices.stdout, { serial: options.serial });
-  if (picked.error) {
-    console.error(picked.error);
+  const target = resolveTarget(options);
+  if (target.error) {
+    console.error(target.error);
     return 2;
   }
 
   try {
     const result = await seedPhoneKeys({
-      adb: resolved.adb,
-      serial: picked.serial,
+      adb: target.adb,
+      serial: target.serial,
       updates,
       dryRun: Boolean(options['dry-run']),
       port: Number(options.port) || DEFAULT_DEBUG_PORT,

@@ -9,6 +9,11 @@ import {
   ASSET_HOST,
   DEFAULT_DEBUG_PORT,
   KNOWN_FLAGS,
+  SAVE_ROUTE,
+  STATUS_ROUTE,
+  checkExpression,
+  checkOutcome,
+  checkPhoneKeys,
   devtoolsSocket,
   envCandidates,
   parseSeedEnv,
@@ -32,6 +37,7 @@ const tempEnv = (text) => {
 
 test('only the documented flags are accepted', () => {
   assert.deepEqual(parseArgs(['--dry-run'], KNOWN_FLAGS), { 'dry-run': true });
+  assert.deepEqual(parseArgs(['--check'], KNOWN_FLAGS), { check: true });
   assert.deepEqual(
     parseArgs(
       ['--from', '.env', '--port=9333', '--serial', 'R58M'],
@@ -205,6 +211,77 @@ test('a plan keeps the app-known keys and refuses a value the app rejects', () =
     rmSync(good.dir, { recursive: true, force: true });
     rmSync(bad.dir, { recursive: true, force: true });
   }
+});
+
+test('--check reads the status route alone, so nothing it reads can change', () => {
+  const expression = checkExpression();
+  assert.match(expression, new RegExp(STATUS_ROUTE));
+  assert.ok(!expression.includes(SAVE_ROUTE), 'the save route is never called');
+  assert.doesNotMatch(
+    expression,
+    /POST|method:/,
+    'a check sends nothing that writes',
+  );
+});
+
+test('a check reports which providers are configured, from the status the app answers', () => {
+  const outcome = checkOutcome({
+    status: 200,
+    body: {
+      keys: [
+        { id: 'gemini', set: true },
+        { id: 'mapillary', set: false },
+        { id: 'google-maps', set: true },
+      ],
+    },
+  });
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.lit, 2);
+  assert.equal(outcome.total, 3);
+  assert.deepEqual(outcome.on, ['gemini', 'google-maps']);
+  assert.deepEqual(outcome.off, ['mapillary']);
+
+  const refused = checkOutcome({ status: 502, body: null });
+  assert.equal(refused.ok, false);
+  assert.match(refused.reason, /502/);
+  const empty = checkOutcome({ status: 200, body: { keys: [] } });
+  assert.equal(empty.ok, false);
+  assert.match(empty.reason, /200/);
+});
+
+test('a check leaves nothing behind but the forward it removed', async () => {
+  const calls = [];
+  const evaluated = [];
+  const result = await checkPhoneKeys({
+    adb: 'adb',
+    serial: 'R58M',
+    run: (...args) => {
+      calls.push(args);
+      return { status: 0, stdout: '', stderr: '' };
+    },
+    attach: async () => ({ socket: { close() {} }, forward: [] }),
+    evaluate: async (socket, expression) => {
+      evaluated.push(expression);
+      return JSON.stringify({
+        status: 200,
+        body: {
+          keys: [
+            { id: 'gemini', set: true },
+            { id: 'openai', set: false },
+          ],
+        },
+      });
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.on, ['gemini']);
+  assert.deepEqual(result.off, ['openai']);
+  // One expression, a status read; one adb call, undoing the forward.
+  assert.equal(evaluated.length, 1);
+  assert.ok(!evaluated[0].includes(SAVE_ROUTE));
+  assert.deepEqual(calls, [
+    ['adb', ['-s', 'R58M', 'forward', '--remove', 'tcp:9333']],
+  ]);
 });
 
 test('--dry-run reports the names and never touches a device', async () => {
