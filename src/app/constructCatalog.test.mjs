@@ -42,7 +42,7 @@ test('catalogs construct distinct layers and classification from their supplied 
   });
   // 33 + Radio Sites + Connected Objects + Windy; the count is pinned so
   // adding a layer is a deliberate review, not a side effect.
-  assert.equal(first.layers.length, 37);
+  assert.equal(first.layers.length, 38);
   assert.ok(first.get('local-adsb'), 'Local ADS-B is registered');
   assert.deepEqual(
     first.metadata.find(({ id }) => id === 'local-adsb'),
@@ -63,6 +63,7 @@ test('catalogs construct distinct layers and classification from their supplied 
     );
   assert.ok(first.get('fire-perimeters'));
   assert.ok(first.get('gnss-integrity'));
+  assert.ok(first.get('s2-ghostmaps'));
   assert.ok(first.get('transit'));
   const order = first.layers.map(({ id }) => id);
   assert.deepEqual(
@@ -156,7 +157,7 @@ test('Mapillary can be omitted or replaced without changing catalog membership',
     surface: fixtureSurface(lifetime.signal),
   };
   const catalog = createApplicationCatalog(options);
-  assert.equal(catalog.layers.length, 37);
+  assert.equal(catalog.layers.length, 38);
   assert.deepEqual(catalog.get('street-level').providerIds, []);
   assert.equal(
     catalogControlServices(catalog).streetLevelLayer,

@@ -12,6 +12,7 @@ test('every provider has both hooks; credential editing serves both servers and 
   const plugins = localProviderPlugins();
   assert.ok(plugins.some(({ name }) => name === 'fire-perimeters'));
   assert.ok(plugins.some(({ name }) => name === 'gnss-integrity'));
+  assert.ok(plugins.some(({ name }) => name === 'ghostmaps'));
   for (const plugin of plugins) {
     assert.equal(typeof plugin.configureServer, 'function', plugin.name);
     assert.equal(typeof plugin.configurePreviewServer, 'function', plugin.name);
@@ -104,6 +105,7 @@ test('real dev and built-preview servers serve provider JSON and terminate unkno
         ['/api/firms/status', 200],
         ['/api/fire-perimeters/inciweb/publication/invalid', 400],
         ['/api/gnss-integrity?lat=invalid', 400],
+        ['/api/ghostmaps/unknown', 404],
         ['/api/terrain/heights?points=invalid', 400],
         ['/api/overpass', 405],
         ['/api/overpass/status', 200],
