@@ -860,7 +860,10 @@
     box-shadow: none;
   }
 
+  /* flex-basis is what sizes a column flex item: without it the trays' 2.45rem
+     held and the ring stayed an ellipse. */
   #command-dock .gev-mic-orbit {
+    flex: 0 0 30px;
     width: 30px;
     height: 30px;
   }
