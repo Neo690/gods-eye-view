@@ -1,0 +1,23 @@
+{
+  "name": "ios-studio-desktop",
+  "productName": "iOS studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone Windows window for the iOS studio panel: builds, signs and installs the iOS shell from a checkout.",
+  "main": "main.mjs",
+  "type": "module",
+  "license": "MIT",
+  "author": {
+    "name": "Neo690"
+  },
+  "scripts": {
+    "start": "electron .",
+    "icon": "node build-icon.mjs",
+    "installer": "node build-installer.mjs",
+    "unpacked": "node build-installer.mjs --dir"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.0.12"
+  }
+}

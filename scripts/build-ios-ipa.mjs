@@ -33,7 +33,13 @@ import { fileURLToPath } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
 
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(SCRIPTS_DIR, '..');
+// The Windows studio app ships these scripts inside its own resources and runs
+// them against a checkout elsewhere on disk, so the project root can be given
+// explicitly. From the repository itself nothing is set and the root is still
+// the directory above `scripts/`.
+const ROOT = path.resolve(
+  process.env.GEV_PROJECT_ROOT?.trim() || path.join(SCRIPTS_DIR, '..'),
+);
 const IOS_DIR = path.join(ROOT, 'ios');
 const IPA_PATH = path.join(IOS_DIR, 'xtool', 'GodsEyeView.ipa');
 const APP_PREFIX = 'Payload/GodsEyeView.app/';

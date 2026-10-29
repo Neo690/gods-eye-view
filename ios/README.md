@@ -228,6 +228,29 @@ Apple ID on the Windows side — the same route the published `ios-latest` relea
 is installed by, and the WebView's storage survives re-signing, so provider keys
 already on the phone are kept.
 
+The same panel also ships as a Windows application of its own —
+`npm run ios:installer` packages it with Electron into
+`desktop/studio/release/iOS studio Setup <version>.exe` (an assisted, per-user
+installer with a desktop shortcut and its own icon; `--dir` stops at the
+unpacked app). The window is not a second panel: the installer carries the four
+files above and starts them with the app's own binary, so it needs no Node
+installation, and the page inside is the page `npm run ios:studio` serves. What
+the app does need is a checkout, because its buttons run `npm run ...` there:
+it opens on the folder it was built from, remembers whatever you pick in
+**File ▸ Open project folder…**, and takes `--root=<path>` when neither is
+right. A release build is smoke-tested with `--verify`, which starts the panel,
+prints what it sees and exits without a window:
+
+```bash
+"desktop/studio/release/win-unpacked/iOS studio.exe" --verify
+```
+
+`npm run ios:shortcut` puts the shortcut back on the desktop and gives it the
+panel's icon. A shortcut is machine state — a desktop path, an absolute target,
+an icon — so a fresh clone has none: the command points it at whatever exists,
+in the order a user would, the installed app first, then the unpacked build,
+then the Node launcher.
+
 ## Install on a device
 
 Xcode's Run button is the path that always works. From a terminal, with the

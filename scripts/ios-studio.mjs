@@ -43,7 +43,13 @@ import {
 import { compareIosPlists } from './compare-ios-plists.mjs';
 
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(SCRIPTS_DIR, '..');
+// The project this panel builds. From the repository it is the checkout the
+// script lives in; the packaged Windows app ships this file inside its own
+// resources and names the checkout with GEV_PROJECT_ROOT, so the buttons still
+// run `npm run ...` where the project actually is.
+const ROOT = path.resolve(
+  process.env.GEV_PROJECT_ROOT?.trim() || path.join(SCRIPTS_DIR, '..'),
+);
 const PAGE = path.join(SCRIPTS_DIR, 'ios-studio.html');
 const IOS_DIR = path.join(ROOT, 'ios');
 const OUTPUT_DIR = path.join(IOS_DIR, 'xtool');
