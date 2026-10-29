@@ -1,13 +1,27 @@
 name: iOS app
 
-# Unlike the Android workflow this one publishes nothing: an installable iOS app
-# needs an Apple Developer signing identity and a provisioning profile, which
-# belong to the maintainer's account, not to this repository. What a runner can
-# prove is that the shell compiles against the real SDK and the real bundle, so
-# that is what this job does — on every push that touches either half.
+# Two jobs, and they answer two different questions.
 #
-# To build a signed IPA or send a build to a phone, use Xcode on a Mac (or a
-# paid CI macOS runner with the signing secrets): see ios/README.md.
+# The first compiles the shell against the real SDK and proves the staged bundle
+# is inside the app. That is what a runner can always do, and it needs nothing
+# but this repository.
+#
+# The second packages an installable `.ipa` and publishes it to the `ios-latest`
+# release. An installable iOS app is signed by an Apple account rather than by
+# CI, so this job waits for the maintainer's signing identity in the repository
+# secrets and steps aside with a notice when it is absent, instead of failing
+# every push that could not have one.
+#
+# Secrets it wants (Settings → Secrets and variables → Actions):
+#
+#   APPLE_CERTIFICATE_P12_BASE64       the signing identity, exported as a .p12
+#   APPLE_CERTIFICATE_PASSWORD         that .p12's password
+#   APPLE_PROVISIONING_PROFILE_BASE64  an ad-hoc profile naming your devices
+#   APPLE_TEAM_ID                      the ten-character team identifier
+#   APPLE_SIGNING_CERTIFICATE          optional; "Apple Distribution" by default
+#
+# ios/README.md says how to produce each value, and what the phone needs before
+# it will install what this job publishes.
 on:
   push:
     branches: [android-shell, main, ios-shell]
@@ -41,7 +55,24 @@ jobs:
     timeout-minutes: 40
     env:
       PUPPETEER_SKIP_DOWNLOAD: '1'
+    outputs:
+      # Carried to the packaging job, which cannot read a secret in its own
+      # `if:` and so asks this one whether the signing identity exists.
+      signing: ${{ steps.signing.outputs.present }}
     steps:
+      - name: Check for the signing identity
+        id: signing
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -n "$CERTIFICATE_BASE64" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::APPLE_CERTIFICATE_P12_BASE64 is not set, so no .ipa is published; the shell below still compiles. The header of .github/workflows/ios-app.yml lists the secrets."
+          fi
+
       - name: Check out source
         uses: actions/checkout@v4
         with:
@@ -80,8 +111,8 @@ jobs:
           ls -d GodsEyeView.xcodeproj
 
       # Simulator, unsigned: this compiles Swift against the iOS SDK and links
-      # the shell, which is the part a Windows machine cannot check. A device
-      # build would additionally require a signing identity.
+      # the shell, which is the part a Windows machine cannot check. Signing is
+      # the packaging job's problem.
       - name: Compile for the simulator
         working-directory: ios
         run: |
@@ -103,3 +134,346 @@ jobs:
           test -n "$APP"
           test -f "$APP/www/index.html"
           echo "bundle: $(du -sh "$APP/www" | cut -f1) in $APP"
+
+  ipa:
+    name: Sign and publish the IPA
+    needs: build
+    # No signing identity, no .ipa. Skipped rather than failed: see the header.
+    if: needs.build.outputs.signing == 'true'
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: '1'
+      # One place for the identifier: the profile check, the archive and the
+      # export all have to agree on it.
+      GEV_BUNDLE_ID: com.godseye.view
+    # Uploading to a release is the only write this workflow performs.
+    permissions:
+      contents: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build the web bundle
+        env:
+          CESIUM_ION_TOKEN: ${{ vars.CESIUM_ION_TOKEN }}
+          GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_API_KEY }}
+        run: |
+          if [ -n "$CESIUM_ION_TOKEN" ]; then
+            echo "Cesium ion token: configured"
+          else
+            echo "Cesium ion token: none (the globe stays on keyless Esri imagery)"
+          fi
+          npm run build
+
+      - name: Stage the bundle into the iOS shell
+        env:
+          GEV_API_BASE: ${{ vars.GEV_API_BASE }}
+        run: |
+          if [ -n "$GEV_API_BASE" ]; then
+            echo "Live data server: $GEV_API_BASE"
+          else
+            echo "Live data server: none (the live layers report unavailable)"
+          fi
+          npm run ios:payload
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodegen generate
+          ls -d GodsEyeView.xcodeproj
+
+      # A build number that only ever rises, so installing over an older copy is
+      # an update rather than a refusal — the WebView keeps its storage, and the
+      # operator's provider keys are in that storage.
+      - name: Compute the version
+        run: |
+          set -euo pipefail
+          echo "GEV_VERSION_NAME=1.0.${{ github.run_number }}" >> "$GITHUB_ENV"
+          echo "GEV_BUILD_NUMBER=${{ github.run_number }}" >> "$GITHUB_ENV"
+
+      # Everything Apple lives in this step and never leaves the runner: the
+      # identity into a throwaway keychain, the profile into the user's profile
+      # directory, and the values xcodebuild needs into the job environment.
+      - name: Import the signing identity and the profile
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_CERTIFICATE || 'Apple Distribution' }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+
+          [ -n "$CERTIFICATE_BASE64" ] || fail "APPLE_CERTIFICATE_P12_BASE64 is not set"
+          [ -n "$PROFILE_BASE64" ] || fail "APPLE_PROVISIONING_PROFILE_BASE64 is not set"
+          [ -n "$TEAM_ID" ] || fail "APPLE_TEAM_ID is not set"
+
+          # openssl rather than `base64`, whose decode flag differs between BSD
+          # (-D, what the macOS runner has) and GNU (-d). Newlines are stripped
+          # first because a repository secret may carry the wrapping a pasted
+          # export arrived with, which -A would otherwise refuse.
+          decode() { printf '%s' "$2" | tr -d '\r\n' | openssl base64 -d -A > "$1"; }
+
+          KEYCHAIN="$RUNNER_TEMP/gev-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          # A locking keychain makes `codesign` stop for a password that no one
+          # is there to type on a runner.
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          decode "$RUNNER_TEMP/gev-signing.p12" "$CERTIFICATE_BASE64"
+          [ -s "$RUNNER_TEMP/gev-signing.p12" ] || fail "the .p12 decoded to nothing: is APPLE_CERTIFICATE_P12_BASE64 really base64 of a .p12?"
+
+          security import "$RUNNER_TEMP/gev-signing.p12" \
+            -k "$KEYCHAIN" \
+            -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          # `security import` puts the identity in the keychain; the partition
+          # list is what stops every later `codesign` call asking for access.
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          IDENTITIES="$(security find-identity -v -p codesigning "$KEYCHAIN")"
+          echo "$IDENTITIES"
+
+          # Matched in the shell rather than with `grep -q` on a pipe: grep exits
+          # at the first match, and `pipefail` would turn the resulting SIGPIPE
+          # into a failure of the step itself.
+          case "$IDENTITIES" in
+            *'"'*) ;;
+            *) fail "the .p12 holds no codesigning identity" ;;
+          esac
+          case "$IDENTITIES" in
+            *"$SIGNING_IDENTITY"*) ;;
+            *) echo "::warning::no identity named \"$SIGNING_IDENTITY\" in the keychain; set APPLE_SIGNING_CERTIFICATE to one of the names above if the export cannot find it." ;;
+          esac
+
+          decode "$RUNNER_TEMP/gev-adhoc.mobileprovision" "$PROFILE_BASE64"
+          [ -s "$RUNNER_TEMP/gev-adhoc.mobileprovision" ] || fail "the profile decoded to nothing: is APPLE_PROVISIONING_PROFILE_BASE64 really base64 of a .mobileprovision?"
+
+          PROFILE_PLIST="$RUNNER_TEMP/gev-adhoc-profile.plist"
+          security cms -D -i "$RUNNER_TEMP/gev-adhoc.mobileprovision" > "$PROFILE_PLIST" \
+            || fail "the provisioning profile is not a CMS-signed plist: check APPLE_PROVISIONING_PROFILE_BASE64"
+          PROFILE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PROFILE_PLIST")"
+          PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$PROFILE_PLIST")"
+          PROFILE_EXPIRES="$(/usr/libexec/PlistBuddy -c 'Print :ExpirationDate' "$PROFILE_PLIST")"
+          PROFILE_IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$PROFILE_PLIST")"
+
+          # A profile that does not cover this app, or has expired, is refused
+          # here with the reason rather than three minutes later inside
+          # xcodebuild.
+          case "$PROFILE_IDENTIFIER" in
+            "$TEAM_ID"."$GEV_BUNDLE_ID"|"$TEAM_ID".*) ;;
+            *) fail "the profile is for $PROFILE_IDENTIFIER, not $TEAM_ID.$GEV_BUNDLE_ID" ;;
+          esac
+
+          # Read through Node rather than `date -j -f`: the expiration has to be
+          # parsed as the RFC 3339 instant it is, whatever the runner's locale.
+          # An ad-hoc build also installs only on the devices the profile names,
+          # so a profile that names none would publish an .ipa nobody can use.
+          # A .mjs file rather than `node -e`: this repository is `type: module`,
+          # and `execFileSync` keeps the path out of any shell.
+          cat > "$RUNNER_TEMP/check-profile.mjs" <<'NODE'
+          import { execFileSync } from 'node:child_process';
+
+          const plist = JSON.parse(
+            execFileSync('plutil', [
+              '-convert',
+              'json',
+              '-o',
+              '-',
+              process.env.PROFILE_PLIST,
+            ]).toString(),
+          );
+
+          const devices = (plist.ProvisionedDevices ?? []).length;
+          if (devices === 0) {
+            console.error(
+              '::error::this profile lists no devices: an ad-hoc build installs only on the devices it names',
+            );
+            process.exit(1);
+          }
+
+          const expires = new Date(plist.ExpirationDate);
+          if (!Number.isFinite(expires.getTime())) {
+            console.error(
+              `::error::the profile carries no readable expiration date: ${plist.ExpirationDate}`,
+            );
+            process.exit(1);
+          }
+          if (expires.getTime() <= Date.now()) {
+            console.error(
+              `::error::the provisioning profile expired on ${expires.toISOString()}`,
+            );
+            process.exit(1);
+          }
+
+          console.log(
+            `profile covers ${devices} device(s), expires ${expires.toISOString()}`,
+          );
+          NODE
+          PROFILE_PLIST="$PROFILE_PLIST" node "$RUNNER_TEMP/check-profile.mjs"
+
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$RUNNER_TEMP/gev-adhoc.mobileprovision" \
+            "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+
+          {
+            echo "GEV_KEYCHAIN_PATH=$KEYCHAIN"
+            echo "GEV_SIGNING_IDENTITY=$SIGNING_IDENTITY"
+            echo "GEV_TEAM_ID=$TEAM_ID"
+            echo "GEV_PROFILE_NAME=$PROFILE_NAME"
+            echo "GEV_PROFILE_UUID=$PROFILE_UUID"
+            echo "GEV_PROFILE_EXPIRES=$PROFILE_EXPIRES"
+          } >> "$GITHUB_ENV"
+
+      - name: Archive for the device
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          # Manual signing with the identity and profile imported above: no
+          # `-allowProvisioningUpdates`, which would need an App Store Connect
+          # key and would let Xcode pick a different identity than the one we
+          # verified.
+          xcodebuild archive \
+            -project GodsEyeView.xcodeproj \
+            -scheme GodsEyeView \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/GodsEyeView.xcarchive \
+            -derivedDataPath build/DerivedData \
+            MARKETING_VERSION="$GEV_VERSION_NAME" \
+            CURRENT_PROJECT_VERSION="$GEV_BUILD_NUMBER" \
+            DEVELOPMENT_TEAM="$GEV_TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="$GEV_SIGNING_IDENTITY" \
+            PROVISIONING_PROFILE_SPECIFIER="$GEV_PROFILE_NAME" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $GEV_KEYCHAIN_PATH"
+
+      - name: Export the ad-hoc IPA
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          cat > build/ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>ad-hoc</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>teamID</key><string>$GEV_TEAM_ID</string>
+            <key>signingCertificate</key><string>$GEV_SIGNING_IDENTITY</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>$GEV_BUNDLE_ID</key><string>$GEV_PROFILE_NAME</string>
+            </dict>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>stripSwiftSymbols</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath build/GodsEyeView.xcarchive \
+            -exportPath build/ipa \
+            -exportOptionsPlist build/ExportOptions.plist
+          test -f build/ipa/GodsEyeView.ipa
+
+      # An .ipa that exports is not the same thing as an .ipa a phone will
+      # install, and the difference is invisible from the release page.
+      - name: Verify what would install
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          IPA=build/ipa/GodsEyeView.ipa
+          rm -rf build/unpacked
+          mkdir -p build/unpacked
+          unzip -q "$IPA" -d build/unpacked
+          APP=build/unpacked/Payload/GodsEyeView.app
+          test -d "$APP"
+
+          # The console has to be inside the shipped app, not only in the staged
+          # copy: one that boots to a blank page is the failure this catches.
+          test -f "$APP/www/index.html"
+          [ -f "$APP/embedded.mobileprovision" ] \
+            || { echo "::error::the app carries no provisioning profile"; exit 1; }
+
+          BID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
+          [ "$BID" = "$GEV_BUNDLE_ID" ] \
+            || { echo "::error::the app is $BID, not $GEV_BUNDLE_ID"; exit 1; }
+
+          # Signed by the identity we imported, for this team, and carrying the
+          # profile we installed rather than a leftover on the runner.
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dv --verbose=4 "$APP" 2>&1 | tee build/codesign.txt
+          grep -q "$GEV_TEAM_ID" build/codesign.txt \
+            || { echo "::error::the signature does not name team $GEV_TEAM_ID"; exit 1; }
+          security cms -D -i "$APP/embedded.mobileprovision" > build/embedded.plist
+          EMBEDDED_UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' build/embedded.plist)"
+          [ "$EMBEDDED_UUID" = "$GEV_PROFILE_UUID" ] \
+            || { echo "::error::the app carries profile $EMBEDDED_UUID, not $GEV_PROFILE_UUID"; exit 1; }
+
+          echo "ipa: $(du -h "$IPA" | cut -f1), $(find "$APP" -type f | wc -l | tr -d ' ') files in the app"
+
+      - name: Publish the IPA to the rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cp ios/build/ipa/GodsEyeView.ipa gods-eye-view.ipa
+          NOTES="Built from ${GITHUB_SHA} (${GEV_VERSION_NAME}) on ${GITHUB_REF_NAME}.
+
+          Ad-hoc signed: it installs only on the devices the provisioning profile
+          names, and it stops being installable when that profile expires
+          (${GEV_PROFILE_EXPIRES}). On a Mac, drag it onto the device in Finder; on
+          a PC, re-sign it with your own Apple ID (AltStore, Sideloadly)."
+          gh release view ios-latest >/dev/null 2>&1 \
+            || gh release create ios-latest --title "God's Eye View — iOS" --notes "$NOTES"
+          gh release upload ios-latest gods-eye-view.ipa --clobber
+          gh release edit ios-latest --notes "$NOTES"
+
+          # Only one release per repository can be "the latest", and the Android
+          # download link is built on being it (android/README.md, and the URL
+          # the APK workflow prints): a new iOS release is deliberately kept out
+          # of that slot so getting the APK on the phone keeps working. The IPA
+          # has its own stable URL, printed below.
+          # The update endpoint takes a release id, not a tag: `releases/tags/...`
+          # is read-only, so the id is resolved first.
+          IOS_RELEASE="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/ios-latest" --jq '.id')"
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$IOS_RELEASE" -f make_latest=false >/dev/null
+          echo "Download: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/ios-latest/gods-eye-view.ipa"
+
+      # The runner is discarded, but the identity is not left where a later step
+      # could use it, and the profile never survives into an artifact.
+      - name: Forget the signing material
+        if: always()
+        run: |
+          set -euo pipefail
+          KEYCHAIN="${GEV_KEYCHAIN_PATH:-}"
+          if [ -n "$KEYCHAIN" ] && [ -e "$KEYCHAIN" ]; then
+            security delete-keychain "$KEYCHAIN" || true
+          fi
+          rm -f "$RUNNER_TEMP/gev-signing.p12" "$RUNNER_TEMP/gev-adhoc.mobileprovision" \
+            "$RUNNER_TEMP/gev-adhoc-profile.plist"
+          rm -rf "${HOME:?}/Library/MobileDevice/Provisioning Profiles"

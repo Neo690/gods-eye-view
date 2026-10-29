@@ -2415,6 +2415,12 @@
       "src/data/layerSnapshot.js",
       "src/layers/alpr/records.js",
       "src/layers/earthquakes/records.js",
+      "src/layers/stations/index.js",
+      "src/layers/stations/departures.js",
+      "src/layers/stations/policy.js",
+      "src/layers/stations/records.js",
+      "src/layers/stations/source.js",
+      "src/app/layers/stations.js",
       "src/app/layers/perimeters.js",
       "src/layers/perimeters/index.js",
       "src/layers/perimeters/source.js",
@@ -3086,6 +3092,12 @@
       "src/app/localGeojsonServices.js",
       "src/layers/alpr/records.js",
       "src/layers/earthquakes/records.js",
+      "src/layers/stations/index.js",
+      "src/layers/stations/departures.js",
+      "src/layers/stations/policy.js",
+      "src/layers/stations/records.js",
+      "src/layers/stations/source.js",
+      "src/app/layers/stations.js",
       "src/app/layers/perimeters.js",
       "src/layers/perimeters/index.js",
       "src/layers/perimeters/source.js",
@@ -3770,6 +3782,18 @@
       "src/i18n/marker.js"
     ],
     "external": []
+  },
+  "rail-provider": {
+    "runtime": "node",
+    "exports": ["./server/providers/rail"],
+    "modules": [
+      "server/providers/rail.js",
+      "src/data/gtfsRealtime.js",
+      "src/data/railDepartures.js",
+      "src/sources/httpBody.js",
+      "src/i18n/marker.js"
+    ],
+    "external": ["pbf"]
   },
   "transit-provider": {
     "runtime": "node",

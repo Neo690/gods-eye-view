@@ -202,8 +202,8 @@ function encode(state) {
 
 test('production registry is exact, canonical, and rejects incomplete contracts', async () => {
   assert.equal(validateLayerStateRegistry(), true);
-  assert.equal(REGISTERED_LAYER_IDS.length, 34);
-  assert.equal(new Set(REGISTERED_LAYER_IDS).size, 34);
+  assert.equal(REGISTERED_LAYER_IDS.length, 35);
+  assert.equal(new Set(REGISTERED_LAYER_IDS).size, 35);
   assert.ok(REGISTERED_LAYER_IDS.includes('transit'));
   assert.ok(REGISTERED_LAYER_IDS.includes('radiation'));
   assert.deepEqual(REGISTERED_LAYER_IDS, [...REGISTERED_LAYER_IDS].sort());
@@ -243,9 +243,10 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   for (const [id, token] of Object.entries(LEGACY_LAYER_STATE_TOKENS)) {
     assert.equal(LAYER_STATE_TOKEN_RESERVATIONS[id], token);
   }
-  assert.equal(nextLayerStateToken(), '8');
-  // 6 and 7 belong to Radio Sites and Connected Objects; 8 and 9 are the
-  // remaining digits, after which the allocator moves to pairs.
+  assert.equal(nextLayerStateToken(), '9');
+  // 6 and 7 belong to Radio Sites and Connected Objects and 8 to the mapped
+  // railway stations; 9 is the last free digit, after which the allocator
+  // moves to pairs.
   assert.equal(
     nextLayerStateToken({
       ...LAYER_STATE_TOKEN_RESERVATIONS,
@@ -310,8 +311,8 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   assert.equal(
     validateLayerStateAllocations(LAYER_STATE_TOKEN_RESERVATIONS, {
       ...LAYER_STATE_TOKEN_RESERVATIONS,
-      future: '8',
-      next: '9',
+      future: '9',
+      next: '00',
     }),
     true,
   );
@@ -321,7 +322,7 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
         ...LAYER_STATE_TOKEN_RESERVATIONS,
         future: '00',
       }),
-    /next free token 8/,
+    /next free token 9/,
   );
   const beforeLastDigit = { ...digitsExhausted };
   delete beforeLastDigit['prior-9'];
@@ -347,7 +348,7 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
         { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '5' },
         { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '5', competing: '5' },
       ),
-    /next free token 8/,
+    /next free token 9/,
   );
   assert.throws(
     () => validateLayerStateAllocations({ future: '00' }, { future: '01' }),

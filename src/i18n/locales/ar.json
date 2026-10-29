@@ -3271,5 +3271,17 @@
   "Zone rules ({count})": "قواعد المناطق ({count})",
   "The map is not ready yet": "الخريطة ليست جاهزة بعد",
   "That is as many zones as the panel keeps ({max})": "لا تحتفظ اللوحة بأكثر من {max} منطقة",
-  "Not an ICAO24 or an MMSI: {list}": "ليس ICAO24 ولا MMSI: {list}"
+  "Not an ICAO24 or an MMSI: {list}": "ليس ICAO24 ولا MMSI: {list}",
+  "Railway Stations": "محطات السكك الحديدية",
+  "Station source unavailable": "مصدر المحطات غير متاح",
+  "Overpass endpoint not configured": "لم يتم تكوين نقطة نهاية Overpass",
+  "Operator {operator}": "المشغّل {operator}",
+  "Network {network}": "الشبكة {network}",
+  "Platforms {count}": "الأرصفة {count}",
+  "Mapped in OpenStreetMap · departures from SNCF (ODbL)": "مرسومة في OpenStreetMap · المغادرات من SNCF (ODbL)",
+  "Mapped in OpenStreetMap · not a live service": "مرسومة في OpenStreetMap · ليست خدمة مباشرة",
+  "No departures expected": "لا مغادرات متوقعة",
+  "Next departures": "المغادرات القادمة",
+  "{minutes} min late": "متأخر {minutes} دقيقة",
+  "on time": "في الموعد"
 }

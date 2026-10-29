@@ -2936,5 +2936,17 @@
   "Zone rules ({count})": "区域规则（{count}）",
   "The map is not ready yet": "地图尚未就绪",
   "That is as many zones as the panel keeps ({max})": "面板最多保留 {max} 个区域",
-  "Not an ICAO24 or an MMSI: {list}": "既不是 ICAO24 也不是 MMSI：{list}"
+  "Not an ICAO24 or an MMSI: {list}": "既不是 ICAO24 也不是 MMSI：{list}",
+  "Railway Stations": "火车站",
+  "Station source unavailable": "车站数据源不可用",
+  "Overpass endpoint not configured": "未配置 Overpass 端点",
+  "Operator {operator}": "运营方 {operator}",
+  "Network {network}": "网络 {network}",
+  "Platforms {count}": "站台 {count}",
+  "Mapped in OpenStreetMap · not a live service": "来自 OpenStreetMap 的测绘地点 · 非实时服务",
+  "Mapped in OpenStreetMap · departures from SNCF (ODbL)": "来自 OpenStreetMap 的测绘地点 · 发车信息由 SNCF 提供（ODbL）",
+  "No departures expected": "预计无发车",
+  "Next departures": "近期发车",
+  "{minutes} min late": "晚点 {minutes} 分钟",
+  "on time": "准点"
 }

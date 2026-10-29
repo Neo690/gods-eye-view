@@ -1,5 +1,37 @@
 # Changelog
 
+- Add a Railway Stations layer: every OpenStreetMap `railway=station` place is
+  drawn on the globe and a click opens its card — name, operator, network and
+  platform count, each line present only when the map records it, under a
+  caption that says the pin is a mapped place rather than a live service. Under
+  that card sit the next departures, joined from two SNCF datasets: the static
+  GTFS locates the station by coordinate (never by name, so "Nantes" the OSM
+  node and "Nantes" the `StopArea` are the same place only because they are 21 m
+  apart) and the GTFS-Realtime TripUpdates feed says when each train now expects
+  to leave. A delayed train is listed at its expected time, a train terminating
+  here is left out rather than listed as going nowhere, a cancelled one is
+  marked, and a snapshot older than ten minutes is labelled stale instead of
+  claimed live. A point more than 0.8 km from any SNCF stop gets a 404, not the
+  nearest station in another region, and a station whose board is empty says so.
+  Eight departures at most, with SNCF's ODbL credit on the board. The 5 MB
+  station index is held on the server for half a day and the realtime snapshot
+  for 45 s; the browser names a position and never an upstream URL. An open card
+  asks again every minute, so a board left on screen keeps up instead of
+  freezing at the moment it was opened, and that schedule dies with the
+  selection.
+
+- Add Aléop, the Pays de la Loire regional coach network, to the Transit
+  layer: keyless through the national transport.data.gouv.fr proxy and shipping
+  on under the Licence Ouverte 2.0 grant already quoted once for the French
+  rows. It is the first feed west of Angers — Nantes, Saint-Nazaire, La
+  Roche-sur-Yon and Laval had no coverage — and it overlaps the Angers and Le
+  Mans feeds on none of its vehicles, measured against both. It carries coaches
+  only: the region's own GTFS publishes no rail route at all, so it can never
+  draw a TER. Atoumod, Normandy's aggregate, is deliberately not registered
+  beside it: Rouen, Le Havre and Cherbourg are already read from their own
+  networks, and the aggregate put 11 of its 210 vehicles within 150 m of a
+  vehicle Astuce already draws.
+
 - The tracked-aircraft descriptor now publishes `verticalRateMps`, on both the
   civil and military layers, so a consumer reading `getTrackedInfo()` no longer
   has to reach past it into the raw poll record for climb/descent. Reported,
