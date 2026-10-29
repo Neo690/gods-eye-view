@@ -238,6 +238,164 @@ export function normalizeVehicleEntity(entity) {
 }
 
 /**
+ * StopTimeUpdate.schedule_relationship: the train does not serve this stop.
+ * 0 SCHEDULED, 1 SKIPPED, 2 NO_DATA, 3 UNSCHEDULED.
+ */
+export const GTFS_STOP_SKIPPED = 1;
+/** Longest accepted stop list for one trip update. A national trip has tens. */
+export const GTFS_MAX_STOP_UPDATES = 200;
+
+/** GTFS `delay` is an int32 carried as a varint: negatives arrive unsigned. */
+function readInt32(pbf) {
+  const value = pbf.readVarint();
+  return value > 0x7fffffff ? value - 0x100000000 : value;
+}
+
+function readStopTimeEvent(tag, event, pbf) {
+  if (tag === 1) event.delay = readInt32(pbf);
+  else if (tag === 2) event.time = pbf.readVarint();
+  else if (tag === 3) event.uncertainty = pbf.readVarint();
+}
+
+function readStopTimeUpdate(tag, update, pbf) {
+  if (tag === 1) update.stopSequence = pbf.readVarint();
+  else if (tag === 2) update.arrival = pbf.readMessage(readStopTimeEvent, {});
+  else if (tag === 3) update.departure = pbf.readMessage(readStopTimeEvent, {});
+  else if (tag === 4) update.stopId = readBoundedString(pbf, update);
+  else if (tag === 5) update.scheduleRelationship = pbf.readVarint();
+}
+
+function readTripUpdate(tag, update, pbf) {
+  if (tag === 1) update.trip = pbf.readMessage(readTripDescriptor, {});
+  else if (tag === 2) {
+    // Past the cap the field is left unread, so an absurd list costs one
+    // length varint per stop instead of a nested decode that is thrown away.
+    if (update.stops.length >= GTFS_MAX_STOP_UPDATES) update.truncated = true;
+    else update.stops.push(pbf.readMessage(readStopTimeUpdate, {}));
+  } else if (tag === 3)
+    update.vehicle = pbf.readMessage(readVehicleDescriptor, {});
+  else if (tag === 4) update.timestamp = pbf.readVarint();
+  else if (tag === 5) update.delay = readInt32(pbf);
+}
+
+function readFeedEntityTripUpdate(tag, entity, pbf) {
+  if (tag === 1) entity.id = readBoundedString(pbf, entity);
+  else if (tag === 2) entity.isDeleted = pbf.readBoolean();
+  else if (tag === 3)
+    entity.tripUpdate = pbf.readMessage(readTripUpdate, { stops: [] });
+  // 4 (vehicle) and 5 (alert) stay unread on this path: a departures query
+  // wants the timetable, not the positions it was already served.
+}
+
+function readFeedMessageTripUpdates(tag, message, pbf) {
+  if (tag === 1) message.header = pbf.readMessage(readFeedHeader, {});
+  else if (tag === 2) {
+    if (message.entities.length >= GTFS_MAX_ENTITIES) message.truncated = true;
+    else message.entities.push(pbf.readMessage(readFeedEntityTripUpdate, {}));
+  }
+}
+
+/**
+ * Flatten one decoded FeedEntity into the compact trip update a station board
+ * reads, or null when the entity carries no usable timetable.
+ *
+ * Only what the feed actually states is kept: a stop with neither a time nor a
+ * delay keeps nulls rather than being given the scheduled hour, and the trip is
+ * dropped entirely when no stop survives.
+ *
+ * @param {object} entity Decoded FeedEntity.
+ * @returns {object|null}
+ */
+export function normalizeTripUpdate(entity) {
+  if (!entity || entity.isDeleted === true) return null;
+  const update = entity.tripUpdate;
+  const trip = update?.trip;
+  if (!update || !trip) return null;
+  if (entity.oversize || update.oversize || trip.oversize) return null;
+  const tripId = nonEmptyString(trip.tripId) || nonEmptyString(entity.id);
+  if (!tripId) return null;
+  const stops = [];
+  for (const stop of update.stops || []) {
+    if (stop?.oversize) continue;
+    const stopId = nonEmptyString(stop.stopId);
+    if (!stopId) continue;
+    const arrivalTime =
+      Number.isFinite(stop.arrival?.time) && stop.arrival.time > 0
+        ? stop.arrival.time
+        : null;
+    const departureTime =
+      Number.isFinite(stop.departure?.time) && stop.departure.time > 0
+        ? stop.departure.time
+        : null;
+    if (arrivalTime === null && departureTime === null) {
+      // A stop with no time carries nothing a board can print.
+      if (stop.scheduleRelationship !== GTFS_STOP_SKIPPED) continue;
+    }
+    stops.push({
+      stopId,
+      sequence: Number.isInteger(stop.stopSequence) ? stop.stopSequence : null,
+      arrivalTime,
+      departureTime,
+      delay:
+        Number.isFinite(stop.departure?.delay) ||
+        Number.isFinite(stop.arrival?.delay)
+          ? Number.isFinite(stop.departure?.delay)
+            ? stop.departure.delay
+            : stop.arrival.delay
+          : null,
+      skipped: stop.scheduleRelationship === GTFS_STOP_SKIPPED,
+    });
+  }
+  if (!stops.length && update.truncated !== true) return null;
+  return {
+    id: tripId,
+    tripId,
+    routeId: nonEmptyString(trip.routeId),
+    startDate: nonEmptyString(trip.startDate),
+    directionId: Number.isInteger(trip.directionId) ? trip.directionId : null,
+    cancelled: trip.scheduleRelationship === 3,
+    timestamp:
+      Number.isFinite(update.timestamp) && update.timestamp > 0
+        ? update.timestamp
+        : null,
+    delay: Number.isFinite(update.delay) ? update.delay : null,
+    truncated: update.truncated === true,
+    stops,
+  };
+}
+
+/**
+ * Decode a TripUpdates feed into the compact snapshot a station board reads.
+ * @param {Uint8Array|ArrayBuffer} bytes Protobuf wire bytes.
+ * @returns {{ version: string|null, timestamp: number|null,
+ *   entityCount: number, truncated: boolean, trips: object[] }}
+ */
+export function decodeTripUpdates(bytes) {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const message = new PbfReader(view).readFields(readFeedMessageTripUpdates, {
+    header: {},
+    entities: [],
+    truncated: false,
+  });
+  const trips = [];
+  for (const entity of message.entities) {
+    const record = normalizeTripUpdate(entity);
+    if (record) trips.push(record);
+  }
+  const headerTimestamp = message.header?.timestamp;
+  return {
+    version: nonEmptyString(message.header?.version),
+    timestamp:
+      Number.isFinite(headerTimestamp) && headerTimestamp > 0
+        ? headerTimestamp
+        : null,
+    entityCount: message.entities.length,
+    truncated: message.truncated === true,
+    trips,
+  };
+}
+
+/**
  * Decode a VehiclePositions feed into the compact snapshot the proxy serves.
  * Duplicate vehicle ids keep the newest timestamp (feeds occasionally repeat
  * a vehicle across two trip entities during a handover).

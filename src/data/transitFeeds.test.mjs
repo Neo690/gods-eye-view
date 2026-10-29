@@ -595,3 +595,51 @@ test('the vehicle card names a rail line the way the tram is signed', () => {
   // A feed with no rail table is untouched by any of this.
   assert.equal(transitRouteLabel(getTransitFeed('mbta'), 'Red'), 'Red');
 });
+
+test('Aléop is a keyless regional coach feed and stays bus-only', () => {
+  const feed = getTransitFeed('aleop-pays-de-la-loire');
+  assert.ok(feed, 'Aléop is routable');
+  assert.equal(
+    feed.url,
+    'https://proxy.transport.data.gouv.fr/resource/aleop-pdl-gtfs-rt-vehicle-position',
+  );
+  assert.equal(new URL(feed.url).search, '', 'the registered URL is bare');
+  assert.equal(feed.license, 'Licence Ouverte 2.0');
+  assert.equal(feed.attribution, 'Aléop — Région des Pays de la Loire');
+  assert.equal(feed.defaultMode, 'bus');
+  // The region publishes coaches: no rail route exists in its GTFS, so no route
+  // hook may claim one, and a numeric route id stays a bus.
+  assert.equal(feed.routeMode, undefined, 'no rail hook is attached');
+  assert.equal(transitModeFor(feed, '209'), 'bus');
+  assert.equal(transitModeResolved(feed, '209'), false);
+});
+
+test('Aléop covers the west of France and not the neighbouring regions', () => {
+  const near = (lat, lon) => transitFeedsInRange(lat, lon).map((f) => f.id);
+  for (const [city, lat, lon] of [
+    ['Nantes', 47.2184, -1.5536],
+    ['Angers', 47.4784, -0.5632],
+    ['Le Mans', 48.0061, 0.1996],
+    ['La Roche-sur-Yon', 46.6705, -1.4269],
+    ['Saint-Nazaire', 47.2735, -2.2137],
+  ]) {
+    assert.ok(near(lat, lon).includes('aleop-pays-de-la-loire'), city);
+  }
+  // Alençon is Normandy, 145 km from the circle's centre: the radius stops
+  // short of it, and Caen never polls a Pays de la Loire feed.
+  assert.equal(near(48.4326, 0.0917).includes('aleop-pays-de-la-loire'), false);
+  assert.equal(
+    near(49.1829, -0.3707).includes('aleop-pays-de-la-loire'),
+    false,
+  );
+});
+
+test('Normandy is read network by network, never through an aggregate', () => {
+  // Atoumod would answer, and was measured: 11 of its 210 vehicles sat within
+  // 150 m of a vehicle Astuce already draws. The registry therefore keeps the
+  // three Norman networks and leaves the aggregate out.
+  assert.equal(getTransitFeed('atoumod-normandie'), null);
+  for (const id of ['astuce-rouen', 'lia-lehavre', 'cap-cotentin']) {
+    assert.ok(getTransitFeed(id), `${id} carries its own city`);
+  }
+});

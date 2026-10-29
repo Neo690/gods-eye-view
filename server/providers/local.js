@@ -15,6 +15,7 @@ import { radioBrowserProxy } from './radio.js';
 import { gbfsProxy } from './gbfs.js';
 import { localReceiversProxy } from './local-receivers.js';
 import { transitProxy } from './transit.js';
+import { railwayBoardProxy } from './rail.js';
 import { upstreamRelayProxy } from './upstream.js';
 import { adsbLolProxy } from './aircraft/adsb-lol.js';
 import { aisLiveProxy } from './vessels/ais-live.js';
@@ -58,6 +59,7 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     gbfsProxy(),
     localReceiversProxy(),
     transitProxy(),
+    railwayBoardProxy(),
     // The standalone shell reads feeds through this relay; the server-side
     // proxies above stay the browser's path.
     upstreamRelayProxy(),

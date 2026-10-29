@@ -3070,5 +3070,17 @@
   "Zone rules ({count})": "Règles de zone ({count})",
   "The map is not ready yet": "La carte n'est pas encore prête",
   "That is as many zones as the panel keeps ({max})": "Le panneau ne garde pas plus de {max} zones",
-  "Not an ICAO24 or an MMSI: {list}": "Ni un ICAO24 ni un MMSI : {list}"
+  "Not an ICAO24 or an MMSI: {list}": "Ni un ICAO24 ni un MMSI : {list}",
+  "Railway Stations": "Gares ferroviaires",
+  "Station source unavailable": "Source des gares indisponible",
+  "Overpass endpoint not configured": "Point de terminaison Overpass non configuré",
+  "Operator {operator}": "Exploitant {operator}",
+  "Network {network}": "Réseau {network}",
+  "Platforms {count}": "Voies {count}",
+  "Mapped in OpenStreetMap · departures from SNCF (ODbL)": "Cartographiée dans OpenStreetMap · départs SNCF (ODbL)",
+  "Mapped in OpenStreetMap · not a live service": "Cartographiée dans OpenStreetMap · pas un service en direct",
+  "No departures expected": "Aucun départ attendu",
+  "Next departures": "Prochains départs",
+  "{minutes} min late": "{minutes} min de retard",
+  "on time": "à l'heure"
 }

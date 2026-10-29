@@ -1006,6 +1006,23 @@ export const TRANSIT_FEED_REGISTRY = Object.freeze([
     licence: 'lov2',
   }),
   frenchFeed({
+    id: 'aleop-pays-de-la-loire',
+    name: 'Aléop',
+    operator: 'Aléop (Région des Pays de la Loire)',
+    attribution: 'Aléop — Région des Pays de la Loire',
+    region: 'Pays de la Loire, FR',
+    // The regional coach network, and the only thing here between Angers and
+    // the Vendée coast: Nantes, Saint-Nazaire, La Roche-sur-Yon and Laval have
+    // no urban feed in this registry. The circle holds Le Mans at 118 km and
+    // stops before Alençon (145 km, Normandy); it also reaches Rennes at 91 km,
+    // which is a polling gate, not a claim that Rennes is covered.
+    lat: 47.4,
+    lon: -1.1,
+    loadRadiusKm: 140,
+    url: 'https://proxy.transport.data.gouv.fr/resource/aleop-pdl-gtfs-rt-vehicle-position',
+    licence: 'lov2',
+  }),
+  frenchFeed({
     id: 'ametis-amiens',
     name: 'Ametis',
     operator: 'Ametis (Amiens Métropole)',

@@ -3070,5 +3070,17 @@
   "Zone rules ({count})": "Reglas de zona ({count})",
   "The map is not ready yet": "El mapa aún no está listo",
   "That is as many zones as the panel keeps ({max})": "El panel no guarda más de {max} zonas",
-  "Not an ICAO24 or an MMSI: {list}": "Ni un ICAO24 ni un MMSI: {list}"
+  "Not an ICAO24 or an MMSI: {list}": "Ni un ICAO24 ni un MMSI: {list}",
+  "Railway Stations": "Estaciones de tren",
+  "Station source unavailable": "Fuente de estaciones no disponible",
+  "Overpass endpoint not configured": "El endpoint Overpass no está configurado",
+  "Operator {operator}": "Operador {operator}",
+  "Network {network}": "Red {network}",
+  "Platforms {count}": "Andenes {count}",
+  "Mapped in OpenStreetMap · not a live service": "Mapeado en OpenStreetMap · no es un servicio en directo",
+  "Mapped in OpenStreetMap · departures from SNCF (ODbL)": "Cartografiada en OpenStreetMap · salidas de SNCF (ODbL)",
+  "No departures expected": "No se esperan salidas",
+  "Next departures": "Próximas salidas",
+  "{minutes} min late": "{minutes} min de retraso",
+  "on time": "puntual"
 }

@@ -3671,7 +3671,8 @@ its criteria cannot be silently ignored.
 | Traffic | Selectable TomTom / OpenStreetMap / Hybrid roads; optional TomTom flow (BYOK) | `src/data/traffic.js` | browser-direct OpenFreeMap tiles; `/api/tomtom` for flow | viewport-driven; capped tile cache |
 | CCTV                   | Austin + Caltrans (CA) + TfL London + Ontario 511 + Fintraffic (FI) + DriveBC (BC) + TxDOT (TX) + Estonia (Tallinn, Tarktee) + Live Traffic NSW + Open Calgary Open Data + Statens vegvesen (NO, stills + live HLS, Kartverket ground heights) + King County (WA) Open Data + WSDOT (WA) Open Data + NYC DOT TMC (opt-in) + City of Toronto RESCU + Catalonia (Servei Català de Trànsit) + Hong Kong Transport Department + FL511 (FL, opt-in) + Freeway Bureau, MOTC (Taiwan) + Street View fallback | `src/data/cctv.js`                                    | `/api/cctv`                                              | 10s (active)                                                                      |
 | Radio                  | Radio Browser (public-domain station directory)                                                                                                                                                 | `src/data/radio.js`                                   | `/api/radio/stations`, `/api/radio/click/:uuid`          | 45 min directory refresh                                                          |
-| Transit 🚌             | Operator GTFS-Realtime VehiclePositions (34 keyless regions, `src/data/transitFeeds.js`)                                                                                                         | `src/layers/transit/` via `src/app/layers/transit.js` | `/api/transit`                                           | 15s (poll + delayed playback)                                                     |
+| Transit 🚌             | Operator GTFS-Realtime VehiclePositions (35 keyless regions, `src/data/transitFeeds.js`)                                                                                                         | `src/layers/transit/` via `src/app/layers/transit.js` | `/api/transit`                                           | 15s (poll + delayed playback)                                                     |
+| Railway Stations 🚉    | OpenStreetMap `railway=station` places, plus next departures joined from SNCF static GTFS and GTFS-Realtime TripUpdates | `src/layers/stations/` via `src/app/layers/stations.js` | `/api/rail/departures` (server index 12 h, snapshot 45 s) | on click (board re-read each open) |
 | Bikeshare 🚲           | GBFS (Lyft + BCycle + Social Bicycles + PBSC incl. Bike Share Toronto, Bike Itaú (Brazil), Bicing (Barcelona) and seven other Spanish cities + Urban Sharing, Entur, JCDecaux (Lillestrøm, Valencia, Seville) + nextbike (AMBici))                                                                                                                                        | `src/data/bikeshare.js`                               | `/api/gbfs`                                              | 60s                                                                               |
 | Directions 🧭          | OSRM on FOSSGIS servers (OpenStreetMap)                                                                                                                                                         | `src/data/directions.js`                              | `/api/route` (`steps=1`)                                 | on placement / mode change                                                        |
 | Datacenters ▣          | OSM extract (bundled)                                                                                                                                                                           | `src/data/localLayers.js`                             | —                                                        | static                                                                            |
@@ -3683,6 +3684,16 @@ its criteria cannot be silently ignored.
 | GNSS Integrity 📡 (`gnss-integrity`) | adsb.lol point snapshot, low navigation accuracy binned per 0.5° cell (GEV NIC/NACp threshold + gpsjam.org formula and bands, keyless, ODbL) | `src/layers/gnss/` via `src/app/layers/gnss.js` | `/api/gnss-integrity` | camera-driven (600 ms debounce, minimum 2.5 s between reads) + 60s poll (server cache 60 s; 30 min rolling window) |
 | Fire Perimeters 🔥 | NIFC WFIGS current interagency perimeters (keyless, paged past the 2000-record cap); InciWeb catalog + incident page origin and update time checks for verified incident-page links | `src/layers/perimeters/` via `src/app/layers/perimeters.js` | `/api/fire-perimeters` + `/api/fire-perimeters/inciweb/*` | 5 min (server caches: catalog 1 h; publication 30 min) |
 | Radiation ☢ (`radiation`) | Ambient gamma dose rate: BfS ODL (Germany, hourly, keyless), Health Canada FPSN (keyless), plus Safecast, radmon.org and uRADMonitor volunteer Geiger counts converted to µSv/h and marked estimated — five networks in one aggregated snapshot, each row tagged with its network (uRADMonitor reads only the units of the account in `URADMONITOR_USER_ID`/`URADMONITOR_USER_HASH`, so it is skipped when those keys are unset) | `src/layers/radiation/` via `src/app/layers/radiation.js` | `/api/radiation` | 10 min (server cache 5 min; a failed network keeps serving its last snapshot for up to 1 h, flagged degraded) |
+
+A railway station card opens on click and names only what the map records —
+operator, network and platform count appear when present, absent instead of
+"unknown" when not — above a caption saying the pin is a mapped place. Its board
+joins SNCF's static GTFS (station located by coordinate, within 0.8 km) with its
+TripUpdates feed (when the train now expects to leave): eight departures at
+most, ordered by expected time, a train terminating at the station omitted, a
+cancelled trip marked, and a snapshot over ten minutes old labelled stale. A
+point far from any SNCF stop answers 404 rather than naming another region's
+station. Both upstream URLs stay server-side; the browser sends a position only.
 
 GNSS Integrity samples a 250 nm circle around the Earth point under the screen
 centre. Camera reads debounce for 600 ms with a monotonic 2.5 s minimum gap;
@@ -4084,13 +4095,14 @@ Transit is off by default, and share links use token `j`. The movement panel ord
 places Transit directly after Street Traffic and before Bike Share. Cameras and
 utilities retain their own groups. The layer polls
 registered feeds near the camera every 15 seconds, below a 3,000 km altitude
-gate. Thirty-four keyless regions are available: Boston, Austin, Minneapolis–St Paul,
+gate. Thirty-five keyless regions are available: Boston, Austin, Minneapolis–St Paul,
 Helsinki, the Netherlands, Norway, South East Queensland, nine in
 Ontario — Toronto (TTC surface vehicles; the subway publishes no
 positions), MiWay, Hamilton HSR, Durham Region, YRT/Viva, Guelph,
-Burlington, Barrie and Kingston — and eighteen in France (Rennes, Dijon, Metz,
+Burlington, Barrie and Kingston — and nineteen in France (Rennes, Dijon, Metz,
 Valence, Brest, Le Mans, Amiens, Vannes, Cannes, Nice, Montpellier, Rouen,
-Valenciennes, Angers, Tours, Le Havre, Lens–Béthune, Cherbourg-en-Cotentin),
+Valenciennes, Angers, Tours, Le Havre, Lens–Béthune, Cherbourg-en-Cotentin and
+Aléop, the Pays de la Loire coach network that is the only feed west of Angers),
 read through the transport.data.gouv.fr proxy or the producer's own endpoint
 under Licence Ouverte 2.0 or ODbL 1.0. Rail routes among them carry the mode
 the operator's own GTFS states for the route id the live feed publishes —

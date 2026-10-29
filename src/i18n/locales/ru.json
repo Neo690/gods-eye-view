@@ -3137,5 +3137,17 @@
   "Zone rules ({count})": "Правила зон ({count})",
   "The map is not ready yet": "Карта ещё не готова",
   "That is as many zones as the panel keeps ({max})": "Панель хранит не более {max} зон",
-  "Not an ICAO24 or an MMSI: {list}": "Ни ICAO24, ни MMSI: {list}"
+  "Not an ICAO24 or an MMSI: {list}": "Ни ICAO24, ни MMSI: {list}",
+  "Railway Stations": "Железнодорожные станции",
+  "Station source unavailable": "Источник данных о станциях недоступен",
+  "Overpass endpoint not configured": "Конечная точка Overpass не настроена",
+  "Operator {operator}": "Оператор {operator}",
+  "Network {network}": "Сеть {network}",
+  "Platforms {count}": "Платформ: {count}",
+  "Mapped in OpenStreetMap · not a live service": "Нанесено на карту OpenStreetMap · не данные реального времени",
+  "Mapped in OpenStreetMap · departures from SNCF (ODbL)": "Нанесено на карту OpenStreetMap · отправления SNCF (ODbL)",
+  "No departures expected": "Отправлений не ожидается",
+  "Next departures": "Ближайшие отправления",
+  "{minutes} min late": "опоздание {minutes} мин",
+  "on time": "по расписанию"
 }
