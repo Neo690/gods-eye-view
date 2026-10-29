@@ -3,8 +3,12 @@ package com.godseye.view;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.location.LocationManager;
+import android.provider.Settings;
+import android.widget.Toast;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -232,9 +236,13 @@ public class MainActivity extends Activity {
       pendingLocationCallback = null;
       pendingLocationOrigin = null;
       if (callback != null && origin != null) {
+        boolean granted = hasLocation();
         // retain=false: the page asks again next launch, so a later "deny" in
         // Android settings is not overruled by a remembered grant.
-        callback.invoke(origin, hasLocation(), false);
+        callback.invoke(origin, granted, false);
+        // A grant with the system switch off still yields no fix; show that
+        // switch now, while the user is looking at the app that needs it.
+        if (granted && !isSystemLocationOn()) openLocationSettings();
       }
     }
   }
@@ -249,6 +257,49 @@ public class MainActivity extends Activity {
       PackageManager.PERMISSION_GRANTED ||
       checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) ==
       PackageManager.PERMISSION_GRANTED;
+  }
+
+  /**
+   * Whether the SYSTEM location switch is on, not just this app's permission.
+   *
+   * <p>These are two different things and the page can only see the second: with
+   * the permission granted and the phone's location switch off, the WebView
+   * answers "unavailable" after a timeout and the map's locate button looks
+   * broken until the user turns location on from the quick settings. Asking
+   * here is what lets the shell say so instead.
+   */
+  private boolean isSystemLocationOn() {
+    LocationManager manager =
+      (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+    if (manager == null) return hasLocation();
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        return manager.isLocationEnabled();
+      }
+      return manager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+        manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+    } catch (RuntimeException error) {
+      Log.w(TAG, "Location state unavailable", error);
+      return false;
+    }
+  }
+
+  /**
+   * Send the user to the one switch this app cannot flip. An app may not turn
+   * location on by itself; the system screen is the only route, and it is the
+   * route every map app takes.
+   */
+  private void openLocationSettings() {
+    try {
+      startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+    } catch (ActivityNotFoundException error) {
+      Log.w(TAG, "No location settings screen", error);
+    }
+    Toast.makeText(
+      this,
+      "Turn on location to let the map follow you.",
+      Toast.LENGTH_LONG
+    ).show();
   }
 
   private void ensureLocation() {
@@ -498,6 +549,13 @@ public class MainActivity extends Activity {
     @Override
     public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
       if (hasLocation()) {
+        if (!isSystemLocationOn()) {
+          // Answering "granted" here would hand the page a provider that never
+          // produces a fix, and the locate button would just time out.
+          callback.invoke(origin, false, false);
+          openLocationSettings();
+          return;
+        }
         callback.invoke(origin, true, false);
         return;
       }
