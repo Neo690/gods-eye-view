@@ -228,28 +228,18 @@ Apple ID on the Windows side — the same route the published `ios-latest` relea
 is installed by, and the WebView's storage survives re-signing, so provider keys
 already on the phone are kept.
 
-The same panel also ships as a Windows application of its own —
-`npm run ios:installer` packages it with Electron into
-`desktop/studio/release/iOS studio Setup <version>.exe` (an assisted, per-user
-installer with a desktop shortcut and its own icon; `--dir` stops at the
-unpacked app). The window is not a second panel: the installer carries the four
-files above and starts them with the app's own binary, so it needs no Node
-installation, and the page inside is the page `npm run ios:studio` serves. What
-the app does need is a checkout, because its buttons run `npm run ...` there:
-it opens on the folder it was built from, remembers whatever you pick in
-**File ▸ Open project folder…**, and takes `--root=<path>` when neither is
-right. A release build is smoke-tested with `--verify`, which starts the panel,
-prints what it sees and exits without a window:
+The same panel ships as a Windows application of its own, from its own
+repository: [Neo690/ios-studio](https://github.com/Neo690/ios-studio). That is an
+Electron window carrying a copy of the four files above and starting them with
+the app's own binary, so an installed copy needs no Node; `npm run installer`
+there builds the NSIS installer and `npm run shortcut` puts its desktop entry
+back. The panel keeps being served here by `npm run ios:studio`.
 
-```bash
-"desktop/studio/release/win-unpacked/iOS studio.exe" --verify
-```
-
-`npm run ios:shortcut` puts the shortcut back on the desktop and gives it the
-panel's icon. A shortcut is machine state — a desktop path, an absolute target,
-an icon — so a fresh clone has none: the command points it at whatever exists,
-in the order a user would, the installed app first, then the unpacked build,
-then the Node launcher.
+The app drives a checkout like this one — its build and install buttons run
+`npm run ios:ipa` and `xtool dev run` in *this* directory — so it asks for the
+folder on first run, remembers it, and accepts `--root=<path>`. Keeping the
+panel here and the window there is deliberate: the page belongs to the project
+it controls, the window belongs to whoever has no Mac.
 
 ## Install on a device
 

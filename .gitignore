@@ -51,13 +51,6 @@ desktop/.payload/
 desktop/release/
 desktop/node_modules/
 
-# The iOS studio app's packager output, its dependencies, and the checkout path
-# `build-installer.mjs` wrote into the package: that path belongs to whoever ran
-# the build, not to the repository.
-desktop/studio/node_modules/
-desktop/studio/release/
-desktop/studio/project-root.json
-
 # iOS shell: the bundle `npm run ios:payload` stages, Xcode's output, and the
 # project XcodeGen derives from ios/project.yml (the spec is the source of truth).
 # The folder itself stays in the repository: XcodeGen refuses a folder
