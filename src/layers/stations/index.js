@@ -12,6 +12,7 @@ import {
   STATION_SELECTED_OVERLAY_SOURCE_OPTIONS,
   STATION_SELECTED_PIXEL_SIZE,
   LABEL_COLLISION_CAPACITY,
+  SERVER_WAKE_HINT_MS,
   buildStationSelectionCopy,
   clampViewport,
   createStationOverlayEntry,
@@ -19,6 +20,7 @@ import {
   selectStationCohort,
   shouldRefetch,
   stationIdFromPick,
+  stationLoadingLabel,
 } from './policy.js';
 import { createOverpassStationSource } from './source.js';
 import { isPointerFree } from '../../data/inputOwnership.js';
@@ -79,6 +81,12 @@ export function createRailwayStationsLayer({
   let _lastError = null;
   let _enabled = false;
   let _loadedBox = null;
+  /** When the in-flight station request began, or null when none is running. */
+  let _requestStartedAt = null;
+  /** Repaint armed for the moment a wait becomes long enough to name. */
+  let _wakeTimer = null;
+  /** The manager, only so a long wait can repaint its own row (see below). */
+  let _dataManager = null;
   /** Station records of the last load, keyed by OSM id — what a click resolves. */
   let _recordsById = new Map();
   let _clickHandler = null;
@@ -90,6 +98,29 @@ export function createRailwayStationsLayer({
   let _boardTimer = null;
   /** Last board fetched, keyed by station id, so a re-click does not refetch. */
   const _boardCache = new Map();
+
+  /**
+   * Repaint the layer row once the request has stood long enough that the wait
+   * itself is the news (a hosted server cold start). Nothing else would redraw
+   * it before the request settles: the manager publishes a status change when
+   * the refresh begins and another when it ends, not in between.
+   */
+  function scheduleWakeHint() {
+    clearWakeHint();
+    if (!_dataManager) return;
+    _wakeTimer = setTimeout(() => {
+      _wakeTimer = null;
+      _dataManager?.refreshLayerStats?.();
+    }, SERVER_WAKE_HINT_MS);
+    // A pending repaint must not hold a test process (or a closing tab) open.
+    _wakeTimer?.unref?.();
+  }
+
+  function clearWakeHint() {
+    if (!_wakeTimer) return;
+    clearTimeout(_wakeTimer);
+    _wakeTimer = null;
+  }
 
   /** Cancel a scheduled board refresh; the card is closing or moving. */
   function stopBoardRefresh() {
@@ -246,6 +277,7 @@ export function createRailwayStationsLayer({
       _lastError = null;
       _enabled = false;
       _loadedBox = null;
+      _requestStartedAt = null;
       _recordsById = new Map();
       _clickHandler = null;
       _selectedKey = null;
@@ -269,6 +301,8 @@ export function createRailwayStationsLayer({
     disable(viewer = _viewer) {
       _request?.abort();
       _request = null;
+      clearWakeHint();
+      _requestStartedAt = null;
       stopBoardRefresh();
       _boardRequest?.abort();
       _boardRequest = null;
@@ -292,6 +326,8 @@ export function createRailwayStationsLayer({
       _request?.abort();
       const request = new AbortController();
       _request = request;
+      _requestStartedAt = Date.now();
+      scheduleWakeHint();
       try {
         const snapshot = await source.getSnapshot(view, {
           signal: request.signal,
@@ -376,12 +412,18 @@ export function createRailwayStationsLayer({
         return false;
       } finally {
         if (_request === request) _request = null;
+        // The settle is reported by the manager's own status publish; the row
+        // must simply stop claiming a wait that is over.
+        clearWakeHint();
+        _requestStartedAt = null;
       }
     },
 
     destroy(viewer = _viewer) {
       _request?.abort();
       _request = null;
+      clearWakeHint();
+      _requestStartedAt = null;
       stopBoardRefresh();
       _boardRequest?.abort();
       _boardRequest = null;
@@ -395,6 +437,7 @@ export function createRailwayStationsLayer({
         _dataSource = null;
       }
       _viewer = null;
+      _dataManager = null;
       _count = 0;
       _lastUpdate = null;
       _lastError = null;
@@ -402,11 +445,27 @@ export function createRailwayStationsLayer({
       _recordsById = new Map();
     },
 
+    /**
+     * The manager calls this on every layer, so a long first load can repaint
+     * its own row (see scheduleWakeHint). Null-safe: the layer works alone.
+     */
+    attachDataManager(manager) {
+      _dataManager = manager || null;
+    },
+
     getStats() {
+      const elapsed =
+        _requestStartedAt === null ? null : Date.now() - _requestStartedAt;
+      // Only a first answer is waited for: once stations are drawn, a later
+      // refresh keeps the count and age on screen instead of flapping to
+      // "connecting" every poll.
+      const loading = elapsed !== null && _count === 0;
       return {
         count: _count,
         lastUpdate: _lastUpdate,
         error: _lastError,
+        loading,
+        loadingLabel: loading ? stationLoadingLabel(elapsed) : '',
       };
     },
   };

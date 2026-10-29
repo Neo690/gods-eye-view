@@ -3283,5 +3283,7 @@
   "No departures expected": "لا مغادرات متوقعة",
   "Next departures": "المغادرات القادمة",
   "{minutes} min late": "متأخر {minutes} دقيقة",
-  "on time": "في الموعد"
+  "on time": "في الموعد",
+  "contacting the data server…": "جارٍ الاتصال بخادم البيانات…",
+  "waking the data server…": "جارٍ إيقاظ خادم البيانات…"
 }

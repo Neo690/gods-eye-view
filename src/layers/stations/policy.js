@@ -35,6 +35,41 @@ export const QUERY_TIMEOUT_S = 25;
 export const POLL_MS = 180_000;
 
 /**
+ * How long a station request may stand before the row stops saying "contacting"
+ * and says what is actually happening.
+ *
+ * The Overpass proxy is a hosted instance (Render's free tier) that sleeps after
+ * 15 minutes idle and needs 30–50 s to answer its first request afterwards. A
+ * slow-but-normal cold start therefore looks exactly like an empty map, and the
+ * row said "never" for as long as it lasted. Past this delay the wait is named:
+ * the server is starting, not missing.
+ */
+export const SERVER_WAKE_HINT_MS = 8_000;
+
+/** A data string: the layer panel translates it (see src/i18n). */
+const msg = (text) => text;
+
+/**
+ * The row's loading line for a station request that began `elapsedMs` ago.
+ *
+ * `null` means no request is in flight, so there is nothing to say. The split
+ * is deliberate: "contacting" covers an ordinary round trip, and only a wait
+ * long enough to be a cold start is called a wake-up — the app cannot ask the
+ * server whether it was asleep, so it never claims more than the wait shows.
+ *
+ * @param {number|null} elapsedMs Milliseconds since the request started.
+ * @returns {string} '' when idle.
+ */
+export function stationLoadingLabel(elapsedMs) {
+  if (elapsedMs === null || elapsedMs === undefined) return '';
+  const elapsed = Number(elapsedMs);
+  if (!Number.isFinite(elapsed) || elapsed < 0) return '';
+  return elapsed >= SERVER_WAKE_HINT_MS
+    ? msg('waking the data server…')
+    : msg('contacting the data server…');
+}
+
+/**
  * How often an open departure board asks again.
  *
  * The server holds its realtime snapshot for 45 s, so a minute is the shortest

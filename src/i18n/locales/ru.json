@@ -3149,5 +3149,7 @@
   "No departures expected": "Отправлений не ожидается",
   "Next departures": "Ближайшие отправления",
   "{minutes} min late": "опоздание {minutes} мин",
-  "on time": "по расписанию"
+  "on time": "по расписанию",
+  "contacting the data server…": "подключение к серверу данных…",
+  "waking the data server…": "сервер данных просыпается…"
 }

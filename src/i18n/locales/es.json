@@ -3082,5 +3082,7 @@
   "No departures expected": "No se esperan salidas",
   "Next departures": "Próximas salidas",
   "{minutes} min late": "{minutes} min de retraso",
-  "on time": "puntual"
+  "on time": "puntual",
+  "contacting the data server…": "contactando con el servidor de datos…",
+  "waking the data server…": "despertando el servidor de datos…"
 }

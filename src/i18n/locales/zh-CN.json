@@ -2948,5 +2948,7 @@
   "No departures expected": "预计无发车",
   "Next departures": "近期发车",
   "{minutes} min late": "晚点 {minutes} 分钟",
-  "on time": "准点"
+  "on time": "准点",
+  "contacting the data server…": "正在连接数据服务器…",
+  "waking the data server…": "正在唤醒数据服务器…"
 }

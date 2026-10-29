@@ -5,6 +5,7 @@ import {
   LABEL_COHORT_LIMIT,
   MAX_VIEWPORT_DEGREES,
   QUERY_LIMIT,
+  SERVER_WAKE_HINT_MS,
   STATION_SELECTED_COLOR,
   buildStationSelectionCopy,
   clampViewport,
@@ -13,6 +14,7 @@ import {
   selectStationCohort,
   shouldRefetch,
   stationIdFromPick,
+  stationLoadingLabel,
   stationPriority,
   stationsQuery,
   viewportDelta,
@@ -324,4 +326,24 @@ test('the selected card is protected, unique, and anchored above the marker', ()
   // No key or no anchor means no card, rather than an entry at the origin.
   assert.equal(createStationSelectedOverlayEntry('', { x: 1 }, copy), null);
   assert.equal(createStationSelectedOverlayEntry('node/5', null, copy), null);
+});
+
+test('a first load names its wait, and only calls it a wake-up when it is one', () => {
+  // Nothing in flight: no line at all, so the row keeps its count and age.
+  assert.equal(stationLoadingLabel(null), '');
+  assert.equal(stationLoadingLabel(undefined), '');
+  assert.equal(stationLoadingLabel(NaN), '');
+  assert.equal(stationLoadingLabel(-1), '');
+  // An ordinary round trip.
+  assert.equal(stationLoadingLabel(0), 'contacting the data server…');
+  assert.equal(
+    stationLoadingLabel(SERVER_WAKE_HINT_MS - 1),
+    'contacting the data server…',
+  );
+  // Past the delay the wait is a hosted instance starting, and it says so.
+  assert.equal(
+    stationLoadingLabel(SERVER_WAKE_HINT_MS),
+    'waking the data server…',
+  );
+  assert.equal(stationLoadingLabel(45_000), 'waking the data server…');
 });
