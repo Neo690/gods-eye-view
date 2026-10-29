@@ -55,7 +55,7 @@ export {
 import { createRealtimeBackend } from './realtimeBackend.js';
 
 import { t } from '../i18n/index.js';
-import { voiceStatusLabel } from './control.js';
+import { voiceErrorHint, voiceStatusLabel } from './control.js';
 
 // Machine states (dataset.status, CSS); voiceStatusLabel() translates labels.
 const STATUS_STATES = new Set([
@@ -435,10 +435,13 @@ export class GevRealtimeController extends RealtimeFacade {
     this.ui.detail.textContent = primaryDetail;
     this.ui.detail.title = primaryDetail;
     if (this.ui.errorDetail) {
-      this.ui.errorDetail.textContent =
+      const failure =
         status === 'error'
           ? resolvedDetail || t('Voice session could not be started.')
           : '';
+      this.ui.errorDetail.textContent = failure;
+      if (this.ui.errorHint)
+        this.ui.errorHint.textContent = voiceErrorHint(failure);
     }
     if (status === 'idle' || status === 'connecting' || status === 'error') {
       this.setVoiceSpeaker('idle');

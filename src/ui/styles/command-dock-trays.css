@@ -449,6 +449,11 @@
   letter-spacing: 0.035rem;
 }
 
+/* A hint that would mislead is blank, and a blank line still costs its margin. */
+#command-dock .gev-voice-error-hint:empty {
+  display: none;
+}
+
 /* Keep the complete inline attribution row above the command dock. */
 body:not(.ui-clean-view):not(.recording-mode) #cesium-credits,
 body:not(.ui-clean-view):not(.recording-mode):has(
