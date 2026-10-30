@@ -358,6 +358,9 @@ public class MainActivity extends Activity {
         startDictation(pendingDictationLocale);
         return;
       }
+      // The raw code is the only clue when the platform answers with one it
+      // does not name here; it stays in logcat, never in the page.
+      Log.w(TAG, "Dictation failed with recogniser code " + code);
       emitDictation("error", "", dictationErrorName(code));
     }
   }
