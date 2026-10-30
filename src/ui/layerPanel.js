@@ -46,6 +46,7 @@ const PANEL_GROUPS = [
       'military',
       'local-adsb',
       'ais-live-vessels',
+      'fishing-effort',
       'traffic',
       'transit',
       'bikeshare',
@@ -75,6 +76,8 @@ const PANEL_GROUPS = [
     ids: [
       'rocket-launches',
       'earthquakes',
+      'orbit-changes',
+      'satellite-watch',
       'radiation',
       'space-weather',
       'local-firms',

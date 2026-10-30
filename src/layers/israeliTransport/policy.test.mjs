@@ -49,18 +49,28 @@ test('every activity has a stable identity and a place on the globe', () => {
   }
 });
 
-test('no record claims a railway activity the research could not verify', () => {
-  // The layer ships ports, airports, roads, bridges and shipping only: an
-  // empty sector is the documented result, not a gap to fill with a guess.
+test('rail is carried, and only where the research found it', () => {
+  // No overseas railway, metro or light-rail award by an Israeli company could
+  // be verified while compiling the data, so the rail records are the Tel Aviv
+  // Red Line works. The test keeps that finding: a later edit cannot quietly
+  // move a rail record abroad, and an empty sector cannot reappear unnoticed.
   assert.deepEqual([...SECTORS], [
     'port',
+    'rail',
     'airport',
     'road',
     'bridge',
     'shipping',
+    'transit',
     'logistics',
   ]);
-  assert.equal(activitiesInSector('rail').length, 0);
+  const rail = activitiesInSector('rail');
+  assert.ok(rail.length >= 1, 'the rail sector must hold the documented work');
+  assert.ok(
+    rail.every((record) => record.country === 'Israel'),
+    'no rail record may sit outside Israel until a source says otherwise',
+  );
+  assert.ok(activitiesInSector('transit').length >= 4);
 });
 
 test('sectors and countries are counted from the data, not hard-coded', () => {

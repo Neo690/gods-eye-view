@@ -41,7 +41,7 @@ import {
   selectActivityCohort,
 } from './policy.js';
 import { COMPANIES, companyFor } from './companies.js';
-import { TRANSPORT_ACTIVITIES } from './data.js';
+import { SECTOR_COLORS, TRANSPORT_ACTIVITIES } from './data.js';
 import { isPointerFree } from '../../data/inputOwnership.js';
 import { t, tn } from '../../i18n/index.js';
 import {
@@ -108,8 +108,10 @@ export function createIsraeliTransportLayer({
             pixelSize: ACTIVITY_PIXEL_SIZE,
             color:
               Cesium.Color.fromCssColorString(ACTIVITY_COLOR).withAlpha(0.9),
+            // The ring takes its sector\u2019s accent, so rail and transit read
+            // apart from a port without a legend lookup.
             outlineColor: Cesium.Color.fromCssColorString(
-              record.sector === 'shipping' ? '#4FD1C5' : ACTIVITY_COLOR,
+              SECTOR_COLORS[record.sector] || ACTIVITY_COLOR,
             ).withAlpha(0.7),
             outlineWidth: 1,
             heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
@@ -307,7 +309,9 @@ export function createIsraeliTransportLayer({
 
   return {
     id: LAYER_ID,
-    name: 'Israeli Transport Sites',
+    // The layer draws companies as well as their sites, and its rail and
+    // transit records sit inside Israel too, so the name says both.
+    name: 'Israeli Transport Sites and Companies',
     icon: '\u25C8',
     source: 'Company and agency publications',
     // A curated record does not change between frames; the manager only needs

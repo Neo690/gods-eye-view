@@ -6,6 +6,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 import * as providers from '../../server/providers/live.js';
 import * as portable from '../../src/data/adsbLolFallback.js';
 
+// A developer's own ADS-B Exchange key must not change what these fixtures
+// assert; the one test that exercises it sets its own and restores the unset.
+delete process.env.ADSBX_API_KEY;
+
 /**
  * The military route with one feed, so its cache and cooldown stay
  * unambiguous. The merge across several feeds has its own tests below.
@@ -168,6 +172,55 @@ test('OpenSky state and track routes share tokens, retain cache and use regional
   assert.equal(fallback.statusCode, 200);
   assert.equal(fallback.headers['x-flight-source'], 'adsb.lol');
   assert.equal(JSON.parse(fallback.body).states[0][0], 'abc123');
+});
+
+test('a keyed ADS-B Exchange read stands in for the keyless regional fallback', async (t) => {
+  environment(t, {
+    OPENSKY_AUTH_MODE: 'anon',
+    OPENSKY_CLIENT_ID: undefined,
+    OPENSKY_CLIENT_SECRET: undefined,
+    OPENSKY_USERNAME: undefined,
+    OPENSKY_PASSWORD: undefined,
+    ADSBX_API_KEY: 'fixture-adsbx-key',
+  });
+  const asked = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    asked.push({ url: String(url), headers: options?.headers || {} });
+    if (String(url).includes('/states/'))
+      return new Response('', { status: 503 });
+    if (String(url).includes('gateway.adsbexchange.com'))
+      return Response.json({
+        now: Math.floor(Date.now() / 1000),
+        ac: [
+          {
+            hex: 'abc123',
+            flight: 'TEST123 ',
+            lat: 30,
+            lon: -97,
+            alt_baro: 10000,
+            gs: 420,
+          },
+        ],
+      });
+    throw Error(`Unexpected URL: ${url}`);
+  });
+  // A fresh module instance, so the earlier fixtures' caches cannot answer.
+  const fresh = await import(
+    `../../server/providers/aircraft/opensky.js?adsbx=${Date.now()}`
+  );
+  const response = await install(fresh.openSkyProxy())(
+    '/api/flights',
+    '?lat=30&lon=-97',
+  );
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers['x-flight-source'], 'ADS-B Exchange');
+  assert.equal(JSON.parse(response.body).states[0][0], 'abc123');
+  const call = asked.find((entry) =>
+    entry.url.includes('gateway.adsbexchange.com'),
+  );
+  assert.ok(call, 'the keyed provider was asked');
+  assert.equal(call.headers['X-Api-Key'], 'fixture-adsbx-key');
+  assert.match(call.url, /\/v2\/lat\/30\/lon\/-97\/dist\/250\//);
 });
 
 test('OpenSky global snapshot attempts are time-limited, retried once, then fall back', async (t) => {

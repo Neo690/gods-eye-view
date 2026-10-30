@@ -66,10 +66,14 @@ const STATUS_KEYS = Object.freeze({
 
 const SECTOR_KEYS = Object.freeze({
   port: msg('Port'),
+  rail: msg('Rail'),
   airport: msg('Airport'),
   road: msg('Road'),
   bridge: msg('Bridge'),
   shipping: msg('Shipping'),
+  // The transit word is the one the transit layer already uses, so a sector
+  // and a layer name that mean the same thing stay translated together.
+  transit: msg('Transit'),
   logistics: msg('Logistics'),
 });
 
@@ -145,10 +149,12 @@ export function buildActivityCard(record, translate = (text) => text) {
 export function activityPriority(record) {
   const sectorWeight = {
     port: 50,
+    rail: 45,
     airport: 50,
     road: 40,
     bridge: 30,
     shipping: 20,
+    transit: 35,
     logistics: 25,
   };
   const statusWeight = {

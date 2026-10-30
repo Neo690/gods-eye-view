@@ -143,6 +143,37 @@ test('exported CelesTrak plugin coalesces refreshes, retains stale TLEs, and rea
   assert.equal(disk.body, tle);
 });
 
+test('CelesTrak keeps the generation a refresh replaced and serves it as the previous read', async (t) => {
+  isolateDisk(t);
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(console, 'warn', () => {});
+  const first = 'ISS\n1 25544U first generation\n2 25544 fixture';
+  const second = 'ISS\n1 25544U second generation\n2 25544 fixture';
+  const bodies = [first, second];
+  let call = 0;
+  t.mock.method(globalThis, 'fetch', async () => new Response(bodies[call++]));
+  const request = install(celestrakProxy());
+  // Nothing has been replaced yet, so there is nothing to compare against.
+  assert.equal(
+    (await request('/api/celestrak', '/previous/stations')).status,
+    404,
+  );
+  assert.equal((await request('/api/celestrak', '/stations')).body, first);
+  now += 6 * 3600_000;
+  assert.equal((await request('/api/celestrak', '/stations')).body, second);
+  const previous = await request('/api/celestrak', '/previous/stations');
+  assert.equal(previous.status, 200);
+  assert.equal(previous.headers['x-tle-cache'], 'PREVIOUS');
+  assert.equal(
+    previous.body,
+    first,
+    'the replaced body is the first reference',
+  );
+  // It is a cache read: asking does not cost an upstream request.
+  assert.equal(call, 2);
+});
+
 test('CelesTrak answers 502 to an oversized TLE body without caching it', async (t) => {
   isolateDisk(t);
   t.mock.method(console, 'warn', () => {});

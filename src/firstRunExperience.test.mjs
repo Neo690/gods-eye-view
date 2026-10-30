@@ -996,11 +996,13 @@ test('the voice TOOL SCHEMA matches the pinned contract — the mission mapping 
   // Street Level and GNSS extend the manifest; broadcast caveats describe tracked and analyst aircraft.
   // Air quality (ECCC AQHI) extends the manifest, and so do the railway
   // stations and the Israeli transport sites. The solar-storm layer adds its
-  // own enum value, which is the one change a new layer is allowed to make.
-  assert.equal(block.length, 31419, 'serialized tool schema length drifted');
+  // own enum value, which is the one change a new layer is allowed to make;
+  // fishing effort adds another, and the ADS-B Exchange row extends the
+  // provider list the settings tool describes.
+  assert.equal(block.length, 31658, 'serialized tool schema length drifted');
   assert.equal(
     crypto.createHash('sha256').update(block).digest('hex'),
-    'a249e5de09db37cb0cad91d8daf77a70f05aafdff90c108a3a2144da4bb3a695',
+    '0dae52bcf1fa39296a8c454e5cfa07d8fce5634a6585452cc8bc6d6638c56081',
     'the first-run missions must ride EXISTING tools: no schema edit, no cache bust',
   );
   const instructions = fs.readFileSync(

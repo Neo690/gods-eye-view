@@ -5,6 +5,9 @@ import { createBundledCableSource } from '../layers/submarineCables/bundledSourc
 import { createAdsbGnssSource } from '../layers/gnss/source.js';
 import { createRadiationSource } from '../layers/radiation/source.js';
 import { createSpaceWeatherSource } from '../layers/spaceWeather/source.js';
+import { createOrbitChangeSource } from '../layers/orbitChanges/source.js';
+import { createSatelliteWatchSource } from '../layers/satelliteWatch/sources.js';
+import { createFishingEffortSource } from '../layers/fishingEffort/sources.js';
 
 /** Construct the existing reference feeds independently of application setup. */
 export function createReferenceSources() {
@@ -16,5 +19,8 @@ export function createReferenceSources() {
     'gnss-integrity': createAdsbGnssSource(),
     radiation: createRadiationSource(),
     'space-weather': createSpaceWeatherSource(),
+    'orbit-changes': createOrbitChangeSource(),
+    'satellite-watch': createSatelliteWatchSource(),
+    'fishing-effort': createFishingEffortSource(),
   };
 }

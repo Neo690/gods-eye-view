@@ -121,7 +121,8 @@
     "ΔE",
     "ΔN",
     "▲ {frp} MW",
-    "{radius} km"
+    "{radius} km",
+    "TCA"
   ],
   "ru": [
     "AIS: --",
@@ -137,7 +138,8 @@
     "R&B",
     "REC",
     "VS",
-    "WHOT/BHOT"
+    "WHOT/BHOT",
+    "TCA"
   ],
   "zh-CN": [
     "1090 MHz",
@@ -192,7 +194,8 @@
     "{value} KM/S",
     "ΔE",
     "ΔN",
-    "▲ {frp} MW"
+    "▲ {frp} MW",
+    "TCA"
   ],
   "fr": [
     "1090 MHz",
@@ -386,7 +389,8 @@
     "ΔE",
     "ΔN",
     "Ⅱ PAUSE",
-    "▲ {frp} MW"
+    "▲ {frp} MW",
+    "TCA"
   ],
   "ar": [
     "1090 MHz",
@@ -439,6 +443,7 @@
     "{source} HTTP {status}",
     "{speed}KT",
     "ΔE",
-    "ΔN"
+    "ΔN",
+    "TCA"
   ]
 }

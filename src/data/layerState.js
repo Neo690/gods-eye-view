@@ -626,6 +626,11 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
     disposition: 'enabled-only',
   }),
   Object.freeze({
+    id: 'fishing-effort',
+    token: '03',
+    disposition: 'enabled-only',
+  }),
+  Object.freeze({
     id: 'flights',
     token: 'f',
     disposition: 'enabled+options',
@@ -666,6 +671,11 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
     disposition: 'enabled-only',
   }),
   Object.freeze({
+    id: 'orbit-changes',
+    token: '01',
+    disposition: 'enabled-only',
+  }),
+  Object.freeze({
     id: 'radiation',
     token: '5',
     disposition: 'enabled-only',
@@ -690,6 +700,11 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
   Object.freeze({
     id: 'rocket-launches',
     token: 'x',
+    disposition: 'enabled-only',
+  }),
+  Object.freeze({
+    id: 'satellite-watch',
+    token: '02',
     disposition: 'enabled-only',
   }),
   Object.freeze({

@@ -1,5 +1,9 @@
 import { openSkyProxy } from './aircraft/opensky.js';
 import { celestrakProxy, rocketLaunchesProxy } from './space.js';
+import { satelliteCatalogueProxy } from './satelliteCatalogue.js';
+import { n2yoProxy } from './n2yo.js';
+import { spaceTrackProxy } from './spacetrack.js';
+import { fishingEffortProxy } from './fishingEffort.js';
 import { tomtomProxy } from './traffic.js';
 import { firmsProxy } from './firms.js';
 import { terrainHeightsProxy } from './terrain.js';
@@ -43,6 +47,10 @@ function localProviderPlugins({ realtime, gemini } = {}) {
   return [
     openSkyProxy(),
     celestrakProxy(),
+    satelliteCatalogueProxy(),
+    n2yoProxy(),
+    spaceTrackProxy(),
+    fishingEffortProxy(),
     tomtomProxy(),
     firmsProxy(),
     rocketLaunchesProxy(),

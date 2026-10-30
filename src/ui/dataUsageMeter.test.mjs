@@ -112,17 +112,18 @@ function fakeDocument() {
 
   const titleBar = make('div');
   const actionRow = make('nav');
-  const hudSlot = make('div');
+  const voiceControl = make('div');
   const byId = new Map([
     ['title-bar', titleBar],
     ['top-center-actions', actionRow],
-    ['hud-data-usage', hudSlot],
+    ['gev-voice-control', voiceControl],
   ]);
   return {
     hidden: false,
     titleBar,
     actionRow,
-    hudSlot,
+    voiceControl,
+    make,
     byId,
     listeners,
     createElement: (tagName) => make(tagName),
@@ -143,7 +144,7 @@ function fakePerformance(entries) {
   };
 }
 
-test('the readout rides the HUD telemetry window and reports bytes already transferred', () => {
+test('the readout sits above the voice control and reports bytes already transferred', () => {
   const documentRef = fakeDocument();
   const entries = [
     {
@@ -166,9 +167,10 @@ test('the readout rides the HUD telemetry window and reports bytes already trans
     clearIntervalFn: () => {},
   });
 
-  const readout = documentRef.hudSlot.children.at(-1);
+  const readout = documentRef.voiceControl.children.at(-1);
   assert.equal(readout.id, 'data-usage');
-  // The application chrome keeps none of it: the line belongs to the HUD.
+  // The application chrome keeps none of it: the line is anchored to the mic,
+  // not parked in the title bar or the action row.
   assert.deepEqual(documentRef.actionRow.children, []);
   assert.deepEqual(documentRef.titleBar.children, []);
   // Rate, separator, total — and no symbols the reader has to decode.
@@ -181,11 +183,44 @@ test('the readout rides the HUD telemetry window and reports bytes already trans
   assert.equal(readout.removed, true);
 });
 
-test('the meter leaves the page alone without a HUD telemetry window', () => {
+test('without a timeline there is nothing to measure', () => {
   const meter = createDataUsageMeter({
     documentRef: { getElementById: () => null },
     performanceRef: fakePerformance([]),
   });
   assert.equal(typeof meter.destroy, 'function');
+  meter.destroy();
+});
+
+test('a voice control built after the meter still gets the line', () => {
+  // Voice is wired up when its runner exists, which is later than the shell's
+  // UI init: the meter must wait for the mic instead of giving up.
+  const documentRef = fakeDocument();
+  const late = documentRef.voiceControl;
+  documentRef.byId.delete('gev-voice-control');
+
+  let tick = null;
+  const meter = createDataUsageMeter({
+    documentRef,
+    performanceRef: fakePerformance([]),
+    setIntervalFn: (fn) => {
+      tick = fn;
+      return 1;
+    },
+    clearIntervalFn: () => {},
+  });
+  assert.deepEqual(documentRef.voiceControl.children, []);
+
+  documentRef.byId.set('gev-voice-control', late);
+  tick();
+  assert.equal(documentRef.voiceControl.children.length, 1);
+  assert.equal(documentRef.voiceControl.children[0].id, 'data-usage');
+
+  // A rebuilt control is adopted again rather than left with a dead line.
+  const rebuilt = documentRef.make('div');
+  documentRef.byId.set('gev-voice-control', rebuilt);
+  tick();
+  assert.equal(rebuilt.children.length, 1);
+
   meter.destroy();
 });

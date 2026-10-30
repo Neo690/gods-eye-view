@@ -33,7 +33,11 @@ export const COMPANIES = Object.freeze(
     {
       key: 'shikun-binui',
       name: 'Shikun & Binui',
-      matches: ['Shikun & Binui', 'Shikun & Binui / SBI'],
+      matches: [
+        'Shikun & Binui',
+        'Shikun & Binui / SBI',
+        'Shikun & Binui / Solel Boneh',
+      ],
       parent: null,
       hq: {
         lat: 31.9882,
@@ -133,7 +137,7 @@ export const COMPANIES = Object.freeze(
     {
       key: 'iai',
       name: 'Israel Aerospace Industries',
-      matches: ['Israel Aerospace Industries'],
+      matches: ['Israel Aerospace Industries', 'IAI Bedek Aviation Group'],
       parent: null,
       hq: {
         lat: 31.9467,
@@ -217,9 +221,317 @@ export const COMPANIES = Object.freeze(
       },
       business:
         'Global container carrier operating its own fleet and liner network.',
-      subsidiaries: [],
+      subsidiaries: ['Gold Star Line'],
       source: {
         url: 'https://www.sec.gov/Archives/edgar/data/1654126/000117891325002994/zk2533624.htm',
+      },
+    },
+
+    // ── Maritime ─────────────────────────────────────────────────────────
+    {
+      key: 'gold-star-line',
+      name: 'Gold Star Line',
+      matches: ['Gold Star Line'],
+      parent: 'zim',
+      hq: {
+        lat: 32.794044,
+        lon: 34.989571,
+        place: 'Haifa',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        'Container line running an Asia–Middle East rotation, commercially based in Haifa.',
+      subsidiaries: [],
+      source: {
+        url: 'https://www.seatrade-maritime.com/containers/gold-star-line-to-expand-into-india-middle-east-africa-with-more-services-planned',
+      },
+    },
+    {
+      key: 'israel-shipyards',
+      name: 'Israel Shipyards',
+      matches: ['Israel Shipyards'],
+      parent: null,
+      hq: {
+        lat: 32.8246,
+        lon: 35.0736,
+        place: 'Haifa Bay',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        'Naval and commercial shipyard building patrol craft and offshore patrol vessels for export.',
+      subsidiaries: [],
+      source: { url: 'https://www.israel-shipyards.com/recent-deliveries.asp' },
+    },
+    {
+      key: 'mano-maritime',
+      name: 'Mano Maritime',
+      matches: ['Mano Maritime', 'Mano Cruises'],
+      parent: null,
+      hq: {
+        lat: 32.8191,
+        lon: 34.9983,
+        place: 'Haifa',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        'Shipowner and cruise operator sailing its own vessel from Haifa across the eastern Mediterranean.',
+      subsidiaries: ['Mano Cruises', 'Crown Iris'],
+      source: {
+        url: 'https://www.cruisemapper.com/news/14724-mano-cruises-launches-2025-eastern-mediterranean-season',
+      },
+    },
+    {
+      key: 'haifa-port',
+      name: 'Haifa Port Company',
+      matches: ['Haifa Port Company', 'Haifa Port'],
+      parent: null,
+      hq: {
+        lat: 32.8236,
+        lon: 35.0008,
+        place: 'Haifa',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        'Operator of the port of Haifa, privatised in 2022 to an Adani (70 %) and Gadot (30 %) consortium.',
+      subsidiaries: [],
+      source: {
+        url: 'https://www.adaniports.com/newsroom/media-releases/adani-and-gadot-win-tender-to-privatise-israels-haifa-port',
+      },
+    },
+    {
+      key: 'captains-eye',
+      name: "Captain's Eye",
+      matches: ["Captain's Eye"],
+      parent: null,
+      hq: {
+        lat: 32.0853,
+        lon: 34.7818,
+        place: 'Tel Aviv',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        'Maritime AI that reads existing port and ship cameras for safety and security events.',
+      subsidiaries: [],
+      source: {
+        url: 'https://www.calcalistech.com/ctechnews/article/rkdxrrdq9',
+      },
+    },
+    {
+      key: 'orca-ai',
+      name: 'Orca AI',
+      matches: ['Orca AI'],
+      parent: null,
+      hq: {
+        lat: 32.0853,
+        lon: 34.7818,
+        place: 'Tel Aviv',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        'Navigation and watchkeeping AI installed on commercial fleets.',
+      subsidiaries: [],
+      source: {
+        url: 'https://www.orca-ai.io/resource/seaspan-expands-ai-adoption-with-100-more-ships-equipped-with-orca-ai-for-enhanced-safety-and-efficiency/',
+      },
+    },
+    {
+      key: 'windward',
+      name: 'Windward',
+      matches: ['Windward'],
+      parent: null,
+      hq: {
+        lat: 32.0778,
+        lon: 34.7818,
+        place: 'Tel Aviv',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        'Maritime risk and trade-compliance analytics used by carriers and governments.',
+      subsidiaries: [],
+      source: {
+        url: 'https://www.prnewswire.com/il/news-releases/windward-to-enhance-shell-s-trade-compliance-processes-814445306.html',
+      },
+    },
+
+    // ── Aviation and construction ────────────────────────────────────────
+    {
+      key: 'cal-cargo',
+      name: 'CAL Cargo Airlines',
+      matches: ['CAL Cargo Airlines', 'Challenge Airlines IL'],
+      parent: null,
+      hq: {
+        lat: 32.0114,
+        lon: 34.8867,
+        place: 'Ben Gurion airport',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        'Israeli all-cargo carrier, renamed Challenge Airlines IL in 2022, based on a 747 and 767 freighter fleet.',
+      subsidiaries: [],
+      source: {
+        url: 'https://www.challenge-group.com/expert/challenge-airlines-il/',
+      },
+    },
+    {
+      key: 'electra',
+      name: 'Electra Group',
+      matches: ['Electra Group', 'Electra'],
+      parent: null,
+      hq: {
+        lat: 32.0684,
+        lon: 34.8248,
+        place: 'Ramat Gan',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        'Building-services and infrastructure contractor working across transport, energy and facilities.',
+      subsidiaries: ['Gilston', 'Electra Afikim'],
+      source: {
+        url: 'https://www.ifi.today/news/2856-Electra-Group-Secures-Lucrative-Contract-for-JFK-A/',
+      },
+    },
+
+    // ── Transit: operators and the software behind them ─────────────────
+    {
+      key: 'egged',
+      name: 'Egged Group',
+      matches: ['Egged Group', 'Egged'],
+      parent: null,
+      hq: {
+        lat: 32.0853,
+        lon: 34.7818,
+        place: 'Tel Aviv',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        "Israel's largest bus operator, holding concessions in Poland, the Netherlands and Lithuania.",
+      subsidiaries: [
+        'Mobilis (Poland)',
+        'EBS (Netherlands)',
+        'TOKS (Lithuania)',
+      ],
+      source: { url: 'https://www.egged.co.il/en/egged-group/egged-europe' },
+    },
+    {
+      key: 'dan',
+      name: 'Dan Group',
+      matches: ['Dan Group', 'Dan'],
+      parent: null,
+      hq: {
+        lat: 32.0853,
+        lon: 34.7818,
+        place: 'Tel Aviv',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        'Public-transport operator running urban bus services in Israel and Lisbon.',
+      subsidiaries: ['Transportes Sul do Tejo (Portugal)'],
+      source: {
+        url: 'https://news.arriva.co.uk/news/arriva-group-concludes-the-sale-of-its-portuguese-business-to-dan-group',
+      },
+    },
+    {
+      key: 'afifi',
+      name: 'Afifi Group',
+      matches: ['Afifi Group', 'Afifi'],
+      parent: null,
+      hq: {
+        lat: 32.7021,
+        lon: 35.2978,
+        place: 'Nazareth',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        'Transport and logistics group whose Busway subsidiary holds a regional bus concession in Portugal.',
+      subsidiaries: ['Busway (Portugal)'],
+      source: {
+        url: 'https://www.portugalresident.com/israeli-company-to-run-buses-in-and-around-aveiro/',
+      },
+    },
+    {
+      key: 'optibus',
+      name: 'Optibus',
+      matches: ['Optibus'],
+      parent: null,
+      hq: {
+        lat: 32.0853,
+        lon: 34.7818,
+        place: 'Tel Aviv',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        'Planning, scheduling and operations software for public-transport operators and agencies.',
+      subsidiaries: ['MagicEye'],
+      source: { url: 'https://optibus.com/case/metrobus-magiceye-control/' },
+    },
+    {
+      key: 'hopon',
+      name: 'HopOn',
+      matches: ['HopOn', 'TAF mobile'],
+      parent: null,
+      hq: {
+        lat: 32.0853,
+        lon: 34.7818,
+        place: 'Tel Aviv',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        'Mobility-as-a-service and mobile ticketing platform, with TAF mobile as its German arm.',
+      subsidiaries: ['TAF mobile'],
+      source: { url: 'https://hopon.co/leipzig-move/' },
+    },
+
+    // ── Road technology ─────────────────────────────────────────────────
+    {
+      key: 'mobileye',
+      name: 'Mobileye',
+      matches: ['Mobileye'],
+      parent: null,
+      hq: {
+        lat: 31.7683,
+        lon: 35.2137,
+        place: 'Jerusalem',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        'Driver-assistance and autonomous-driving systems supplied to carmakers and transit pilots.',
+      subsidiaries: [],
+      source: {
+        url: 'https://www.mobileye.com/blog/from-neighborhoods-to-networks-how-grorud-valleys-maas-enriched-public-transit/',
+      },
+    },
+    {
+      key: 'notraffic',
+      name: 'NoTraffic',
+      matches: ['NoTraffic'],
+      parent: null,
+      hq: {
+        lat: 32.0853,
+        lon: 34.7818,
+        place: 'Tel Aviv',
+        country: 'Israel',
+        precision: 'city',
+      },
+      business:
+        'AI traffic-signal platform deployed at intersections and approved for statewide use.',
+      subsidiaries: [],
+      source: {
+        url: 'https://www.notraffic.com/news-media/maryland-department-of-transportation-greenlights-notraffic/',
       },
     },
   ].map((company) =>

@@ -140,6 +140,17 @@ const ADSBLOL_POINT_CACHE_MS = 12000;
 const ADSBLOL_POINT_CACHE_MAX = 80;
 const ADSBLOL_POINT_RADIUS_NM = 250;
 const ADSBLOL_POINT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+/**
+ * ADS-B Exchange regional fallback, when the operator has a key. Same shape
+ * (readsb JSON) and same 250 nm anchor as the keyless adsb.lol read; the key
+ * stays here, and its RapidAPI quota is why this cache is coarser still.
+ */
+const _adsbxPointCache = new Map();
+const _adsbxPointInFlight = new Map();
+const ADSBX_POINT_CACHE_MS = 20_000;
+const ADSBX_POINT_CACHE_MAX = 60;
+const ADSBX_POINT_RADIUS_NM = 250;
+const ADSBX_POINT_MAX_RESPONSE_BYTES = 12 * 1024 * 1024;
 // A 200 response can still contain an old OpenSky snapshot. Past this point
 // the viewport-scoped adsb.lol source is more honest and keeps local motion
 // current instead of coasting a stale worldwide frame indefinitely.
@@ -367,6 +378,118 @@ async function fetchAdsbLolPointFallback(req) {
   }
 }
 
+/**
+ * The operator's ADS-B Exchange key, if any — the same `ADSBX_API_KEY` the
+ * military feed uses, so one subscription covers both reads.
+ */
+function adsbExchangeKey() {
+  return String(process.env.ADSBX_API_KEY || '').trim();
+}
+
+/**
+ * ADS-B Exchange answers the same readsb JSON as adsb.lol, so one normaliser
+ * serves both; only the transport and the key differ.
+ */
+async function fetchAdsbExchangePointFallback(req) {
+  const key = adsbExchangeKey();
+  if (!key) return null;
+  const anchor = adsbLolFallbackAnchor(req);
+  if (!anchor) return null;
+  const roundedLat = Math.round(anchor.latitude * 4) / 4;
+  const roundedLon = Math.round(anchor.longitude * 4) / 4;
+  const cacheKey = `${roundedLat.toFixed(2)},${roundedLon.toFixed(2)}`;
+  const cached = _adsbxPointCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && now - cached.cachedAt < ADSBX_POINT_CACHE_MS) {
+    return { ...cached, cacheStatus: 'HIT' };
+  }
+
+  const request = coalesceProxyRequest(
+    _adsbxPointInFlight,
+    cacheKey,
+    async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      try {
+        const upstream = await fetch(
+          `https://gateway.adsbexchange.com/api/aircraft/v2/lat/${roundedLat}/lon/${roundedLon}/dist/${ADSBX_POINT_RADIUS_NM}/`,
+          {
+            headers: {
+              Accept: 'application/json',
+              'X-Api-Key': key,
+              'User-Agent': 'gods-eye-view-adsbx-fallback/1.0',
+            },
+            signal: controller.signal,
+          },
+        );
+        if (!upstream.ok) throw new Error(`upstream HTTP ${upstream.status}`);
+        const payload = await readResponseJsonCapped(
+          upstream,
+          ADSBX_POINT_MAX_RESPONSE_BYTES,
+        );
+        const normalized = normalizeAdsbLolPointResponse(payload);
+        if (!normalized.states.length)
+          throw new Error('no positioned aircraft');
+        const record = {
+          body: JSON.stringify(normalized),
+          cachedAt: Date.now(),
+          count: normalized.states.length,
+        };
+        _adsbxPointCache.delete(cacheKey);
+        _adsbxPointCache.set(cacheKey, record);
+        while (_adsbxPointCache.size > ADSBX_POINT_CACHE_MAX) {
+          _adsbxPointCache.delete(_adsbxPointCache.keys().next().value);
+        }
+        return record;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    },
+  );
+  try {
+    const record = await request.promise;
+    return { ...record, cacheStatus: request.shared ? 'INFLIGHT' : 'MISS' };
+  } catch (error) {
+    if (!request.shared && error?.name !== 'AbortError') {
+      console.warn(
+        '[ADS-B Exchange Flights Fallback]',
+        error?.message || error,
+      );
+    }
+    return cached ? { ...cached, cacheStatus: 'STALE' } : null;
+  }
+}
+
+async function serveAdsbExchangePointFallback(req, res, requestedMode, reason) {
+  const fallback = await fetchAdsbExchangePointFallback(req);
+  if (!fallback) return false;
+  res.writeHead(200, {
+    ...buildOpenSkyHeaders({
+      cacheStatus: fallback.cacheStatus,
+      requestedMode,
+      usedMode: 'adsb-exchange-regional',
+      reason,
+    }),
+    'X-Feed-Source': 'ADS-B Exchange',
+    'X-Flight-Source': 'ADS-B Exchange',
+    'X-Flight-Coverage': `${ADSBX_POINT_RADIUS_NM}nm regional fallback`,
+    'X-Flight-Count': String(fallback.count),
+  });
+  res.end(fallback.body);
+  return true;
+}
+
+/**
+ * The regional fallback order: the operator's ADS-B Exchange key first (it is
+ * the network they chose and pay for), then the keyless adsb.lol read. Both
+ * answer the same OpenSky-shaped body, so the renderer never knows which.
+ */
+async function serveRegionalPointFallback(req, res, requestedMode, reason) {
+  if (await serveAdsbExchangePointFallback(req, res, requestedMode, reason))
+    return true;
+  return serveAdsbLolPointFallback(req, res, requestedMode, reason);
+}
+
 async function serveAdsbLolPointFallback(req, res, requestedMode, reason) {
   const fallback = await fetchAdsbLolPointFallback(req);
   if (!fallback) return false;
@@ -438,7 +561,7 @@ export function openSkyProxy() {
         ) {
           if (
             openSkySourceIsStale(_openskyCacheSourceEpochMs, now) &&
-            (await serveAdsbLolPointFallback(
+            (await serveRegionalPointFallback(
               req,
               res,
               requestedMode,
@@ -478,7 +601,7 @@ export function openSkyProxy() {
         // succeed and just burns goodwill.
         if (inCooldown) {
           if (
-            await serveAdsbLolPointFallback(
+            await serveRegionalPointFallback(
               req,
               res,
               requestedMode,
@@ -564,7 +687,7 @@ export function openSkyProxy() {
         if (
           upstream.ok &&
           openSkySourceIsStale(sourceEpochMs, now) &&
-          (await serveAdsbLolPointFallback(
+          (await serveRegionalPointFallback(
             req,
             res,
             requestedMode,
@@ -605,7 +728,7 @@ export function openSkyProxy() {
         }
 
         if (!upstream.ok && !_openskyCacheBody) {
-          const servedFallback = await serveAdsbLolPointFallback(
+          const servedFallback = await serveRegionalPointFallback(
             req,
             res,
             requestedMode,
@@ -728,7 +851,7 @@ export function openSkyProxy() {
           process.env.OPENSKY_AUTH_MODE,
         );
         if (
-          await serveAdsbLolPointFallback(
+          await serveRegionalPointFallback(
             req,
             res,
             requestedMode,

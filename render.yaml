@@ -61,6 +61,12 @@ services:
         sync: false
       - key: OPENSKY_CLIENT_SECRET
         sync: false
+      # Satellites above the view centre (/api/n2yo/above) — the fourth
+      # Satellite Watch source. Unset, the route answers {"error":"no_key"}
+      # and that switch says a key is missing while the other four keep
+      # reading. Server-side only: the browser never receives it.
+      - key: N2YO_API_KEY
+        sync: false
       # Account-scoped: only the uRADMonitor units this account owns or was
       # granted. Unset, the radiation snapshot skips the network and the four
       # keyless feeds still draw.

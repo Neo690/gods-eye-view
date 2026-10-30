@@ -134,6 +134,46 @@ export const KEY_SETUP_KEYS = Object.freeze([
     clientExposed: true,
   }),
   Object.freeze({
+    id: 'adsb-exchange',
+    title: 'ADS-B EXCHANGE', // i18n-ignore: provider product name
+    unlocks: msg(
+      'A third military aircraft feed and the regional flights fallback when OpenSky is unavailable — paste the API key of your own ADS-B Exchange agreement. It stays on the server; their terms allow personal, non-commercial use only',
+    ),
+    getUrl: 'https://www.adsbexchange.com/data-products/',
+    envVars: Object.freeze(['ADSBX_API_KEY']),
+    tier: 'paid',
+  }),
+  Object.freeze({
+    id: 'global-fishing-watch',
+    title: 'GLOBAL FISHING WATCH', // i18n-ignore: provider product name
+    unlocks: msg(
+      'Apparent fishing effort in the Fishing Effort layer — paste the API token from your Global Fishing Watch account; it stays on the server',
+    ),
+    getUrl: 'https://globalfishingwatch.org/our-apis/tokens',
+    envVars: Object.freeze(['GFW_API_TOKEN']),
+    tier: 'free',
+  }),
+  Object.freeze({
+    id: 'space-track',
+    title: 'SPACE-TRACK', // i18n-ignore: provider product name
+    unlocks: msg(
+      'Official element sets and the public conjunction feed in Satellite Watch — paste the account username and password; they stay on the server and the app never sends them to the browser',
+    ),
+    getUrl: 'https://www.space-track.org/auth/createAccount',
+    envVars: Object.freeze(['SPACETRACK_USER', 'SPACETRACK_PASSWORD']),
+    tier: 'free',
+  }),
+  Object.freeze({
+    id: 'n2yo',
+    title: 'N2YO', // i18n-ignore: provider product name
+    unlocks: msg(
+      'Satellites above the view centre in Satellite Watch — paste the API key from your N2YO account. The key stays on the server; the app reads it through its own route',
+    ),
+    getUrl: 'https://www.n2yo.com/api/',
+    envVars: Object.freeze(['N2YO_API_KEY']),
+    tier: 'free',
+  }),
+  Object.freeze({
     id: 'uradmonitor',
     title: 'URADMONITOR', // i18n-ignore: provider product name
     unlocks: msg(

@@ -1,40 +1,31 @@
 /* ── Data Usage Readout ────────────────────────
-   One line in the HUD telemetry window, after the coordinates and the imaging
-   scale. Telemetry, not a control: no frame, no background of its own, no
-   chevron — it should read like the AIS line above it, one step quieter. */
+   One dim line floating just above the voice control, right-aligned with it.
+   Telemetry, not a control: no frame, no background of its own, no chevron —
+   the rate reads like a HUD number, and the mic keeps the corner.
 
-/* An empty slot draws nothing: the line only exists once the meter has
-   written its first numbers. */
-.hud-data-usage:empty {
-  display: none;
-}
+   The control is a positioned box in every shell (fixed on the body, relative
+   inside the dock), so the line anchors to its top-right corner without a
+   wrapper. It yields the slot to the two things that also open there: the
+   hover hint (0.7rem above the pill) and the voice card. */
 
-.hud-data-usage {
-  display: flex;
-  margin-top: 4px;
-}
-
-.hud-data-usage .data-usage {
+#gev-voice-control .data-usage {
+  position: absolute;
+  right: 2px;
+  bottom: calc(100% + 1px);
   display: inline-flex;
   align-items: center;
   gap: 5px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
   line-height: 1;
-  letter-spacing: 1.2px;
+  letter-spacing: 0.7px;
   font-variant-numeric: tabular-nums;
-  /* Inherited from its window, so every HUD variant (and the phone's cyan)
-     keeps the readout in the same colour as the numbers around it. */
-  color: inherit;
-  opacity: 0.56;
+  color: var(--text-primary);
+  opacity: 0.5;
   white-space: nowrap;
   user-select: none;
-  cursor: default;
+  pointer-events: none;
   transition: opacity 140ms ease;
-}
-
-.hud-data-usage .data-usage:hover {
-  opacity: 0.92;
 }
 
 .data-usage-value {
@@ -50,21 +41,28 @@
   opacity: 0.6;
 }
 
-/* On a phone the telemetry window is one centred column between the
-   classification block and the credits; the rate alone clears it, and the
-   session total stays in the title. */
+/* The help tray opens 0.7rem above the pill, which is where this line sits:
+   an approaching pointer asks for the hint, so the rate steps aside. */
+#gev-voice-control:hover .data-usage,
+#gev-voice-control:focus-within .data-usage {
+  opacity: 0;
+}
+
+/* The voice card covers the same slot and carries the conversation. */
+#gev-voice-control:has(.gev-voice-card:not([hidden])) .data-usage {
+  display: none;
+}
+
+/* On a phone the mic is a 92px pill in the dock: the rate alone clears it, and
+   the session total stays in the title. */
 @media (max-width: 700px) {
-  .hud-data-usage {
-    justify-content: center;
+  #gev-voice-control .data-usage {
+    font-size: 8.5px;
+    letter-spacing: 0.4px;
   }
 
-  .hud-data-usage .data-usage {
-    font-size: 9.5px;
-    letter-spacing: 0.6px;
-  }
-
-  .hud-data-usage .data-usage-total,
-  .hud-data-usage .data-usage-sep {
+  #gev-voice-control .data-usage-total,
+  #gev-voice-control .data-usage-sep {
     display: none;
   }
 }

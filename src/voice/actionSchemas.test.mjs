@@ -39,8 +39,9 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // Street Level and GNSS extend the manifest; tracked and analyst aircraft describe broadcasts.
     // Air quality (ECCC AQHI) extends the manifest.
     // Railway stations and the Israeli transport sites extend it too, each with
-    // the fields its card prints. The solar-storm layer adds one enum value.
-    'f9dfc50e4b5d3f1f716c77fef109f380adf8bb5566a884c05740cc6f31a6fe2f',
+    // the fields its card prints. The solar-storm layer adds one enum value,
+    // and fishing effort another.
+    'cfe49c678592c44761ccb137123d234408e5f6941062be791b4c65b7699476a2',
   );
 });
 

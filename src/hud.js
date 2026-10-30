@@ -313,11 +313,6 @@ export class IntelHUD {
             <div id="hud-alt">ALT: --m   SUN: --° EL</div>
             <div id="hud-ais-vessel" class="hud-ais-vessel">${t('AIS: --')}</div>
             <div id="hud-windy" class="hud-windy" style="display:none"></div>
-            <!-- The data readout's slot (ui/dataUsageMeter.js fills it): the
-                 app's own HTTP traffic is telemetry, so it belongs here with
-                 the rest of the numbers rather than floating under the window
-                 buttons. -->
-            <div id="hud-data-usage" class="hud-data-usage"></div>
           </div>
           <div class="hud-bracket">┘</div>
         </div>

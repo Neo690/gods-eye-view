@@ -2,11 +2,15 @@ import { t } from '../i18n/index.js';
 
 /**
  * Live HTTP data readout: what this app has pulled over the network, and how
- * fast. It is one dim line in the HUD's telemetry window, after the coordinates
- * and the imaging scale — telemetry, not a control, so it carries no frame and
- * no button of its own. It used to sit under the window buttons, where it was
- * one more number competing with the controls; inside the TOP SECRET readout it
- * is where an operator looks for numbers anyway.
+ * fast. It is one dim line floating just above the voice control, right-aligned
+ * with it — telemetry, not a control, so it carries no frame, no background and
+ * no button of its own. It sat in the HUD telemetry window for a while, but
+ * those numbers are read at a glance and this one is a running rate: above the
+ * mic it stays in sight without pushing the coordinates down.
+ *
+ * The voice control is built when voice is wired up, which can happen after
+ * this module mounts, so the line attaches on the first tick that finds it and
+ * re-attaches if the control is rebuilt.
  *
  * Numbers come from the browser's own Resource Timing entries, which is the
  * only source that reports bytes already on the wire — no request is wrapped,
@@ -72,7 +76,7 @@ export function rateFromSamples(samples, now, windowMs = RATE_WINDOW_MS) {
 }
 
 /**
- * Mount the readout in the globe-action strip and keep it ticking.
+ * Mount the readout above the voice control and keep it ticking.
  * @param {object} [options]
  * @param {Document} [options.documentRef]
  * @param {Performance} [options.performanceRef]
@@ -88,12 +92,14 @@ export function createDataUsageMeter({
   setIntervalFn = globalThis.setInterval,
   clearIntervalFn = globalThis.clearInterval,
 } = {}) {
-  // The HUD owns the slot (hud.js builds it before this module runs). No HUD,
-  // no readout: the line belongs to that screen, not to the application chrome.
-  const host = documentRef?.getElementById?.('hud-data-usage');
+  // The voice control is the anchor: the readout sits above the mic. It may not
+  // exist yet (voice is wired up later), so attachment is retried on each tick.
+  const hostFor = () => documentRef?.getElementById?.('gev-voice-control');
   const timeline =
     typeof performanceRef?.now === 'function' ? performanceRef : null;
-  if (!host || !timeline || !documentRef?.createElement) {
+  // A page with no place to measure from gets no readout at all; a page with no
+  // voice control yet is a different case — the line waits for it.
+  if (!timeline || !documentRef?.createElement) {
     return { destroy() {} };
   }
   // A re-init keeps one readout: the old one is a stale measurement.
@@ -122,8 +128,6 @@ export function createDataUsageMeter({
   readout.append(separator);
   const totalValue = value('data-usage-total', t('Total received since load'));
 
-  host.append(readout);
-
   const seen = new Set();
   const samples = [];
   let total = 0;
@@ -131,6 +135,16 @@ export function createDataUsageMeter({
   let baseline = true;
   let timer = null;
   let destroyed = false;
+  let attachedTo = null;
+
+  /** Put the line above the mic once the control exists; skip once attached. */
+  const attach = () => {
+    const target = hostFor();
+    if (!target || target === attachedTo) return;
+    target.append(readout);
+    attachedTo = target;
+  };
+  attach();
 
   const scan = () => {
     const entries = timeline.getEntriesByType?.('resource') ?? [];
@@ -152,6 +166,7 @@ export function createDataUsageMeter({
 
   const tick = () => {
     if (destroyed) return;
+    attach();
     scan();
     const now = timeline.now();
     if (!baseline) samples.push({ at: now, bytes: pending });

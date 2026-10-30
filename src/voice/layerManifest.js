@@ -313,6 +313,9 @@ const layers = [
       'israeli companies',
       'israeli ports',
       'israeli transport sites',
+      'israeli transport companies',
+      'israeli rail',
+      'israeli shipping',
     ],
     context: true,
     query: {
@@ -457,10 +460,34 @@ const layers = [
     noQuery: 'station readings are presented in the layer panel',
   },
   {
+    id: 'satellite-watch',
+    aliases: [
+      'satellite watch',
+      'azmth',
+      'orbital radar',
+      'war monitor',
+      'n2yo',
+    ],
+    context: false,
+    noQuery: 'four sources of tracked objects; the layer panel carries them',
+  },
+  {
+    id: 'orbit-changes',
+    aliases: ['orbit changes', 'satellite manoeuvres', 'orbit manoeuvres'],
+    context: false,
+    noQuery: 'inferred changes; the layer panel carries the figures',
+  },
+  {
     id: 'space-weather',
     aliases: ['solar storms', 'space weather', 'aurora', 'kp index'],
     context: false,
     noQuery: 'conditions and flare markers; the fiche carries the readings',
+  },
+  {
+    id: 'fishing-effort',
+    aliases: ['fishing effort', 'fishing activity', 'global fishing watch'],
+    context: false,
+    noQuery: 'heat cells from AIS effort; the layer panel carries the totals',
   },
   {
     id: 'windy-weather',

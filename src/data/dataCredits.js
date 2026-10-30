@@ -148,7 +148,33 @@ export const DATA_CREDITS = [
     html:
       'Satellites (TLEs): CelesTrak ' +
       '(<a href="https://celestrak.org" target="_blank" rel="noopener">celestrak.org</a>), ' +
-      'Dr. T.S. Kelso',
+      'Dr. T.S. Kelso. Orbit changes are inferred by diffing successive element sets; ' +
+      'they are not confirmed manoeuvres.',
+  },
+  {
+    key: 'tle-catalogue',
+    html:
+      'Satellite Watch catalogue: keyless TLE API by ' +
+      '<a href="https://tle.ivanstanojevic.me" target="_blank" rel="noopener">Ivan Stanojević</a> ' +
+      '(public element sets, refreshed upstream).',
+  },
+  {
+    key: 'space-track',
+    html:
+      'Satellite Watch (official element sets and conjunctions): ' +
+      '<a href="https://www.space-track.org" target="_blank" rel="noopener">Space-Track.org</a> ' +
+      '(US Space Force, 18th Space Defense Squadron), read with the operator’s own ' +
+      'account and cached inside the usage limits it publishes. Conjunction positions ' +
+      'are the primary object at TCA, propagated from its own element set — not a ' +
+      'confirmed miss distance.',
+  },
+  {
+    key: 'n2yo',
+    html:
+      'Satellite Watch (N2YO source): ' +
+      '<a href="https://www.n2yo.com/api/" target="_blank" rel="noopener">N2YO.com</a> ' +
+      'satellite API, read through this app’s own route with the operator’s key held ' +
+      'server-side; positions are N2YO’s answers, not a re-served dataset.',
   },
   {
     key: 'launch-library-2',
@@ -442,6 +468,10 @@ export const DATA_CREDITS = [
   {
     key: 'space-weather',
     html: 'Space weather: <a href="https://www.swpc.noaa.gov/" target="_blank" rel="noopener">NOAA SWPC</a> · GOES X-ray flares (7-day log), planetary K index (1-minute estimate and 3-hourly series) and the OVATION aurora forecast grid. A forecast probability, not an observation of the sky over you.',
+  },
+  {
+    key: 'global-fishing-watch',
+    html: 'Fishing effort: <a href="https://globalfishingwatch.org/" target="_blank" rel="noopener">Global Fishing Watch</a> · apparent fishing hours from AIS, aggregated per 0.1° cell (CC BY-NC 4.0). A cell is a modelled density over a square, not a vessel position.',
   },
   {
     key: 'weather-cyclones',

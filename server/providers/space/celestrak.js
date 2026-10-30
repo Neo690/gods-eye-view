@@ -20,14 +20,50 @@ import { readResponseTextCapped } from '../common/http.js';
  * 6 h; on upstream failure the freshest stale copy is served (a stale TLE
  * beats an empty satellites layer). Pattern mirrors openSkyProxy's
  * cache+serve-stale. Adapted from skylight's TleStore (MIT).
+ *
+ * Each refresh also keeps the body it replaced (memory and
+ * `.gev-cache/celestrak-<group>-previous.json`) and serves it at
+ * `GET /api/celestrak/previous/<group>`, so a first orbit-change comparison
+ * has something to compare against without waiting for a second poll.
  */
 export function celestrakProxy() {
   const TLE_TTL_MS = 6 * 3600_000;
   const CACHE_DIR = path.join(process.cwd(), '.gev-cache');
   const mem = new Map(); // group -> { at: epochMs, body: string }
   const inflight = new Map(); // group -> Promise<{at, body}|null>
+  // The body the cache held before the last refresh: the element sets an
+  // orbit-change comparison needs to have anything to compare on a first read.
+  const previous = new Map(); // group -> { at, body, replacedAt }
 
   const diskPath = (group) => path.join(CACHE_DIR, `celestrak-${group}.json`);
+  const previousDiskPath = (group) =>
+    path.join(CACHE_DIR, `celestrak-${group}-previous.json`);
+
+  async function readPreviousDisk(group) {
+    try {
+      const parsed = JSON.parse(
+        await fsp.readFile(previousDiskPath(group), 'utf8'),
+      );
+      if (typeof parsed?.body === 'string' && Number.isFinite(parsed?.at))
+        return parsed;
+    } catch {
+      /* no previous generation yet */
+    }
+    return null;
+  }
+
+  async function writePreviousDisk(group, entry) {
+    try {
+      await fsp.mkdir(CACHE_DIR, { recursive: true });
+      await fsp.writeFile(
+        previousDiskPath(group),
+        JSON.stringify(entry),
+        'utf8',
+      );
+    } catch {
+      console.warn('[celestrak-proxy] previous-generation write failed');
+    }
+  }
 
   async function readDisk(group) {
     try {
@@ -77,9 +113,49 @@ export function celestrakProxy() {
 
   const installMiddleware = (server) => {
     server.middlewares.use('/api/celestrak', async (req, res) => {
-      const group = String(req.url || '')
-        .replace(/^\//, '')
-        .split('?')[0];
+      const target = String(req.url || '')
+        .split('?')[0]
+        .replace(/\/$/, '');
+      // The generation the current one replaced, for a first comparison. It is
+      // a cache read only: no refresh is started for it, and a path that is not
+      // exactly one group name is answered 400 rather than treated as a group.
+      if (target === '/previous' || target.startsWith('/previous/')) {
+        const groupName = target.slice('/previous/'.length);
+        if (!/^[a-z0-9-]+$/i.test(groupName)) {
+          res.writeHead(400, {
+            'Content-Type': 'text/plain',
+            'x-tle-cache': 'NONE',
+          });
+          res.end('invalid group');
+          return;
+        }
+        try {
+          let entry = previous.get(groupName);
+          if (!entry) {
+            entry = await readPreviousDisk(groupName);
+            if (entry) previous.set(groupName, entry);
+          }
+          if (!entry) {
+            res.writeHead(404, {
+              'Content-Type': 'text/plain',
+              'x-tle-cache': 'NONE',
+            });
+            res.end('no previous element sets');
+            return;
+          }
+          res.writeHead(200, {
+            'Content-Type': 'text/plain',
+            'x-tle-cache': 'PREVIOUS',
+          });
+          res.end(entry.body);
+        } catch {
+          if (res.headersSent) return;
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+          res.end('celestrak proxy error');
+        }
+        return;
+      }
+      const group = target.replace(/^\//, '');
       if (!/^[a-z0-9-]+$/i.test(group)) {
         res.writeHead(400, { 'Content-Type': 'text/plain' });
         res.end('invalid group');
@@ -113,6 +189,18 @@ export function celestrakProxy() {
             group,
             fetchUpstream(group)
               .then(async (fresh) => {
+                // Keep what this refresh replaced: an identical body is the
+                // same observation, and comparing it with itself yields no
+                // change at all.
+                if (entry && entry.body !== fresh.body) {
+                  const replaced = {
+                    at: entry.at,
+                    body: entry.body,
+                    replacedAt: Date.now(),
+                  };
+                  previous.set(group, replaced);
+                  await writePreviousDisk(group, replaced);
+                }
                 mem.set(group, fresh);
                 await writeDisk(group, fresh);
                 return fresh;
