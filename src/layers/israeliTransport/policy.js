@@ -29,6 +29,33 @@ export const ACTIVITY_SELECTED_OVERLAY_SOURCE_ID = `${LAYER_ID}:selected`;
 /** Never paint more ambient cards than this, whatever the dataset grows to. */
 export const CARD_COHORT_LIMIT = 24;
 
+/**
+ * Company nodes ride the same entity namespace as sites, under their own
+ * marker, so one pick resolver can tell a hub from a site without a second
+ * registry.
+ */
+export const COMPANY_ENTITY_MARKER = 'company:';
+
+/** Hubs sit above the site markers and are drawn larger. */
+export const COMPANY_COLOR = '#7FD1FF';
+export const COMPANY_HUB_PIXEL_SIZE = 10;
+export const COMPANY_HUB_SELECTED_PIXEL_SIZE = 14;
+
+/** Card words, kept in English until a locale translates them. */
+const CARD_TEXT = Object.freeze({
+  headquarters: msg('Headquarters'),
+  subsidiaries: msg('Subsidiaries'),
+  noSite: msg('No site in this layer'),
+  site: msg('site'),
+  sites: msg('sites'),
+  country: msg('country'),
+  countries: msg('countries'),
+});
+
+/** The link from a hub to one of its sites. */
+export const COMPANY_LINK_COLOR = '#7FD1FF';
+export const COMPANY_LINK_WIDTH = 1.2;
+
 const STATUS_KEYS = Object.freeze({
   operating: msg('Operating'),
   completed: msg('Completed'),
@@ -214,6 +241,108 @@ export function selectActivityCohort(entries, limit = CARD_COHORT_LIMIT) {
 }
 
 /**
+ * The company key behind a picked entity id, or null when the pick is a site.
+ * @param {string|null|undefined} pickedId
+ * @returns {string|null}
+ */
+export function companyKeyFromPick(pickedId) {
+  const id = typeof pickedId === 'string' ? pickedId : '';
+  if (!id.startsWith(ENTITY_PREFIX)) return null;
+  const rest = id.slice(ENTITY_PREFIX.length);
+  if (!rest.startsWith(COMPANY_ENTITY_MARKER)) return null;
+  // A link carries its site after the key (`company:zim:link:ashdod`); the
+  // pick still selects the company the link belongs to.
+  return rest.slice(COMPANY_ENTITY_MARKER.length).split(':')[0] || null;
+}
+
+/** Entity id of a company hub. */
+export function companyEntityId(key) {
+  return `${ENTITY_PREFIX}${COMPANY_ENTITY_MARKER}${key}`;
+}
+
+/** Entity id of one hub-to-site link. */
+export function companyLinkEntityId(key, activityId) {
+  return `${companyEntityId(key)}:link:${activityId}`;
+}
+
+/**
+ * The company fiche: what it does, where it sits, and what the layer shows it
+ * operating. Counts come from the dataset itself, so the card can never claim
+ * more sites than the map draws.
+ *
+ * @param {object} company One entry of `COMPANIES`.
+ * @param {ReadonlyArray<object>} sites The records attributed to that company.
+ * @param {function(string):string} translate The i18n `t`.
+ * @param {(key:string, vars?:object)=>string} [plural] The i18n `tn`, for counts.
+ * @returns {{title: string, details: string[]}}
+ */
+export function buildCompanyCard(
+  company,
+  sites,
+  translate = (text) => text,
+  plural,
+) {
+  if (!company) return { title: '', details: [] };
+  const list = Array.isArray(sites) ? sites : [];
+  const countries = [
+    ...new Set(list.map((site) => site.country).filter(Boolean)),
+  ];
+  const sectors = [
+    ...new Set(
+      list.map((site) => sectorLabel(site.sector, translate)).filter(Boolean),
+    ),
+  ];
+  const count = (n, one, many) =>
+    plural ? plural(n, one, many) : `${n} ${n === 1 ? one : many}`;
+  const lines = [
+    company.business,
+    `${translate(CARD_TEXT.headquarters)}: ${company.hq.place}, ${company.hq.country}`,
+    list.length
+      ? `${count(list.length, CARD_TEXT.site, CARD_TEXT.sites)} · ${count(
+          countries.length,
+          CARD_TEXT.country,
+          CARD_TEXT.countries,
+        )}`
+      : translate(CARD_TEXT.noSite),
+    sectors.length ? sectors.join(' · ') : '',
+    company.subsidiaries.length
+      ? `${translate(CARD_TEXT.subsidiaries)}: ${company.subsidiaries.join(' · ')}`
+      : '',
+    sourceHost(company.source?.url),
+  ]
+    .map((line) => clampLine(line, 88))
+    .filter(Boolean);
+  return { title: clampLine(company.name, 58), details: [...new Set(lines)] };
+}
+
+/**
+ * A hub reads above its sites: one per company, so it is never crowded out by
+ * a cluster of its own markers.
+ * @param {object} company
+ * @param {{x:number,y:number,z:number}} position
+ * @returns {object}
+ */
+export function createCompanyOverlayEntry(company, position) {
+  return {
+    id: `company-${company.key}`,
+    position,
+    variant: 'label',
+    title: String(company.name),
+    accent: COMPANY_COLOR,
+    priority: 1000,
+    collisionGroup: 'ambient-label',
+    paintLane: 'ambient-label',
+    interactive: false,
+    edgeFade: 'keyhole',
+    horizonCull: true,
+    terrainOcclusion: false,
+    gapPx: 14,
+    verticalOnly: true,
+    placement: 'above',
+  };
+}
+
+/**
  * The activity id behind a picked entity id, or null when the pick belongs to
  * another layer.
  * @param {string|null|undefined} pickedId
@@ -223,5 +352,7 @@ export function activityIdFromPick(pickedId) {
   const id = typeof pickedId === 'string' ? pickedId : '';
   if (!id.startsWith(ENTITY_PREFIX)) return null;
   const rest = id.slice(ENTITY_PREFIX.length);
-  return rest || null;
+  // A hub and its links are not sites; they answer to companyKeyFromPick.
+  if (!rest || rest.startsWith(COMPANY_ENTITY_MARKER)) return null;
+  return rest;
 }

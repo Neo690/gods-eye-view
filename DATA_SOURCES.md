@@ -240,6 +240,12 @@ It is compiled from company and agency publications, not a licensed feed, and it
 
 Sources used, one per record: Magal Solutions and Calcalist/CTech (Spanish ports), Gadot Belgium, Airport Technology / AviTrader / TLD (TaxiBot at Frankfurt, Delhi and Bengaluru), SBI Uganda and Uganda's Ministry of Works (Kabaale airport), Ashtrom International (Sangster airport, Abuloma–Woji bridge), FHWA and Shikun & Binui USA (SH 288, Cundinamarca 010, Beaver River, PennDOT bridges), SBI Infrastructure (Nigeria and Uganda roads), Ynet/Reuters (Sagamu–Benin), ZIM, Lloyd's List (Ray Shipping), Chemship and XT Holdings.
 
+#### Company nodes (`src/layers/israeliTransport/companies.js`)
+
+Enabling the layer also draws its neural map: one hub per company at its published head office, and one link from that hub to every site the company is credited on, so a click on a hub opens the company fiche instead of a site card. The fiche prints only what the profile holds — the business in one sentence, the head office, the site and country counts the dataset itself yields, the sectors, and the subsidiaries the sources name.
+
+Head-office coordinates are **city or locality centres**, not rooftop pins, unless the profile says `precision: 'address'`; the profile says which. Profiles and their pages: Shikun & Binui and SBI Infrastructure (shikunbinui.com), S&B USA (shikunusa.com), Ashtrom International (ashtrominternational.com), Gadot Group / Gadot Belgium / Chemship (gadot.com, gadot.be, chemship.com), IAI (IAF membership profile), Magal Solutions (magalsolutions.com), Ray Shipping / Ray Car Carriers (raycarcarriers.com, Bloomberg LEI record), XT Shipping (xtholdings.com), ZIM (SEC filing and zim.com). A company whose head office could not be sourced carries no hub rather than a guessed one.
+
 ### ⚠️ TeleGeography is bundled but NonCommercial
 
 The submarine-cable GeoJSON is **CC BY-NC-SA 3.0** (Attribution-**NonCommercial**-**ShareAlike**). It is bundled so the cables layer works out of the box, but it is **not covered by this project's MIT license**. CC BY-NC-SA permits redistribution with attribution and share-alike — which is exactly how it ships here — but the **NonCommercial** clause means:

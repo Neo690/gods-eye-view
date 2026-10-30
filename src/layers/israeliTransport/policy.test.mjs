@@ -7,6 +7,11 @@ import {
   LAYER_ID,
   activityIdFromPick,
   buildActivityCard,
+  buildCompanyCard,
+  companyEntityId,
+  companyKeyFromPick,
+  companyLinkEntityId,
+  createCompanyOverlayEntry,
   createActivityOverlayEntry,
   createSelectedActivityEntry,
   selectActivityCohort,
@@ -19,6 +24,7 @@ import {
   activitiesInSector,
   activityCountries,
 } from './data.js';
+import { COMPANIES, COMPANIES_BY_KEY, companyFor } from './companies.js';
 
 const translate = (text) => text;
 
@@ -164,6 +170,90 @@ test('the cohort keeps the cap and breaks ties deterministically', () => {
     (entry) => entry.id,
   );
   assert.deepEqual(first, again);
+});
+
+test('every company behind a site has a node, and every node has a site', () => {
+  const keys = new Set();
+  for (const company of COMPANIES) {
+    assert.match(company.key, /^[a-z0-9-]+$/, company.key);
+    assert.ok(!keys.has(company.key), `duplicate company ${company.key}`);
+    keys.add(company.key);
+    assert.ok(company.name.trim(), company.key);
+    assert.ok(company.business.trim(), company.key);
+    assert.match(company.source.url, /^https?:\/\//, company.key);
+    assert.ok(
+      Number.isFinite(company.hq.lat) && Number.isFinite(company.hq.lon),
+      company.key,
+    );
+    if (company.parent)
+      assert.ok(COMPANIES_BY_KEY[company.parent], `${company.key} parent`);
+  }
+  for (const record of TRANSPORT_ACTIVITIES) {
+    const company = companyFor(record.company);
+    assert.ok(company, `no company node for ${record.company}`);
+    assert.ok(company.matches.includes(record.company) || record.company.startsWith(company.matches[0]), record.company);
+  }
+  for (const company of COMPANIES) {
+    assert.ok(
+      TRANSPORT_ACTIVITIES.some(
+        (record) => companyFor(record.company)?.key === company.key,
+      ),
+      `${company.key} has no site in the layer`,
+    );
+  }
+});
+
+test('a record that names its group first still resolves to that group', () => {
+  assert.equal(companyFor('Shikun & Binui / SBI').key, 'shikun-binui');
+  assert.equal(companyFor('S&B USA (Shikun & Binui)').key, 'sb-usa');
+  assert.equal(companyFor('Magal Security Systems').key, 'magal');
+  assert.equal(companyFor('Gadot / Chemship').key, 'gadot-group');
+  assert.equal(companyFor('Unknown Carrier Ltd'), null);
+  assert.equal(companyFor(''), null);
+});
+
+test('the company fiche counts the sites the layer actually draws', () => {
+  const company = COMPANIES_BY_KEY.zim;
+  const sites = TRANSPORT_ACTIVITIES.filter(
+    (record) => companyFor(record.company)?.key === company.key,
+  );
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const card = buildCompanyCard(company, sites, translate, plural);
+  assert.equal(card.title, company.name);
+  assert.equal(card.details[0], company.business);
+  assert.match(card.details[1], /^Headquarters: Haifa, Israel$/);
+  assert.match(
+    card.details[2],
+    new RegExp(
+      `^${sites.length} ${sites.length === 1 ? 'site' : 'sites'} · `,
+    ),
+  );
+  assert.ok(
+    card.details.every((line) => line.length <= 88),
+    'every fiche line is clamped',
+  );
+  // No site: the card says so instead of printing an empty count.
+  const empty = buildCompanyCard(company, [], translate, plural);
+  assert.ok(empty.details.includes('No site in this layer'));
+});
+
+test('a hub click resolves to its company, a link to the company it belongs to', () => {
+  assert.equal(companyKeyFromPick(companyEntityId('zim')), 'zim');
+  assert.equal(companyKeyFromPick(companyLinkEntityId('zim', 'zim-ashdod')), 'zim');
+  assert.equal(companyKeyFromPick(`${ENTITY_PREFIX}zim-ashdod`), null);
+  assert.equal(companyKeyFromPick('railway-stations:node/1'), null);
+  // A hub is never mistaken for a site.
+  assert.equal(activityIdFromPick(companyEntityId('zim')), null);
+  const entry = createCompanyOverlayEntry(COMPANIES_BY_KEY.zim, { x: 0, y: 0, z: 0 });
+  assert.equal(entry.addressFree, undefined);
+  assert.equal(entry.id, 'company-zim');
+  assert.equal(entry.interactive, false);
+  assert.ok(
+    entry.priority >
+      createActivityOverlayEntry(TRANSPORT_ACTIVITIES[0], { x: 0, y: 0, z: 0 })
+        .priority,
+    'a hub outranks its own sites in the cohort',
+  );
 });
 
 test('the layer keeps its own overlay sources', () => {

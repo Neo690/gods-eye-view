@@ -22,17 +22,28 @@ import {
   ACTIVITY_SELECTED_OVERLAY_SOURCE_ID,
   ACTIVITY_SELECTED_PIXEL_SIZE,
   CARD_COHORT_LIMIT,
+  COMPANY_COLOR,
+  COMPANY_HUB_PIXEL_SIZE,
+  COMPANY_HUB_SELECTED_PIXEL_SIZE,
+  COMPANY_LINK_COLOR,
+  COMPANY_LINK_WIDTH,
   ENTITY_PREFIX,
   LAYER_ID,
   activityIdFromPick,
   buildActivityCard,
+  buildCompanyCard,
+  companyEntityId,
+  companyKeyFromPick,
+  companyLinkEntityId,
   createActivityOverlayEntry,
+  createCompanyOverlayEntry,
   createSelectedActivityEntry,
   selectActivityCohort,
 } from './policy.js';
+import { COMPANIES, companyFor } from './companies.js';
 import { TRANSPORT_ACTIVITIES } from './data.js';
 import { isPointerFree } from '../../data/inputOwnership.js';
-import { t } from '../../i18n/index.js';
+import { t, tn } from '../../i18n/index.js';
 import {
   isOwnedByOtherLayer,
   registerPickOwner,
@@ -42,6 +53,7 @@ import {
 
 export * from './policy.js';
 export * from './data.js';
+export * from './companies.js';
 
 /**
  * Own one transport-activity display and its selection.
@@ -60,6 +72,7 @@ export function createIsraeliTransportLayer({
   let _dataSource = null;
   let _enabled = false;
   let _recordsById = new Map();
+  let _companiesByKey = new Map();
   let _selectedKey = null;
   let _selectedEntity = null;
   let _clickHandler = null;
@@ -70,6 +83,13 @@ export function createIsraeliTransportLayer({
     _selectedEntity = null;
     _selectedKey = null;
     overlayHost.clearSource(ACTIVITY_SELECTED_OVERLAY_SOURCE_ID);
+  }
+
+  /** Sites attributed to one company, in dataset order. */
+  function sitesOfCompany(key) {
+    return activities.filter(
+      (record) => companyFor(record.company)?.key === key,
+    );
   }
 
   /** Draw every site once; the dataset does not move. */
@@ -109,6 +129,67 @@ export function createIsraeliTransportLayer({
       cards.push(createActivityOverlayEntry(record, position));
     }
     _recordsById = byId;
+
+    // The neural map: each company sits at its published head office and one
+    // link reaches every site it is credited on. Links are clamped to the
+    // ground so the constellation reads at any zoom, and a hub answers a click
+    // with the company fiche rather than a site card.
+    const companies = [];
+    for (const company of COMPANIES) {
+      const sites = sitesOfCompany(company.key);
+      if (!sites.length) continue;
+      const hubPosition = Cesium.Cartesian3.fromDegrees(
+        company.hq.lon,
+        company.hq.lat,
+      );
+      for (const site of sites) {
+        _dataSource.entities.add(
+          new Cesium.Entity({
+            id: companyLinkEntityId(company.key, site.id),
+            polyline: {
+              positions: [
+                hubPosition,
+                Cesium.Cartesian3.fromDegrees(site.lon, site.lat),
+              ],
+              width: COMPANY_LINK_WIDTH,
+              clampToGround: true,
+              material:
+                Cesium.Color.fromCssColorString(COMPANY_LINK_COLOR).withAlpha(
+                  0.34,
+                ),
+            },
+          }),
+        );
+      }
+      _dataSource.entities.add(
+        new Cesium.Entity({
+          id: companyEntityId(company.key),
+          position: hubPosition,
+          point: {
+            pixelSize: COMPANY_HUB_PIXEL_SIZE,
+            color:
+              Cesium.Color.fromCssColorString(COMPANY_COLOR).withAlpha(0.95),
+            outlineColor:
+              Cesium.Color.fromCssColorString('#0B1520').withAlpha(0.85),
+            outlineWidth: 1,
+            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+          properties: {
+            company: company.name,
+            hq: `${company.hq.place}, ${company.hq.country}`,
+            sites: sites.length,
+            source: company.source?.url,
+          },
+        }),
+      );
+      companies.push({ company, sites, position: hubPosition });
+      cards.push(createCompanyOverlayEntry(company, hubPosition));
+    }
+    _companiesByKey = new Map(
+      companies.map((entry) => [entry.company.key, entry]),
+    );
+
     overlayHost.setEntries(
       ACTIVITY_OVERLAY_SOURCE_ID,
       selectActivityCohort(cards, CARD_COHORT_LIMIT),
@@ -150,6 +231,40 @@ export function createIsraeliTransportLayer({
       });
   }
 
+  /** Open the company fiche on its hub. */
+  function selectCompany(companyKey) {
+    const entry = _companiesByKey.get(companyKey);
+    if (!entry || !_viewer) return;
+    clearSelection();
+    const { company, sites, position } = entry;
+    _selectedKey = companyEntityId(company.key);
+    _selectedEntity = _viewer.entities.add({
+      position,
+      point: {
+        pixelSize: COMPANY_HUB_SELECTED_PIXEL_SIZE,
+        color: Cesium.Color.fromCssColorString(ACTIVITY_SELECTED_COLOR),
+        outlineColor: Cesium.Color.fromCssColorString(COMPANY_COLOR),
+        outlineWidth: 2,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+    const card = createSelectedActivityEntry(
+      { id: company.key },
+      position,
+      buildCompanyCard(company, sites, t, tn),
+    );
+    // A hub card carries the company accent, so a fiche is never mistaken for
+    // a site card at a glance.
+    if (card) card.accent = COMPANY_COLOR;
+    if (card)
+      overlayHost.setEntries(ACTIVITY_SELECTED_OVERLAY_SOURCE_ID, [card], {
+        cohortLimit: 1,
+        collisionCapacity: 1,
+        moving: false,
+      });
+  }
+
   function onKeyDown(event) {
     if (event?.key === 'Escape' && _selectedKey) clearSelection();
   }
@@ -165,6 +280,11 @@ export function createIsraeliTransportLayer({
       if (_selectedEntity && picked?.id === _selectedEntity) return;
       const pickedId = resolvePickId(picked);
       if (pickedId && isOwnedByOtherLayer(LAYER_ID, pickedId)) return;
+      const companyKey = companyKeyFromPick(pickedId);
+      if (companyKey && _companiesByKey.has(companyKey)) {
+        selectCompany(companyKey);
+        return;
+      }
       const activityId = activityIdFromPick(pickedId);
       if (activityId && _recordsById.has(activityId)) {
         selectActivity(activityId);
@@ -205,6 +325,7 @@ export function createIsraeliTransportLayer({
       _selectedKey = null;
       _selectedEntity = null;
       _recordsById = new Map();
+      _companiesByKey = new Map();
       _lastUpdate = null;
       overlayHost.setVisible(ACTIVITY_OVERLAY_SOURCE_ID, false);
       overlayHost.setVisible(ACTIVITY_SELECTED_OVERLAY_SOURCE_ID, false);
@@ -218,7 +339,7 @@ export function createIsraeliTransportLayer({
       overlayHost.setVisible(ACTIVITY_SELECTED_OVERLAY_SOURCE_ID, true);
       if (viewer) installClickHandler(viewer);
       registerPickOwner(LAYER_ID, (pickedId) =>
-        Boolean(activityIdFromPick(pickedId)),
+        Boolean(activityIdFromPick(pickedId) || companyKeyFromPick(pickedId)),
       );
     },
 
@@ -230,6 +351,7 @@ export function createIsraeliTransportLayer({
       overlayHost.setVisible(ACTIVITY_OVERLAY_SOURCE_ID, false);
       overlayHost.setVisible(ACTIVITY_SELECTED_OVERLAY_SOURCE_ID, false);
       _recordsById = new Map();
+      _companiesByKey = new Map();
     },
 
     update() {
@@ -248,6 +370,7 @@ export function createIsraeliTransportLayer({
       }
       _viewer = null;
       _recordsById = new Map();
+      _companiesByKey = new Map();
       _lastUpdate = null;
     },
 
@@ -256,6 +379,7 @@ export function createIsraeliTransportLayer({
         count: _enabled ? _recordsById.size : 0,
         lastUpdate: _lastUpdate,
         error: null,
+        companies: _enabled ? _companiesByKey.size : 0,
       };
     },
   };

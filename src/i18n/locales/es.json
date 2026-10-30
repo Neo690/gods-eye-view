@@ -3103,5 +3103,12 @@
   "Bridge": "Puente",
   "Shipping": "Transporte marítimo",
   "Logistics": "Logística",
-  "Israeli Transport Sites": "Sitios de transporte israelíes"
+  "Israeli Transport Sites": "Sitios de transporte israelíes",
+  "Headquarters": "Sede",
+  "Subsidiaries": "Filiales",
+  "No site in this layer": "Ningún sitio en esta capa",
+  "site": "sitio",
+  "sites": "sitios",
+  "country": "país",
+  "countries": "países"
 }

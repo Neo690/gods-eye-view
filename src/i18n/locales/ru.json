@@ -3170,5 +3170,12 @@
   "Bridge": "Мост",
   "Shipping": "Морские перевозки",
   "Logistics": "Логистика",
-  "Israeli Transport Sites": "Объекты израильского транспорта"
+  "Israeli Transport Sites": "Объекты израильского транспорта",
+  "Headquarters": "Штаб-квартира",
+  "Subsidiaries": "Дочерние компании",
+  "No site in this layer": "В этом слое нет объектов",
+  "site": "объект",
+  "sites": "объектов",
+  "country": "страна",
+  "countries": "стран"
 }

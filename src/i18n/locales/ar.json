@@ -3304,5 +3304,12 @@
   "Bridge": "جسر",
   "Shipping": "شحن بحري",
   "Logistics": "لوجستيات",
-  "Israeli Transport Sites": "مواقع النقل الإسرائيلية"
+  "Israeli Transport Sites": "مواقع النقل الإسرائيلية",
+  "Headquarters": "المقر",
+  "Subsidiaries": "الشركات التابعة",
+  "No site in this layer": "لا يوجد موقع في هذه الطبقة",
+  "site": "موقع",
+  "sites": "مواقع",
+  "country": "بلد",
+  "countries": "بلدان"
 }

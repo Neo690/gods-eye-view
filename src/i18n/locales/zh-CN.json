@@ -2969,5 +2969,12 @@
   "Bridge": "桥梁",
   "Shipping": "航运",
   "Logistics": "物流",
-  "Israeli Transport Sites": "以色列交通项目"
+  "Israeli Transport Sites": "以色列交通项目",
+  "Headquarters": "总部",
+  "Subsidiaries": "子公司",
+  "No site in this layer": "此图层没有站点",
+  "site": "站点",
+  "sites": "站点",
+  "country": "国家",
+  "countries": "国家"
 }
