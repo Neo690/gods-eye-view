@@ -48,6 +48,7 @@ import {
 import { applyLocaleChoice, mountLocalePicker } from './localePicker.js';
 import { mountAlertCenter } from './alertCenter.js';
 import { CommandPalette } from './commandPalette.js';
+import { createDictation } from './dictation.js';
 import { bindMapViewControls, flyToFix } from './mapViewControls.js';
 
 /**
@@ -717,6 +718,30 @@ export class StyleManager extends ShellFacade {
   _initUI() {
     this._displayBindings._initUI();
     this._initCommandPalette();
+    this._initDictation();
+  }
+
+  /**
+   * Mounts command dictation (src/ui/dictation.js) on a phone that has it.
+   *
+   * The shell does the listening; this only decides what a transcript means, so
+   * the mode costs nothing and needs neither a key nor a server. A transcript
+   * opens the palette as its query: the rows it shows are the same ones Ctrl+K
+   * offers, and nothing runs until the operator picks one.
+   * @returns {void}
+   */
+  _initDictation() {
+    const button = globalThis.document?.getElementById?.('map-dictate');
+    if (!button) return;
+    this._dictation = createDictation({
+      button,
+      openPalette: (text) => this._commandPalette?.open(text),
+      toast: (text) => this._showToast(text),
+    });
+    // The native side answers by name, so the page has to publish the handler.
+    if (this._dictation) {
+      globalThis.__gevDictation = (event) => this._dictation?.handle(event);
+    }
   }
 
   /**
@@ -1897,6 +1922,9 @@ export class StyleManager extends ShellFacade {
 
     this._commandPalette?.destroy();
     this._commandPalette = null;
+    this._dictation?.destroy();
+    this._dictation = null;
+    if (globalThis.__gevDictation) delete globalThis.__gevDictation;
     this._displayBindings.destroy();
     this._mapSourceControls?.destroy();
     this._cameraOrientationControls?.destroy();

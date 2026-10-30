@@ -1,4 +1,8 @@
-import { createVoiceControl, voiceStatusLabel } from './control.js';
+import {
+  createVoiceControl,
+  voiceErrorHint,
+  voiceStatusLabel,
+} from './control.js';
 import { createVoiceSession } from './session.js';
 import { VoiceCardControls } from './voiceCard.js';
 import { PointerReticle } from './pointerReticle.js';
@@ -108,11 +112,14 @@ export function createVoiceCommands({
     ui.detail.textContent =
       detail || (idle ? t('Voice off') : t('Voice active'));
     ui.button.setAttribute('aria-pressed', String(session.isActive()));
-    if (ui.errorDetail)
-      ui.errorDetail.textContent =
+    if (ui.errorDetail) {
+      const failure =
         event.state === 'error'
           ? event.detail || t('Voice could not be started.')
           : '';
+      ui.errorDetail.textContent = failure;
+      if (ui.errorHint) ui.errorHint.textContent = voiceErrorHint(failure);
+    }
     if (event.state === 'error') ui.root.classList?.remove('error-dismissed');
   });
   // Captions, plan and result card nested in the control; it only reads

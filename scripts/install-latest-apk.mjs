@@ -14,6 +14,12 @@
  * the phone" behaviour. Nothing here talks to a build: it reads the runs API,
  * so it works from any machine with adb and never needs the signing key.
  *
+ * The release is a single rolling tag that every build overwrites, so the
+ * newest successful run is the one the release holds — whichever branch it was
+ * built from. Following only the checked-out branch installed nothing while a
+ * newer build sat published from another branch; `--branch` narrows the search
+ * for the rare case of wanting one branch's build specifically.
+ *
  *   npm run apk:install              install the newest successful build once
  *   npm run apk:watch                keep doing it (default: every 2 minutes)
  *   node scripts/install-latest-apk.mjs --branch=android-shell --serial=R58M
@@ -92,13 +98,16 @@ export function parseRepo(remote) {
   return match ? `${match[1]}/${match[2]}` : null;
 }
 
-/** Runs API URL: newest *successful* run of the APK workflow on one branch. */
+/**
+ * Runs API URL: newest *successful* run of the APK workflow.
+ *
+ * No `branch` parameter when none is named, so GitHub answers across every
+ * branch. That matches the release: `apk-latest` is one rolling tag, and the
+ * run that wrote it last is the newest one regardless of where it ran.
+ */
 export function runsUrl({ repo, branch, workflow = APK_WORKFLOW_FILE }) {
-  const query = new URLSearchParams({
-    branch,
-    status: 'success',
-    per_page: '1',
-  });
+  const query = new URLSearchParams({ status: 'success', per_page: '1' });
+  if (branch) query.set('branch', branch);
   return `https://api.github.com/repos/${repo}/actions/workflows/${workflow}/runs?${query}`;
 }
 
@@ -327,11 +336,6 @@ function writeState(file, state) {
   }
 }
 
-function currentBranch() {
-  const result = runCommand('git', ['rev-parse', '--abbrev-ref', 'HEAD']);
-  return result.status === 0 ? result.stdout.trim() : null;
-}
-
 function originRepo() {
   const result = runCommand('git', ['remote', 'get-url', 'origin']);
   return result.status === 0 ? parseRepo(result.stdout) : null;
@@ -340,7 +344,8 @@ function originRepo() {
 const USAGE = `usage: node scripts/install-latest-apk.mjs [options]
   --watch            keep checking (default: one pass)
   --interval=<sec>   seconds between checks in watch mode (default ${DEFAULT_INTERVAL_SECONDS})
-  --branch=<name>    branch whose builds to follow (default: the current branch)
+  --branch=<name>    narrow the search to one branch (default: every branch,
+                     because the release holds whichever build ran last)
   --repo=<owner/name> repository to read (default: origin)
   --serial=<device>  adb device to install on (default: the only one connected)
   --adb=<path>       adb binary (default: $ADB, then "adb")
@@ -367,11 +372,7 @@ async function main(argv) {
     console.error('cannot tell which repository to read: pass --repo=owner/name');
     return 2;
   }
-  const branch = options.branch || currentBranch();
-  if (!branch) {
-    console.error('cannot tell which branch to follow: pass --branch=<name>');
-    return 2;
-  }
+  const branch = typeof options.branch === 'string' ? options.branch : null;
   const { adb, looked } = resolveAdb({ explicit: options.adb });
   const interval = Math.max(15, Number(options.interval) || DEFAULT_INTERVAL_SECONDS);
   const devices = runCommand(adb, ['devices']);
@@ -405,7 +406,9 @@ async function main(argv) {
 
   if (!options.watch) return (await pass()).installed || options['dry-run'] ? 0 : 1;
 
-  console.log(`watching ${repo} ${branch} every ${interval}s for ${picked.serial}`);
+  console.log(
+    `watching ${repo}${branch ? ` ${branch}` : ' (all branches)'} every ${interval}s for ${picked.serial}`,
+  );
   let running = true;
   process.on('SIGINT', () => {
     running = false;

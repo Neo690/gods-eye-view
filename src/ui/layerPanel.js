@@ -60,6 +60,8 @@ const PANEL_GROUPS = [
     ids: [
       'alpr-cameras',
       'military-installations',
+      'railway-stations',
+      'israeli-transport',
       'local-datacenters',
       'telegeography-submarine-cables',
       'local-dams',

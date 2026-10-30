@@ -4,6 +4,24 @@ import { t } from '../i18n/index.js';
 const ASSISTANT_NAME = 'GEV';
 
 /**
+ * The troubleshooting line under a voice error, or '' when it would mislead.
+ *
+ * The generic line names the microphone and the network because that is what
+ * usually fails on a phone. A missing provider credential is not that: the
+ * shell held the microphone, the request reached this machine's server and the
+ * server has no key — so the hint is dropped and the message above it, which
+ * names the key, stands alone instead of sending the operator to the one
+ * permission that is already fine.
+ *
+ * @param {string} detail the error the session reported
+ * @returns {string}
+ */
+export function voiceErrorHint(detail) {
+  if (/api[ _-]?key/i.test(String(detail || ''))) return '';
+  return t('Check microphone permission and network access, then try again.');
+}
+
+/**
  * Short state label for the narrow voice heading. The `voice` context lets
  * languages use shorter words; unknown states show upper-cased.
  * @param {string} status machine state (dataset.status)
@@ -93,7 +111,7 @@ export function createVoiceControl({ reset = false } = {}) {
           <button class="gev-voice-error-dismiss" type="button">${t('DISMISS')}</button>
         </div>
         <div id="gev-voice-error-detail"></div>
-        <div class="gev-voice-error-hint">${t('Check microphone permission and network access, then try again.')}</div>
+        <div id="gev-voice-error-hint" class="gev-voice-error-hint">${voiceErrorHint('')}</div>
       </div>
     `;
     const commandDock = document.getElementById('command-dock');
@@ -122,6 +140,7 @@ export function createVoiceControl({ reset = false } = {}) {
     detail: root.querySelector('#gev-voice-detail'),
     helpDetail: root.querySelector('.gev-voice-help-detail'),
     errorDetail: root.querySelector('#gev-voice-error-detail'),
+    errorHint: root.querySelector('#gev-voice-error-hint'),
     tierButton: root.querySelector('#gev-voice-tier'),
     costValue: root.querySelector('#gev-voice-cost-value'),
     card: root.querySelector('#gev-voice-card'),

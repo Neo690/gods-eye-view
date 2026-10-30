@@ -49,6 +49,17 @@ test('the query asks GitHub for the newest successful build of one branch', () =
   assert.equal(url.searchParams.get('per_page'), '1');
 });
 
+test('without a branch the newest published build is asked for across every branch', () => {
+  // The release is one rolling tag: the run that wrote it last is the newest,
+  // wherever it ran. Filtering on the checked-out branch hid exactly that and
+  // reported "already installed" while a newer build sat published.
+  const url = new URL(runsUrl({ repo: 'Neo690/gods-eye-view' }));
+  assert.equal(url.searchParams.get('branch'), null);
+  assert.equal(url.searchParams.has('branch'), false, 'no empty or undefined branch filter');
+  assert.equal(url.searchParams.get('status'), 'success');
+  assert.equal(url.searchParams.get('per_page'), '1');
+});
+
 test('a run summary carries the fields the install decision needs', () => {
   assert.equal(newestRun({ workflow_runs: [] }), null);
   assert.equal(newestRun({}), null);

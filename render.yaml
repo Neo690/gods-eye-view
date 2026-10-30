@@ -34,6 +34,19 @@ services:
       # sees this key.
       - key: FIRMS_MAP_KEY
         sync: false
+      # Detailed OpenStreetMap queries (/api/overpass). The Railway Stations
+      # layer is the first caller: without an endpoint it answers
+      # OVERPASS_NOT_CONFIGURED at the capability probe, and the layer reads as
+      # unavailable on the phone while every other layer keeps working. A
+      # comma-separated list of endpoints this deployment is allowed to read.
+      #
+      # Public mirrors are not used by default: list only an instance you run or
+      # are entitled to. A measured stopgap is the French community instance at
+      # https://overpass.openstreetmap.fr/api/interpreter — a 2° box answers in
+      # ~19 s, under the proxy's 25 s cut, while the widest 6° view times out
+      # upstream, so the layer is dependable at city zoom and degrades far out.
+      - key: OVERPASS_UPSTREAMS
+        sync: false
       # Gemini Live voice. /api/gemini/token mints the short-lived credential the
       # app attaches to the Live socket, so the voice session needs this on the
       # server even when the phone has its own key in Provider Settings.

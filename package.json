@@ -262,6 +262,9 @@
     "./sources/overpass": "./src/sources/overpass.js",
     "./search/nominatim": "./src/search/nominatim.js",
     "./sources/nominatim": "./src/sources/nominatim.js",
+    "./server/providers/rail": {
+      "node": "./server/providers/rail.js"
+    },
     "./server/providers/transit": {
       "node": "./server/providers/transit.js"
     },

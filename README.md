@@ -284,9 +284,13 @@ Apple ID works but its profile expires after seven days. Full details — device
 install, permissions, what the shell provides — in
 [ios/README.md](ios/README.md).
 
-No `.ipa` is published from CI: an installable iOS build needs your Apple
-signing identity. The `iOS app` workflow compiles the shell on a macOS runner
-instead, so a broken Swift change fails the build rather than reaching a phone.
+The `iOS app` workflow compiles the shell on a macOS runner, so a broken Swift
+change fails the build rather than reaching a phone. Once your Apple signing
+identity is in the repository secrets it also publishes an ad-hoc
+[`gods-eye-view.ipa`](https://github.com/Neo690/gods-eye-view/releases/download/ios-latest/gods-eye-view.ipa),
+which installs on the devices the signing profile names and no others; without
+those secrets the packaging job skips and the shell still compiles. The secrets
+it wants, and how to produce each one, are in [ios/README.md](ios/README.md).
 
 ### Then power it up — in the app, not in a file
 

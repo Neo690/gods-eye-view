@@ -54,6 +54,13 @@
   transform: scale(0.94);
 }
 
+/* `display: flex` above outbids the user agent's [hidden] rule, so the
+   dictation button has to be hidden explicitly: it only exists on a phone
+   whose shell can dictate. */
+#map-tools button[hidden] {
+  display: none;
+}
+
 /* Following the device: the button stays lit while the watch is running. */
 #map-tools button[aria-pressed='true'] {
   color: var(--accent);

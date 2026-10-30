@@ -398,6 +398,13 @@ export const DATA_CREDITS = [
     html: 'Transit vehicles: operator GTFS-Realtime feeds (each operator is credited below when its vehicles are shown)',
   },
   {
+    key: 'sncf-rail',
+    html:
+      'Station departures: ' +
+      '<a href="https://transport.data.gouv.fr/datasets/horaires-sncf" target="_blank" rel="noopener">SNCF — horaires et temps réel</a> ' +
+      '(<a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener">ODbL 1.0</a>)',
+  },
+  {
     key: 'radio-browser',
     html:
       'Internet-radio station directory: ' +
