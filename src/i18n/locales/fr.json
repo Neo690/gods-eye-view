@@ -3091,5 +3091,17 @@
   "Dictation needs a network connection on this device.": "La dictée a besoin d'une connexion réseau sur cet appareil.",
   "Nothing was heard. Try again.": "Rien n'a été entendu. Réessayez.",
   "Dictation is not available on this device.": "La dictée n'est pas disponible sur cet appareil.",
-  "The phone cannot dictate in this language.": "Le téléphone ne peut pas dicter dans cette langue."
+  "The phone cannot dictate in this language.": "Le téléphone ne peut pas dicter dans cette langue.",
+  "Operating": "En service",
+  "Completed": "Terminé",
+  "Under construction": "En construction",
+  "Announced": "Annoncé",
+  "Global network": "Réseau mondial",
+  "Port": "Port",
+  "Airport": "Aéroport",
+  "Road": "Route",
+  "Bridge": "Pont",
+  "Shipping": "Transport maritime",
+  "Logistics": "Logistique",
+  "Israeli Transport Sites": "Sites de transport israéliens"
 }

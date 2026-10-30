@@ -2957,5 +2957,17 @@
   "Dictation needs a network connection on this device.": "听写需要此设备上的网络连接。",
   "Nothing was heard. Try again.": "没有听到任何内容。请重试。",
   "Dictation is not available on this device.": "此设备不支持听写。",
-  "The phone cannot dictate in this language.": "手机无法用这种语言进行听写。"
+  "The phone cannot dictate in this language.": "手机无法用这种语言进行听写。",
+  "Operating": "运行中",
+  "Completed": "已完工",
+  "Under construction": "在建",
+  "Announced": "已公布",
+  "Global network": "全球网络",
+  "Port": "港口",
+  "Airport": "机场",
+  "Road": "公路",
+  "Bridge": "桥梁",
+  "Shipping": "航运",
+  "Logistics": "物流",
+  "Israeli Transport Sites": "以色列交通项目"
 }

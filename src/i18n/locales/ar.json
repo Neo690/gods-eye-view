@@ -3292,5 +3292,17 @@
   "Dictation needs a network connection on this device.": "يحتاج الإملاء إلى اتصال بالشبكة على هذا الجهاز.",
   "Nothing was heard. Try again.": "لم يُسمع شيء. حاول مرة أخرى.",
   "Dictation is not available on this device.": "الإملاء غير متاح على هذا الجهاز.",
-  "The phone cannot dictate in this language.": "لا يمكن للهاتف الإملاء بهذه اللغة."
+  "The phone cannot dictate in this language.": "لا يمكن للهاتف الإملاء بهذه اللغة.",
+  "Operating": "يعمل",
+  "Completed": "مكتمل",
+  "Under construction": "قيد الإنشاء",
+  "Announced": "معلن",
+  "Global network": "شبكة عالمية",
+  "Port": "ميناء",
+  "Airport": "مطار",
+  "Road": "طريق",
+  "Bridge": "جسر",
+  "Shipping": "شحن بحري",
+  "Logistics": "لوجستيات",
+  "Israeli Transport Sites": "مواقع النقل الإسرائيلية"
 }

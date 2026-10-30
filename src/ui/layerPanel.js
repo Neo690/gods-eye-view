@@ -61,6 +61,7 @@ const PANEL_GROUPS = [
       'alpr-cameras',
       'military-installations',
       'railway-stations',
+      'israeli-transport',
       'local-datacenters',
       'telegeography-submarine-cables',
       'local-dams',
