@@ -1,5 +1,35 @@
 # Changelog
 
+- Add a transport-activity layer for Israeli companies: twenty documented sites
+  — port security at Tarragona and Huelva, a chemical terminal at Ghent,
+  TaxiBot at Frankfurt, Delhi and Bengaluru, the Kabaale airport in Uganda,
+  Sangster in Jamaica, toll roads in Texas and Cundinamarca, highways in
+  Nigeria and Uganda, three bridges, and four carriers marked at their base —
+  each with the work, the company's part, its state and years, and the public
+  page it came from. A click on a site reads as a fiche, Escape closes it. The
+  list is bundled, so the layer needs no key, no server and no network, in the
+  browser and in the APK alike. It is curated, not exhaustive: an award that
+  names only a region is left out rather than placed on a guessed coordinate,
+  and it ships no railway site because no overseas rail contract could be
+  verified. Layer-state token 9 is its own, which exhausts the digit range.
+
+- Add command dictation on Android: the button in the right-hand stack runs the
+  phone's own `SpeechRecognizer` and hands the transcript to the command
+  palette, so a command can be spoken with no provider key, no socket and no
+  bill. Nothing runs until a row is picked, and the button stays hidden wherever
+  the shell has no recogniser. The device refuses an unsupported language
+  outright, so a refused language retries once without one and lets the phone
+  choose; the failure that survives is named for what it is rather than blamed
+  on the microphone.
+
+- `npm run apk:install` installs the newest published build whichever branch
+  it came from, instead of only the branch the checkout is on. The release is a
+  single rolling tag that every build overwrites, so the run that wrote it last
+  is the one worth installing; following the current branch hid a newer build
+  published from another one and reported "already installed" while the phone
+  kept the old APK. `--branch=<name>` still narrows the search when one
+  branch's build is wanted specifically.
+
 - Add a Railway Stations layer: every OpenStreetMap `railway=station` place is
   drawn on the globe and a click opens its card — name, operator, network and
   platform count, each line present only when the map records it, under a
