@@ -42,7 +42,11 @@
     </button>
   </nav>
   <!-- Zoom and device position: thumb-reachable, right edge above the dock. -->
-  <div id="map-tools" role="group" aria-label="Zoom and location" data-i18n-aria-label>
+  <div id="map-tools" role="group" aria-label="Zoom, dictation and location" data-i18n-aria-label>
+    <!-- Dictation: the phone's own recogniser, shown only where the shell has one. -->
+    <button id="map-dictate" type="button" aria-label="Dictate a command" title="Dictate a command with the phone's speech recognition" hidden data-i18n-aria-label data-i18n-title>
+      <span class="material-symbols-outlined" aria-hidden="true">keyboard_voice</span>
+    </button>
     <button id="map-zoom-in" type="button" aria-label="Zoom in" title="Zoom in" data-i18n-aria-label data-i18n-title>
       <span aria-hidden="true">+</span>
     </button>

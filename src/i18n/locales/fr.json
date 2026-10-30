@@ -2976,7 +2976,7 @@
   "Following your position": "Suivi de votre position",
   "Location access is blocked for this app.": "L'accès à la localisation est bloqué pour cette application.",
   "Location unavailable": "Localisation indisponible",
-  "Zoom and location": "Zoom et localisation",
+  "Zoom, dictation and location": "Zoom, dictée et position",
   "Map windows": "Fenêtres de la carte",
   "Transit networks": "Réseaux de transport",
   "Shown": "Affiché",
@@ -3084,5 +3084,11 @@
   "{minutes} min late": "{minutes} min de retard",
   "on time": "à l'heure",
   "contacting the data server…": "connexion au serveur de données…",
-  "waking the data server…": "réveil du serveur de données…"
+  "waking the data server…": "réveil du serveur de données…",
+  "Dictate a command": "Dicter une commande",
+  "Dictate a command with the phone's speech recognition": "Dicter une commande avec la reconnaissance vocale du téléphone",
+  "Dictation needs the microphone permission.": "La dictée a besoin de l'autorisation du microphone.",
+  "Dictation needs a network connection on this device.": "La dictée a besoin d'une connexion réseau sur cet appareil.",
+  "Nothing was heard. Try again.": "Rien n'a été entendu. Réessayez.",
+  "Dictation is not available on this device.": "La dictée n'est pas disponible sur cet appareil."
 }

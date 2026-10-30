@@ -8,6 +8,9 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
 import android.provider.Settings;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
 import android.widget.Toast;
 import android.graphics.Color;
 import android.net.Uri;
@@ -31,9 +34,13 @@ import android.app.Activity;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
  * Single-Activity shell for the God's Eye View console.
@@ -52,12 +59,18 @@ public class MainActivity extends Activity {
   private static final int REQUEST_MIC = 41;
   private static final int REQUEST_LOCATION = 42;
   private static final int REQUEST_FILE_CHOOSER = 43;
+  private static final int REQUEST_DICTATION_MIC = 44;
 
   private WebView webView;
   private PermissionRequest pendingAudioRequest;
   private GeolocationPermissions.Callback pendingLocationCallback;
   /** The page's file input, waiting for the system picker to answer. */
   private ValueCallback<Uri[]> pendingFileChooser;
+  /** The platform recogniser behind command dictation; null until first use. */
+  private SpeechRecognizer dictation;
+  private String pendingDictationLocale = "";
+  /** Cleared once an offline-only attempt proves this phone has no offline model. */
+  private boolean dictationOfflineOnly = true;
   private String pendingLocationOrigin;
   private ApiForwarder apiForwarder;
 
@@ -177,6 +190,11 @@ public class MainActivity extends Activity {
 
   @Override
   protected void onDestroy() {
+    if (dictation != null) {
+      dictation.cancel();
+      dictation.destroy();
+      dictation = null;
+    }
     if (webView != null) {
       webView.stopLoading();
       webView.destroy();
@@ -194,6 +212,153 @@ public class MainActivity extends Activity {
     if (hasMic()) return;
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
       requestPermissions(new String[] { Manifest.permission.RECORD_AUDIO }, REQUEST_MIC);
+    }
+  }
+
+  /**
+   * Starts the phone's own speech recogniser for command dictation.
+   *
+   * <p>This is the shell's answer to a voice mode that costs nothing: no
+   * provider key, no token to mint, no session to bill. The recogniser belongs
+   * to the platform, so a phone carrying the offline model keeps the audio on
+   * the device; one without it falls back to the system service, which still
+   * costs nothing and needs no account.
+   *
+   * <p>The transcript stays a command, not a conversation: it goes to the
+   * command palette, which already knows how to run a layer, a panel or a
+   * place. Nothing here invents an assistant.
+   */
+  private boolean startDictation(String locale) {
+    if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+      emitDictation("error", "", "no_recognizer");
+      return false;
+    }
+    if (dictation == null) {
+      dictation = SpeechRecognizer.createSpeechRecognizer(this);
+      dictation.setRecognitionListener(new DictationListener());
+    }
+    Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+    intent.putExtra(
+      RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+      RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+    );
+    intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+    intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+    // Preferred, never required: a phone with no offline model still answers.
+    if (dictationOfflineOnly) {
+      intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true);
+    }
+    if (locale != null && !locale.trim().isEmpty()) {
+      intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale.trim());
+    }
+    try {
+      dictation.startListening(intent);
+    } catch (RuntimeException error) {
+      Log.w(TAG, "Dictation could not start", error);
+      emitDictation("error", "", "start_failed");
+      return false;
+    }
+    emitDictation("listening", "", "");
+    return true;
+  }
+
+  /** Posts one dictation event to the page; the page decides what it means. */
+  private void emitDictation(String status, String text, String message) {
+    if (webView == null) return;
+    JSONObject event = new JSONObject();
+    try {
+      event.put("status", status);
+      event.put("text", text == null ? "" : text);
+      event.put("message", message == null ? "" : message);
+    } catch (JSONException error) {
+      Log.w(TAG, "Dictation event could not be built", error);
+      return;
+    }
+    final String script =
+      "window.__gevDictation&&window.__gevDictation(" + event + ")";
+    runOnUiThread(() -> webView.evaluateJavascript(script, null));
+  }
+
+  private static String bestResult(Bundle bundle) {
+    if (bundle == null) return "";
+    ArrayList<String> matches = bundle.getStringArrayList(
+      SpeechRecognizer.RESULTS_RECOGNITION
+    );
+    if (matches == null || matches.isEmpty()) return "";
+    String first = matches.get(0);
+    return first == null ? "" : first.trim();
+  }
+
+  /** Platform error codes, named the way the page reads them. */
+  private static String dictationErrorName(int code) {
+    switch (code) {
+      case SpeechRecognizer.ERROR_NO_MATCH:
+        return "no_match";
+      case SpeechRecognizer.ERROR_SPEECH_TIMEOUT:
+        return "timeout";
+      case SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS:
+        return "permission";
+      case SpeechRecognizer.ERROR_NETWORK:
+      case SpeechRecognizer.ERROR_NETWORK_TIMEOUT:
+        return "network";
+      case SpeechRecognizer.ERROR_AUDIO:
+        return "audio";
+      default:
+        return "error";
+    }
+  }
+
+  /** Routes the platform recogniser's callbacks back into the page. */
+  private final class DictationListener implements RecognitionListener {
+    @Override
+    public void onReadyForSpeech(Bundle params) {}
+
+    @Override
+    public void onBeginningOfSpeech() {}
+
+    @Override
+    public void onRmsChanged(float rms) {}
+
+    @Override
+    public void onBufferReceived(byte[] buffer) {}
+
+    @Override
+    public void onEndOfSpeech() {}
+
+    @Override
+    public void onEvent(int type, Bundle params) {}
+
+    @Override
+    public void onPartialResults(Bundle partialResults) {
+      String text = bestResult(partialResults);
+      if (!text.isEmpty()) emitDictation("partial", text, "");
+    }
+
+    @Override
+    public void onResults(Bundle results) {
+      String text = bestResult(results);
+      if (text.isEmpty()) {
+        emitDictation("error", "", "no_match");
+        return;
+      }
+      emitDictation("final", text, "");
+    }
+
+    @Override
+    public void onError(int code) {
+      // A phone with no offline model answers ERROR_LANGUAGE_UNAVAILABLE (or
+      // ERROR_CLIENT) to an offline-only request. One retry without that
+      // preference is what makes dictation work on a stock device.
+      if (
+        dictationOfflineOnly &&
+        (code == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE ||
+          code == SpeechRecognizer.ERROR_CLIENT)
+      ) {
+        dictationOfflineOnly = false;
+        startDictation(pendingDictationLocale);
+        return;
+      }
+      emitDictation("error", "", dictationErrorName(code));
     }
   }
 
@@ -221,6 +386,11 @@ public class MainActivity extends Activity {
   @Override
   public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
     super.onRequestPermissionsResult(requestCode, permissions, results);
+    if (requestCode == REQUEST_DICTATION_MIC) {
+      if (hasMic()) startDictation(pendingDictationLocale);
+      else emitDictation("error", "", "permission");
+      return;
+    }
     if (requestCode == REQUEST_MIC) {
       PermissionRequest request = pendingAudioRequest;
       pendingAudioRequest = null;
@@ -613,6 +783,30 @@ public class MainActivity extends Activity {
 
   /** Exposes native relay capabilities to the in-app Web client. */
   public final class NativeBridge {
+    /**
+     * Starts the phone's own recogniser. The page listens for
+     * {@code window.__gevDictation(...)}; true means the attempt began.
+     */
+    @JavascriptInterface
+    public boolean dictate(String locale) {
+      runOnUiThread(() -> {
+        pendingDictationLocale = locale == null ? "" : locale;
+        if (hasMic()) {
+          startDictation(pendingDictationLocale);
+          return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+          requestPermissions(
+            new String[] { Manifest.permission.RECORD_AUDIO },
+            REQUEST_DICTATION_MIC
+          );
+        } else {
+          emitDictation("error", "", "permission");
+        }
+      });
+      return true;
+    }
+
     @JavascriptInterface
     public String post(String path, String headersJson, String body) {
       if (apiForwarder != null && apiForwarder.isEnabled()) {

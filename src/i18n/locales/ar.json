@@ -3177,7 +3177,7 @@
   "Following your position": "جارٍ تتبّع موقعك",
   "Location access is blocked for this app.": "تم حظر صلاحية الموقع لهذا التطبيق.",
   "Location unavailable": "الموقع غير متاح",
-  "Zoom and location": "التكبير والموقع",
+  "Zoom, dictation and location": "التكبير والإملاء والموقع",
   "Map windows": "نوافذ الخريطة",
   "Transit networks": "شبكات النقل",
   "Shown": "ظاهر",
@@ -3285,5 +3285,11 @@
   "{minutes} min late": "متأخر {minutes} دقيقة",
   "on time": "في الموعد",
   "contacting the data server…": "جارٍ الاتصال بخادم البيانات…",
-  "waking the data server…": "جارٍ إيقاظ خادم البيانات…"
+  "waking the data server…": "جارٍ إيقاظ خادم البيانات…",
+  "Dictate a command": "أملِ أمرًا",
+  "Dictate a command with the phone's speech recognition": "أملِ أمرًا باستخدام التعرّف على الكلام في الهاتف",
+  "Dictation needs the microphone permission.": "يحتاج الإملاء إلى إذن الميكروفون.",
+  "Dictation needs a network connection on this device.": "يحتاج الإملاء إلى اتصال بالشبكة على هذا الجهاز.",
+  "Nothing was heard. Try again.": "لم يُسمع شيء. حاول مرة أخرى.",
+  "Dictation is not available on this device.": "الإملاء غير متاح على هذا الجهاز."
 }

@@ -3043,7 +3043,7 @@
   "Following your position": "Отслеживание вашего местоположения",
   "Location access is blocked for this app.": "Доступ к геолокации заблокирован для этого приложения.",
   "Location unavailable": "Местоположение недоступно",
-  "Zoom and location": "Масштаб и местоположение",
+  "Zoom, dictation and location": "Масштаб, диктовка и местоположение",
   "Map windows": "Окна карты",
   "Transit networks": "Сети транспорта",
   "Shown": "Показано",
@@ -3151,5 +3151,11 @@
   "{minutes} min late": "опоздание {minutes} мин",
   "on time": "по расписанию",
   "contacting the data server…": "подключение к серверу данных…",
-  "waking the data server…": "сервер данных просыпается…"
+  "waking the data server…": "сервер данных просыпается…",
+  "Dictate a command": "Продиктовать команду",
+  "Dictate a command with the phone's speech recognition": "Продиктовать команду распознаванием речи телефона",
+  "Dictation needs the microphone permission.": "Диктовке нужно разрешение на микрофон.",
+  "Dictation needs a network connection on this device.": "Диктовке нужно сетевое подключение на этом устройстве.",
+  "Nothing was heard. Try again.": "Ничего не услышано. Попробуйте снова.",
+  "Dictation is not available on this device.": "Диктовка недоступна на этом устройстве."
 }
