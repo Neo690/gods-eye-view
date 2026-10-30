@@ -1578,12 +1578,9 @@
   top: max(14vh, 136px);
 }
 
-#intel-hud[data-variant='cyber'] .hud-bottom-left,
-#intel-hud[data-variant='cyber'] .hud-bottom-right {
-  bottom: calc(2vh + 6.5rem);
-}
-
-/* Attribution's logo row extends above its text baseline. Reserve the whole
+/* The telemetry window is a single block now, so one rule sets its height: it
+   used to take 6.5rem and be raised again to 7.75rem for the credits.
+   Attribution's logo row extends above its text baseline, so reserve the whole
    row plus a gap above the dock-relative 2vh + 5rem credit position. */
 #intel-hud[data-variant='cyber'] .hud-bottom-left {
   bottom: calc(2vh + 7.75rem);
@@ -1846,13 +1843,6 @@
 
   #intel-hud[data-variant='cyber'] .hud-bottom-bar {
     display: none;
-  }
-
-  /* Sits above the language picker row in the bottom-right corner
-     (locale-picker.css: 0.9rem inset + one ~2rem button + a gap). */
-  #intel-hud[data-variant='cyber'] .hud-bottom-right {
-    right: 28px;
-    bottom: 3.5rem;
   }
 }
 

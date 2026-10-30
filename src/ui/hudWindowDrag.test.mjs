@@ -110,10 +110,10 @@ function offsetOf(el) {
   };
 }
 
-test('the three windows are the ones the phone shows', () => {
+test('the two windows are the ones the phone shows', () => {
   assert.deepEqual(
     HUD_WINDOW_DRAG_SPECS.map((spec) => spec.id),
-    ['top-left', 'bottom-left', 'bottom-right'],
+    ['top-left', 'bottom-left'],
   );
   assert.equal(HUD_WINDOW_DRAG_MEDIA, '(max-width: 720px)');
   // A renamed class would silently stop a window from being movable.
@@ -156,12 +156,12 @@ test('a stored offset is put back where it was left', () => {
 });
 
 test('a stored offset cannot park a window off the screen', () => {
-  const bottomRight = fakeWindow({ left: 76, top: 493, width: 208, height: 38 });
-  const doc = fakeDocument({ '.hud-bottom-right': bottomRight });
-  const storage = fakeStorage({ 'bottom-right': { x: -400, y: 900 } });
+  const bottomLeft = fakeWindow({ left: 76, top: 493, width: 208, height: 38 });
+  const doc = fakeDocument({ '.hud-bottom-left': bottomLeft });
+  const storage = fakeStorage({ 'bottom-left': { x: -400, y: 900 } });
   const control = createHudWindowDrag({ document: doc, storage });
-  assert.deepEqual(offsetOf(bottomRight), { x: '-72px', y: '185px' });
-  assert.deepEqual(storage.read()['bottom-right'], { x: -72, y: 185 });
+  assert.deepEqual(offsetOf(bottomLeft), { x: '-72px', y: '185px' });
+  assert.deepEqual(storage.read()['bottom-left'], { x: -72, y: 185 });
   control.destroy();
 });
 

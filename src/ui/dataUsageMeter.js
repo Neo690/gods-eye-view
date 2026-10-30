@@ -2,8 +2,11 @@ import { t } from '../i18n/index.js';
 
 /**
  * Live HTTP data readout: what this app has pulled over the network, and how
- * fast. It rides the globe-action strip as one dim line of text, next to the
- * window menu — telemetry, not a control, so it carries no frame and no button.
+ * fast. It is one dim line in the HUD's telemetry window, after the coordinates
+ * and the imaging scale — telemetry, not a control, so it carries no frame and
+ * no button of its own. It used to sit under the window buttons, where it was
+ * one more number competing with the controls; inside the TOP SECRET readout it
+ * is where an operator looks for numbers anyway.
  *
  * Numbers come from the browser's own Resource Timing entries, which is the
  * only source that reports bytes already on the wire — no request is wrapped,
@@ -85,9 +88,9 @@ export function createDataUsageMeter({
   setIntervalFn = globalThis.setInterval,
   clearIntervalFn = globalThis.clearInterval,
 } = {}) {
-  const host =
-    documentRef?.getElementById?.('top-center-actions') ??
-    documentRef?.getElementById?.('title-bar');
+  // The HUD owns the slot (hud.js builds it before this module runs). No HUD,
+  // no readout: the line belongs to that screen, not to the application chrome.
+  const host = documentRef?.getElementById?.('hud-data-usage');
   const timeline =
     typeof performanceRef?.now === 'function' ? performanceRef : null;
   if (!host || !timeline || !documentRef?.createElement) {

@@ -112,14 +112,17 @@ function fakeDocument() {
 
   const titleBar = make('div');
   const actionRow = make('nav');
+  const hudSlot = make('div');
   const byId = new Map([
     ['title-bar', titleBar],
     ['top-center-actions', actionRow],
+    ['hud-data-usage', hudSlot],
   ]);
   return {
     hidden: false,
     titleBar,
     actionRow,
+    hudSlot,
     byId,
     listeners,
     createElement: (tagName) => make(tagName),
@@ -140,7 +143,7 @@ function fakePerformance(entries) {
   };
 }
 
-test('the readout rides the action strip and reports bytes already transferred', () => {
+test('the readout rides the HUD telemetry window and reports bytes already transferred', () => {
   const documentRef = fakeDocument();
   const entries = [
     {
@@ -163,8 +166,11 @@ test('the readout rides the action strip and reports bytes already transferred',
     clearIntervalFn: () => {},
   });
 
-  const readout = documentRef.actionRow.children.at(-1);
+  const readout = documentRef.hudSlot.children.at(-1);
   assert.equal(readout.id, 'data-usage');
+  // The application chrome keeps none of it: the line belongs to the HUD.
+  assert.deepEqual(documentRef.actionRow.children, []);
+  assert.deepEqual(documentRef.titleBar.children, []);
   // Rate, separator, total — and no symbols the reader has to decode.
   assert.equal(readout.children.length, 3);
   assert.match(readout.children[0].textContent, /^0 B\/s$/);
@@ -175,7 +181,7 @@ test('the readout rides the action strip and reports bytes already transferred',
   assert.equal(readout.removed, true);
 });
 
-test('the meter leaves the page alone without an action strip', () => {
+test('the meter leaves the page alone without a HUD telemetry window', () => {
   const meter = createDataUsageMeter({
     documentRef: { getElementById: () => null },
     performanceRef: fakePerformance([]),

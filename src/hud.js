@@ -297,9 +297,11 @@ export class IntelHUD {
         <div class="hud-bracket">┐</div>
       </div>
 
-      <!-- The two telemetry windows. The wrapper generates no box on a
-           desktop, so they keep their corner anchors; a phone stacks them on
-           the classification window's centre line instead (see
+      <!-- One telemetry window, not two: coordinates, imaging scale, AIS and
+           the app's own traffic read as one block of numbers, and a phone no
+           longer stacks two centred slabs over the street names. The wrapper
+           generates no box on a desktop, so the window keeps its corner
+           anchor; a phone centres it on the classification line (see
            mobile-compact.css). -->
       <div class="hud-bottom-center">
         <div class="hud-corner hud-bottom-left">
@@ -307,15 +309,15 @@ export class IntelHUD {
           <div class="hud-content">
             <div id="hud-mgrs">MGRS: ---</div>
             <div id="hud-latlon">--°--'--"N ---°--'--"W</div>
-          </div>
-        </div>
-
-        <div class="hud-corner hud-bottom-right">
-          <div class="hud-content" style="text-align:right">
             <div id="hud-gsd">GSD: --m  NIIRS: --</div>
             <div id="hud-alt">ALT: --m   SUN: --° EL</div>
             <div id="hud-ais-vessel" class="hud-ais-vessel">${t('AIS: --')}</div>
             <div id="hud-windy" class="hud-windy" style="display:none"></div>
+            <!-- The data readout's slot (ui/dataUsageMeter.js fills it): the
+                 app's own HTTP traffic is telemetry, so it belongs here with
+                 the rest of the numbers rather than floating under the window
+                 buttons. -->
+            <div id="hud-data-usage" class="hud-data-usage"></div>
           </div>
           <div class="hud-bracket">┘</div>
         </div>
@@ -1053,7 +1055,7 @@ export class IntelHUD {
   }
 
   /**
-   * Update the Windy weather mini-readout in the bottom-right HUD corner.
+   * Update the Windy weather mini-readout in the HUD telemetry window.
    * Call with `null` to hide the element (e.g. when the layer is disabled).
    * @param {object|null} data - Weather data from {@link createWindyWeatherLayer}.
    */

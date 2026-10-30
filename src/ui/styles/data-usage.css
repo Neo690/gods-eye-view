@@ -1,30 +1,40 @@
 /* ── Data Usage Readout ────────────────────────
-   Telemetry, not a control: one line of dim text inside the globe-action strip,
-   next to the window menu. No frame, no background of its own, no chevron — it
-   should read like the FPS counter, not like another button. */
-#top-center-actions .data-usage,
-#title-bar .data-usage {
+   One line in the HUD telemetry window, after the coordinates and the imaging
+   scale. Telemetry, not a control: no frame, no background of its own, no
+   chevron — it should read like the AIS line above it, one step quieter. */
+
+/* An empty slot draws nothing: the line only exists once the meter has
+   written its first numbers. */
+.hud-data-usage:empty {
+  display: none;
+}
+
+.hud-data-usage {
+  display: flex;
+  margin-top: 4px;
+}
+
+.hud-data-usage .data-usage {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  align-self: center;
-  padding: 0 2px;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1;
-  letter-spacing: 0.6px;
+  letter-spacing: 1.2px;
   font-variant-numeric: tabular-nums;
-  color: var(--text-primary);
-  opacity: 0.42;
+  /* Inherited from its window, so every HUD variant (and the phone's cyan)
+     keeps the readout in the same colour as the numbers around it. */
+  color: inherit;
+  opacity: 0.56;
   white-space: nowrap;
   user-select: none;
   cursor: default;
   transition: opacity 140ms ease;
 }
 
-#top-center-actions .data-usage:hover,
-#title-bar .data-usage:hover {
-  opacity: 0.8;
+.hud-data-usage .data-usage:hover {
+  opacity: 0.92;
 }
 
 .data-usage-value {
@@ -37,20 +47,24 @@
 }
 
 .data-usage-sep {
-  color: var(--accent);
   opacity: 0.6;
 }
 
-/* On a phone the row already holds six 34px buttons; the live rate is the part
-   worth its width there, and the session total stays in the title. */
+/* On a phone the telemetry window is one centred column between the
+   classification block and the credits; the rate alone clears it, and the
+   session total stays in the title. */
 @media (max-width: 700px) {
-  #top-center-actions .data-usage {
-    font-size: 8px;
-    gap: 3px;
+  .hud-data-usage {
+    justify-content: center;
   }
 
-  #top-center-actions .data-usage-total,
-  #top-center-actions .data-usage-sep {
+  .hud-data-usage .data-usage {
+    font-size: 9.5px;
+    letter-spacing: 0.6px;
+  }
+
+  .hud-data-usage .data-usage-total,
+  .hud-data-usage .data-usage-sep {
     display: none;
   }
 }

@@ -190,11 +190,6 @@
   left: 36px;
 }
 
-.hud-bottom-right {
-  bottom: 180px;
-  right: 36px;
-}
-
 .hud-bracket {
   font-size: 22px;
   line-height: 1;
@@ -354,7 +349,6 @@
 }
 
 #intel-hud[data-variant='minimal'] .hud-top-right,
-#intel-hud[data-variant='minimal'] .hud-bottom-right,
 #intel-hud[data-variant='minimal'] .hud-left-edge,
 #intel-hud[data-variant='minimal'] .hud-right-edge,
 #intel-hud[data-variant='minimal'] .hud-classification,

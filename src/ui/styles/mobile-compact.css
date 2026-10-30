@@ -476,13 +476,12 @@
   }
 
   /* ── Windows: glass off, data on ─────────────
-     Three slabs of near-black were doing the reading, and paying for it with
+     Two slabs of near-black were doing the reading, and paying for it with
      the map underneath. The readouts already glow in their own colour, so the
      scrim goes to a trace of it and each line gains a dark shadow instead:
      legible over a white roof, and the imagery keeps its detail. */
   #intel-hud .hud-top-left,
-  #intel-hud .hud-bottom-left,
-  #intel-hud .hud-bottom-right {
+  #intel-hud .hud-bottom-left {
     padding: 4px 6px;
     background: transparent;
     border: 0;
@@ -511,15 +510,14 @@
   }
 
   /* ── Draggable windows ───────────────────────
-     Each of the three can be pulled around by finger (see hudWindowDrag.js).
+     Both can be pulled around by finger (see hudWindowDrag.js).
      The module only writes the offset, so the transform lives here: one place
      to move them, and the halo drawn above travels with its window for free.
      `touch-action: none` is what lets a drag be a drag instead of a page
      scroll, and taking pointer events is the price of being grabbable — the
      rest of the HUD stays a read-out the globe can be turned through. */
   #intel-hud .hud-top-left,
-  #intel-hud .hud-bottom-left,
-  #intel-hud .hud-bottom-right {
+  #intel-hud .hud-bottom-left {
     pointer-events: auto;
     touch-action: none;
     transform: translate3d(
@@ -540,8 +538,7 @@
      uses, and every line gets a hard dark rim: a halo alone is readable on a
      night city and disappears on a white roof. */
   #intel-hud .hud-top-left *,
-  #intel-hud .hud-bottom-left *,
-  #intel-hud .hud-bottom-right * {
+  #intel-hud .hud-bottom-left * {
     color: rgba(0, 255, 255, 0.9);
     /* A 1px rim, not a 7px smear: five stacked lines of blurred shadow pooled
        into a grey slab behind the block. */
@@ -603,11 +600,11 @@
     letter-spacing: 0.8px;
   }
 
-  /* The classification window is centred; the telemetry pair was pinned to
-     the left and right edges, which is what made the view read as full. Both
-     share the classification's centre line now, so the edges of the map stay
-     open. The column sits above the credit band, which keeps its desktop
-     anchor (2vh + 5rem, re-measured by the attribution pin). */
+  /* The classification window is centred; the telemetry window was pinned to
+     the left edge, which is what made the view read as full. It shares the
+     classification's centre line now, so the edges of the map stay open. The
+     column sits above the credit band, which keeps its desktop anchor
+     (2vh + 5rem, re-measured by the attribution pin). */
   #intel-hud .hud-bottom-center {
     position: absolute;
     inset: auto 0 140px;
@@ -619,9 +616,8 @@
   }
 
   /* `relative` with no offsets lays out exactly like `static` — that is what
-     drops the desktop corner anchors — and gives the halo above something to
-     be inset from. Both boxes take the same width so the pair reads as one
-     column instead of two centred blocks of different sizes. */
+     drops the desktop corner anchor — and gives the halo above something to
+     be inset from. */
   #intel-hud .hud-bottom-center > .hud-corner {
     position: relative;
     inset: auto;
@@ -630,10 +626,8 @@
     max-width: calc(100vw - 24px);
   }
 
-  /* One alignment for both, and it is the centre line they are stacked on: a
-     left-aligned MGRS above a right-aligned GSD staggered the column. The
-     inline `text-align: right` on the desktop markup is on the wrapper, so the
-     lines themselves take this. */
+  /* Every line takes the centre line the window sits on, so the coordinates,
+     the imaging scale and the traffic read as one block. */
   #intel-hud .hud-bottom-center .hud-content {
     flex: 1 1 auto;
     width: 100%;

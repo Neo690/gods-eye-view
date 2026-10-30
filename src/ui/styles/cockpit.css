@@ -2028,8 +2028,7 @@ body.cockpit-mode #intel-hud .hud-bottom-left {
   transform: scale(0.78);
   transform-origin: left center;
 }
-body.cockpit-mode #intel-hud .hud-top-right,
-body.cockpit-mode #intel-hud .hud-bottom-right {
+body.cockpit-mode #intel-hud .hud-top-right {
   right: clamp(18px, 3vw, 44px);
   transform: scale(0.78);
   transform-origin: right center;
@@ -2038,8 +2037,7 @@ body.cockpit-mode #intel-hud .hud-top-left,
 body.cockpit-mode #intel-hud .hud-top-right {
   top: clamp(104px, 13vh, 138px);
 }
-body.cockpit-mode #intel-hud .hud-bottom-left,
-body.cockpit-mode #intel-hud .hud-bottom-right {
+body.cockpit-mode #intel-hud .hud-bottom-left {
   bottom: clamp(84px, 11vh, 118px);
 }
 body.cockpit-mode #intel-hud .hud-summary-wrap {

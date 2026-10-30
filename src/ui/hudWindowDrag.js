@@ -1,11 +1,11 @@
 /**
  * Finger-draggable HUD windows.
  *
- * The three readouts on the map — classification, MGRS, telemetry — are placed
- * by the layout: one at the top, two in a centred column above the credits. On
- * a phone that is a good default and a bad constant: the classification window
+ * The two readouts on the map — classification and telemetry — are placed by
+ * the layout: one at the top, one in a centred window above the credits. On a
+ * phone that is a good default and a bad constant: the classification window
  * covers exactly the part of the imagery an operator wants to look at, and the
- * telemetry column sits over the street names they are reading. Each window
+ * telemetry window sits over the street names they are reading. Each window
  * can be moved by finger and stays where it was put, across reloads and
  * locale switches.
  *
@@ -29,7 +29,6 @@ export const HUD_WINDOW_DRAG_MEDIA = '(max-width: 720px)';
 export const HUD_WINDOW_DRAG_SPECS = Object.freeze([
   Object.freeze({ id: 'top-left', selector: '.hud-top-left' }),
   Object.freeze({ id: 'bottom-left', selector: '.hud-bottom-left' }),
-  Object.freeze({ id: 'bottom-right', selector: '.hud-bottom-right' }),
 ]);
 
 /** A press has to travel this far before it counts as a drag, not a tap. */
