@@ -63,13 +63,15 @@ npm run apk:install      # once
 npm run apk:watch        # every 2 minutes until Ctrl-C
 ```
 
-It reads the runs API for the current branch, downloads the rolling release
-asset and installs it with `adb install -r`. Because that asset carries the CI
+It reads the runs API for the newest successful build on any branch — the
+release is one rolling tag, so the run that wrote it last is the one worth
+installing, whichever branch it came from — downloads that asset and installs
+it with `adb install -r`. Because that asset carries the CI
 key, the phone takes it as an update of the app it already runs — settings and
 presets survive. A locally built debug APK cannot do that, which is why this
 installs the published artifact rather than `dist/`.
 
-Options: `--branch=<name>` (default: the current branch), `--serial=<device>`
+Options: `--branch=<name>` (narrow to one branch), `--serial=<device>`
 when several phones are plugged in, `--interval=<seconds>`, `--force`,
 `--dry-run`, `--adb=<path>` (also `$ADB`, then `$ANDROID_HOME/platform-tools`).
 The last installed commit is remembered in `.gev-apk-install.json`, which is
