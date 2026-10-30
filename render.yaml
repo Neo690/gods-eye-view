@@ -67,6 +67,14 @@ services:
       # reading. Server-side only: the browser never receives it.
       - key: N2YO_API_KEY
         sync: false
+      # N2YO passes (/api/n2yo/above): the satellites-overhead source of the
+      # satellite watch layer. The proxy adds the key server-side, so the
+      # browser never sees it. Unset, the route answers 503 {"error":"no_key"}
+      # and that source reads as "needs a key" instead of an empty sky.
+      # The deploy workflow keeps the deployed value in step with the
+      # repository secret of the same name.
+      - key: N2YO_API_KEY
+        sync: false
       # Account-scoped: only the uRADMonitor units this account owns or was
       # granted. Unset, the radiation snapshot skips the network and the four
       # keyless feeds still draw.
