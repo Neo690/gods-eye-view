@@ -69,6 +69,16 @@ services:
       # so a fresh service or a rotated key needs no dashboard trip.
       - key: N2YO_API_KEY
         sync: false
+      # Space-Track account (/api/spacetrack/gp and /api/spacetrack/cdm) — the
+      # official element sets and the public conjunction feed for the satellite
+      # layers. The routes log in server-side and cache for the windows its
+      # usage policy requires (GP 1 h, CDM 8 h); a browser never holds these.
+      # The deploy workflow pushes both from repository secrets of the same
+      # name, so a rotation needs no dashboard trip.
+      - key: SPACETRACK_USER
+        sync: false
+      - key: SPACETRACK_PASSWORD
+        sync: false
       # Account-scoped: only the uRADMonitor units this account owns or was
       # granted. Unset, the radiation snapshot skips the network and the four
       # keyless feeds still draw.

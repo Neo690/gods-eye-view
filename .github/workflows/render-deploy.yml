@@ -36,42 +36,54 @@ jobs:
     timeout-minutes: 25
     steps:
       # Server-only provider keys live in the Render service's Environment tab,
-      # not in this repository or in the browser. N2YO is the first one we keep
-      # in sync from a repository secret: /api/n2yo/above adds it upstream, so
+      # not in this repository or in the browser. Each one is kept in sync from
+      # a repository secret of the same name: the proxies add them upstream, so
       # an unset value silently empties a layer rather than failing loudly.
-      # Setting it here (idempotently) means a fresh service or a rotated key
-      # needs no dashboard trip, and the deploy that follows already has it.
-      - name: Sync N2YO_API_KEY onto the service
+      # Setting them here (idempotently, only when the value differs) means a
+      # fresh service or a rotated key needs no dashboard trip, and the deploy
+      # that follows already has them.
+      - name: Sync server-only keys onto the service
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           N2YO_API_KEY: ${{ secrets.N2YO_API_KEY }}
+          SPACETRACK_USER: ${{ secrets.SPACETRACK_USER }}
+          SPACETRACK_PASSWORD: ${{ secrets.SPACETRACK_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -z "${N2YO_API_KEY:-}" ]; then
-            echo "::warning::N2YO_API_KEY is not a repository secret; /api/n2yo/above will answer no_key."
-            exit 0
-          fi
-          url="https://api.render.com/v1/services/${RENDER_SERVICE_ID}/env-vars/N2YO_API_KEY"
-          current=$(curl -sS -H "Authorization: Bearer $RENDER_API_KEY" "$url" \
-            | jq -r '.value // ""')
-          if [ "$current" = "$N2YO_API_KEY" ]; then
-            echo "N2YO_API_KEY already up to date"
-            exit 0
-          fi
-          code=$(curl -sS -o "$RUNNER_TEMP/n2yo-env.json" -w '%{http_code}' -X PUT \
-            -H "Authorization: Bearer $RENDER_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -cn --arg v "$N2YO_API_KEY" '{value: $v}')" \
-            "$url")
-          echo "PUT env-var -> $code"
-          case "$code" in
-            200|201) echo "N2YO_API_KEY set" ;;
-            *)
-              cat "$RUNNER_TEMP/n2yo-env.json" || true
-              echo "::error::Render answered $code while setting N2YO_API_KEY"
-              exit 1
-              ;;
-          esac
+          base="https://api.render.com/v1/services/${RENDER_SERVICE_ID}/env-vars"
+
+          sync_key() {
+            name="$1"
+            value="$2"
+            if [ -z "$value" ]; then
+              echo "::warning::$name is not a repository secret; its route will answer no_key."
+              return 0
+            fi
+            current=$(curl -sS -H "Authorization: Bearer $RENDER_API_KEY" \
+              "$base/$name" | jq -r '.value // ""')
+            if [ "$current" = "$value" ]; then
+              echo "$name already up to date"
+              return 0
+            fi
+            code=$(curl -sS -o "$RUNNER_TEMP/env-var.json" -w '%{http_code}' -X PUT \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "$(jq -cn --arg v "$value" '{value: $v}')" \
+              "$base/$name")
+            echo "PUT $name -> $code"
+            case "$code" in
+              200|201) ;;
+              *)
+                cat "$RUNNER_TEMP/env-var.json" || true
+                echo "::error::Render answered $code while setting $name"
+                exit 1
+                ;;
+            esac
+          }
+
+          sync_key N2YO_API_KEY "${N2YO_API_KEY:-}"
+          sync_key SPACETRACK_USER "${SPACETRACK_USER:-}"
+          sync_key SPACETRACK_PASSWORD "${SPACETRACK_PASSWORD:-}"
 
       - name: Trigger the deploy
         id: trigger
@@ -178,4 +190,39 @@ jobs:
             exit 0
           fi
           echo "::error::/api/n2yo/above answered $code"
+          exit 1
+
+      # Space-Track allows one GP read an hour for the whole account, so this is
+      # the only call the deploy makes: it both proves the account is live and
+      # leaves the route's hour-long cache warm for the layer. The CDM feed is
+      # deliberately not touched — three downloads a day is scarce. As above, a
+      # missing account is a warning, not a failed build.
+      - name: Check the Space-Track route has its account
+        run: |
+          set -euo pipefail
+          code=$(curl -sS --max-time 180 -D "$RUNNER_TEMP/st-headers.txt" \
+            -o "$RUNNER_TEMP/gp.json" -w '%{http_code}' \
+            "$BASE_URL/api/spacetrack/gp" || echo 000)
+          echo "GET /api/spacetrack/gp -> $code"
+          grep -i '^x-spacetrack-cache' "$RUNNER_TEMP/st-headers.txt" || true
+          if [ "$code" = "200" ]; then
+            python3 - "$RUNNER_TEMP/gp.json" <<'PY'
+          import json, sys
+          payload = json.load(open(sys.argv[1]))
+          entries = payload.get("entries") or []
+          if not entries:
+              raise SystemExit("GP answered 200 with no element sets")
+          first = entries[0]
+          line1, line2 = str(first.get("line1", "")), str(first.get("line2", ""))
+          if not (line1.startswith("1 ") and line2.startswith("2 ")):
+              raise SystemExit("GP entry is not a two-line element set: %r" % (first,))
+          print("GP ok: %d element sets, e.g. %s" % (len(entries), first.get("norad")))
+          PY
+            exit 0
+          fi
+          if [ "$code" = "503" ]; then
+            echo "::warning::SPACETRACK_USER/PASSWORD are missing on the service; element sets and conjunctions stay empty."
+            exit 0
+          fi
+          echo "::error::/api/spacetrack/gp answered $code"
           exit 1
