@@ -71,6 +71,8 @@ public class MainActivity extends Activity {
   private String pendingDictationLocale = "";
   /** Cleared once an offline-only attempt proves this phone has no offline model. */
   private boolean dictationOfflineOnly = true;
+  /** Set once this press has retried without naming a language. */
+  private boolean dictationLanguageDropped = false;
   private String pendingLocationOrigin;
   private ApiForwarder apiForwarder;
 
@@ -301,6 +303,9 @@ public class MainActivity extends Activity {
       case SpeechRecognizer.ERROR_NETWORK:
       case SpeechRecognizer.ERROR_NETWORK_TIMEOUT:
         return "network";
+      case SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED:
+      case SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE:
+        return "language";
       case SpeechRecognizer.ERROR_AUDIO:
         return "audio";
       default:
@@ -346,14 +351,24 @@ public class MainActivity extends Activity {
 
     @Override
     public void onError(int code) {
-      // A phone with no offline model answers ERROR_LANGUAGE_UNAVAILABLE (or
-      // ERROR_CLIENT) to an offline-only request. One retry without that
-      // preference is what makes dictation work on a stock device.
+      // The on-device model on a stock phone often speaks only the system
+      // language, and refuses "fr" flatly. Dropping the language extra hands
+      // the choice back to the phone, which is better than no dictation; it
+      // happens once per press so a refused language cannot loop.
       if (
-        dictationOfflineOnly &&
-        (code == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE ||
-          code == SpeechRecognizer.ERROR_CLIENT)
+        !dictationLanguageDropped &&
+        (code == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ||
+          code == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE)
       ) {
+        dictationLanguageDropped = true;
+        dictationOfflineOnly = false;
+        startDictation("");
+        return;
+      }
+      // A phone with no offline model answers ERROR_CLIENT to an offline-only
+      // request. One retry without that preference is what makes dictation
+      // work on a stock device.
+      if (dictationOfflineOnly && code == SpeechRecognizer.ERROR_CLIENT) {
         dictationOfflineOnly = false;
         startDictation(pendingDictationLocale);
         return;
@@ -794,6 +809,7 @@ public class MainActivity extends Activity {
     public boolean dictate(String locale) {
       runOnUiThread(() -> {
         pendingDictationLocale = locale == null ? "" : locale;
+        dictationLanguageDropped = false;
         if (hasMic()) {
           startDictation(pendingDictationLocale);
           return;

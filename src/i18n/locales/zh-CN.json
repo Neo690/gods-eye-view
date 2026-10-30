@@ -2956,5 +2956,6 @@
   "Dictation needs the microphone permission.": "听写需要麦克风权限。",
   "Dictation needs a network connection on this device.": "听写需要此设备上的网络连接。",
   "Nothing was heard. Try again.": "没有听到任何内容。请重试。",
-  "Dictation is not available on this device.": "此设备不支持听写。"
+  "Dictation is not available on this device.": "此设备不支持听写。",
+  "The phone cannot dictate in this language.": "手机无法用这种语言进行听写。"
 }

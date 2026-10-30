@@ -3291,5 +3291,6 @@
   "Dictation needs the microphone permission.": "يحتاج الإملاء إلى إذن الميكروفون.",
   "Dictation needs a network connection on this device.": "يحتاج الإملاء إلى اتصال بالشبكة على هذا الجهاز.",
   "Nothing was heard. Try again.": "لم يُسمع شيء. حاول مرة أخرى.",
-  "Dictation is not available on this device.": "الإملاء غير متاح على هذا الجهاز."
+  "Dictation is not available on this device.": "الإملاء غير متاح على هذا الجهاز.",
+  "The phone cannot dictate in this language.": "لا يمكن للهاتف الإملاء بهذه اللغة."
 }

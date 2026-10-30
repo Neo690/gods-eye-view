@@ -3090,5 +3090,6 @@
   "Dictation needs the microphone permission.": "El dictado necesita el permiso del micrófono.",
   "Dictation needs a network connection on this device.": "El dictado necesita una conexión de red en este dispositivo.",
   "Nothing was heard. Try again.": "No se oyó nada. Inténtalo de nuevo.",
-  "Dictation is not available on this device.": "El dictado no está disponible en este dispositivo."
+  "Dictation is not available on this device.": "El dictado no está disponible en este dispositivo.",
+  "The phone cannot dictate in this language.": "El teléfono no puede dictar en este idioma."
 }

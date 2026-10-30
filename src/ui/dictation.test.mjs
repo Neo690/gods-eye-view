@@ -74,6 +74,7 @@ test('failures say what the operator can act on', () => {
   assert.match(dictationMessage('permission'), /permission/i);
   assert.match(dictationMessage('network'), /network/i);
   assert.match(dictationMessage('timeout'), /nothing was heard/i);
+  assert.match(dictationMessage('language'), /language/i);
   assert.match(dictationMessage('no_recognizer'), /not available/i);
   assert.match(dictationMessage(''), /not available/i);
   assert.equal(

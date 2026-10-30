@@ -3157,5 +3157,6 @@
   "Dictation needs the microphone permission.": "Диктовке нужно разрешение на микрофон.",
   "Dictation needs a network connection on this device.": "Диктовке нужно сетевое подключение на этом устройстве.",
   "Nothing was heard. Try again.": "Ничего не услышано. Попробуйте снова.",
-  "Dictation is not available on this device.": "Диктовка недоступна на этом устройстве."
+  "Dictation is not available on this device.": "Диктовка недоступна на этом устройстве.",
+  "The phone cannot dictate in this language.": "Телефон не может распознавать речь на этом языке."
 }

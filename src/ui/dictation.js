@@ -33,6 +33,8 @@ export function dictationMessage(code) {
       return t('Dictation needs the microphone permission.');
     case 'network':
       return t('Dictation needs a network connection on this device.');
+    case 'language':
+      return t('The phone cannot dictate in this language.');
     case 'no_match':
     case 'timeout':
       return t('Nothing was heard. Try again.');
