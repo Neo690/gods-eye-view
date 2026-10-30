@@ -194,15 +194,21 @@ test('a save is reported from what the app answered, not assumed', () => {
 
 test('a plan keeps the app-known keys and refuses a value the app rejects', () => {
   const good = tempEnv(
-    'GEMINI_API_KEY=AIza-example\nURADMONITOR_USER_ID=123\n',
+    'GEMINI_API_KEY=AIza-example\nURADMONITOR_USER_ID=123\nUNKNOWN_PROVIDER_KEY=x\n',
   );
   const bad = tempEnv('GEMINI_API_KEY=has a space\n');
   try {
     const plan = planSeed({ file: good.file });
-    assert.deepEqual(Object.keys(plan.updates), ['GEMINI_API_KEY']);
-    assert.deepEqual(plan.unknown, ['URADMONITOR_USER_ID']);
+    // Every provider the panel offers is seedable, including the account-scoped
+    // uRADMonitor pair, which joined the registry after this test was written.
+    assert.deepEqual(Object.keys(plan.updates).sort(), [
+      'GEMINI_API_KEY',
+      'URADMONITOR_USER_ID',
+    ]);
+    assert.deepEqual(plan.unknown, ['UNKNOWN_PROVIDER_KEY']);
     assert.equal(plan.validation.ok, true);
     assert.ok(knownKeySetupEnvVars().has('GEMINI_API_KEY'));
+    assert.ok(knownKeySetupEnvVars().has('URADMONITOR_USER_HASH'));
 
     const invalid = planSeed({ file: bad.file });
     assert.equal(invalid.validation.ok, false);

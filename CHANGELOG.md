@@ -1,5 +1,40 @@
 # Changelog
 
+- Give the solar-storm layer's horizon test a deadband: a cell stays drawn a
+  hair past the limb and is only revealed once clearly inside it. The oval
+  already hid the far hemisphere every frame, but an exact test on a cell that
+  sits on the boundary made that one cell blink while a hand jittered on the
+  limb (eight toggles in four seconds of tremor, measured against today's
+  OVATION grid); the same measurement now reads none, while a steady orbit
+  still shows each cell once and hides it once, and no cell is drawn past the
+  horizon.
+
+- Add a live data-usage readout: the current download rate and the bytes this
+  app has pulled over HTTP since it loaded, as one dim line in the
+  globe-action strip next to the window menu — telemetry, so it carries no
+  frame and no symbols to decode, and a phone keeps only the live rate. It
+  reads the browser's own Resource Timing entries, so nothing wraps, clones or
+  re-reads a response and measuring costs no traffic; the first scan only sets
+  the baseline, which keeps the boot bundle out of the rate, and a hidden tab
+  folds its backlog into the total instead of firing a spike. Cross-origin
+  responses the browser refuses to size and long-lived streams (radio audio,
+  voice) are not counted, which the tooltip says rather than a number it cannot
+  know. It remounts on every UI init and is removed with the shell.
+
+- Add a solar-storm layer: the last 24 h of GOES X-ray flares, each drawn at
+  the point under the Sun at its peak (a flare has no ground coordinate of its
+  own, so the marker is the subsolar point and the card says so), the OVATION
+  auroral oval as cells at or above 10 % probability, the planetary K index
+  with its three-hourly series, and the geomagnetic alert level read off Kp on
+  the NOAA G scale — its G0/G1 label sits on the oval's thickest cell so the
+  condition reads without opening anything. A click on a flare or that label
+  opens a fiche; Escape closes it. One `/api/space-weather` route serves it,
+  caching four SWPC reads for three minutes, trimming the 65 160-cell grid to
+  at most 4 000 drawn cells, and keeping a failed product's last payload for up
+  to an hour while marking the answer degraded rather than drawing a quiet Sun.
+  The APK answers the same route in-page through the shell's relay. Layer-state
+  token 00 is its own, the first of the base-36 pairs.
+
 - Add a transport-activity layer for Israeli companies: twenty documented sites
   — port security at Tarragona and Huelva, a chemical terminal at Ghent,
   TaxiBot at Frankfurt, Delhi and Bengaluru, the Kabaale airport in Uganda,

@@ -26,6 +26,7 @@
   ["recent-imagery", "1"],
   ["rocket-launches", "x"],
   ["satellites", "s"],
+  ["space-weather", "00"],
   ["street-level", "0"],
   ["telegeography-submarine-cables", "u"],
   ["traffic", "t"],

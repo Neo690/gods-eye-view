@@ -440,6 +440,10 @@ export const DATA_CREDITS = [
     html: 'Space radiation: <a href="https://www.swpc.noaa.gov/" target="_blank" rel="noopener">NOAA SWPC</a> · GOES integral proton flux (≥10 MeV) and the planetary K index. Space-weather conditions, not a health forecast.',
   },
   {
+    key: 'space-weather',
+    html: 'Space weather: <a href="https://www.swpc.noaa.gov/" target="_blank" rel="noopener">NOAA SWPC</a> · GOES X-ray flares (7-day log), planetary K index (1-minute estimate and 3-hourly series) and the OVATION aurora forecast grid. A forecast probability, not an observation of the sky over you.',
+  },
+  {
     key: 'weather-cyclones',
     html: 'Cyclone advisories: <a href="https://www.nhc.noaa.gov/" target="_blank" rel="noopener">NOAA/NWS NHC / CPHC</a> · Atlantic and eastern/central North Pacific. Forecast center uncertainty, not storm size.',
   },

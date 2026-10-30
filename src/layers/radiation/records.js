@@ -492,3 +492,49 @@ export function formatDose(usvh) {
   if (usvh >= 1) return usvh.toFixed(1);
   return usvh.toFixed(3);
 }
+
+/** Labels kept on the globe at once: enough to read the map, few enough to see it. */
+export const READING_LABEL_LIMIT = 24;
+/** One label per cell of this many degrees, so a dense network never stacks. */
+export const READING_LABEL_CELL_DEG = 4;
+
+/**
+ * The stations worth labelling: the strongest reading per coarse cell.
+ *
+ * Four thousand stations cannot all carry a number, and the strongest few
+ * hundred would all sit on the same mine if the choice were by dose alone. One
+ * reading per cell — the highest in it — keeps the labels spread over the map
+ * while still showing where the radiation actually is. Ties break on the
+ * station id, so the same snapshot always yields the same labels.
+ * @param {Array<object>} stations Visible stations.
+ * @param {object} [options]
+ * @param {number} [options.limit]
+ * @param {number} [options.cellDeg]
+ * @returns {Array<object>} At most `limit` stations, strongest first.
+ */
+export function selectReadingCohort(
+  stations,
+  { limit = READING_LABEL_LIMIT, cellDeg = READING_LABEL_CELL_DEG } = {},
+) {
+  if (!Array.isArray(stations) || !stations.length) return [];
+  const cap = Math.max(0, Math.floor(Number(limit) || 0));
+  if (!cap) return [];
+  const cell = Math.max(0.5, Number(cellDeg) || READING_LABEL_CELL_DEG);
+  const best = new Map();
+  for (const station of stations) {
+    if (!isFiniteNumber(station?.lat) || !isFiniteNumber(station?.lon))
+      continue;
+    if (!isFiniteNumber(station.usvh)) continue;
+    const key = `${Math.floor(station.lat / cell)}:${Math.floor(station.lon / cell)}`;
+    const current = best.get(key);
+    if (
+      !current ||
+      station.usvh > current.usvh ||
+      (station.usvh === current.usvh && String(station.id) < String(current.id))
+    )
+      best.set(key, station);
+  }
+  return [...best.values()]
+    .sort((a, b) => b.usvh - a.usvh || String(a.id).localeCompare(String(b.id)))
+    .slice(0, cap);
+}

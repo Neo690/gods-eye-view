@@ -754,6 +754,7 @@
       "src/ui/displayControls.js",
       "src/ui/segmentedControl.js",
       "src/ui/effects.js",
+      "src/ui/dataUsageMeter.js",
       "src/ui/frameRateMonitor.js",
       "src/ui/layerPanel.js",
       "src/ui/weatherPanel.js",
@@ -2314,6 +2315,7 @@
       "src/ui/displayControls.js",
       "src/ui/segmentedControl.js",
       "src/ui/effects.js",
+      "src/ui/dataUsageMeter.js",
       "src/ui/frameRateMonitor.js",
       "src/ui/layerPanel.js",
       "src/ui/weatherPanel.js",
@@ -2693,7 +2695,14 @@
       "src/ui/commandPalette.js",
       "src/ui/panelDrawer.js",
       "src/ui/panelRailAccordion.js",
-      "src/ui/panelWindows.js"
+      "src/ui/panelWindows.js",
+      "src/app/layers/spaceWeather.js",
+      "src/layers/spaceWeather/horizon.js",
+      "src/layers/spaceWeather/index.js",
+      "src/layers/spaceWeather/policy.js",
+      "src/layers/spaceWeather/records.js",
+      "src/layers/spaceWeather/source.js",
+      "src/layers/spaceWeather/sun.js"
     ],
     "external": [
       "hls.js",
@@ -3295,7 +3304,14 @@
       "src/layers/viewportPoints/engine.js",
       "src/layers/viewportPoints/records.js",
       "src/layers/windy/index.js",
-      "src/layers/windy/source.js"
+      "src/layers/windy/source.js",
+      "src/app/layers/spaceWeather.js",
+      "src/layers/spaceWeather/horizon.js",
+      "src/layers/spaceWeather/index.js",
+      "src/layers/spaceWeather/policy.js",
+      "src/layers/spaceWeather/records.js",
+      "src/layers/spaceWeather/source.js",
+      "src/layers/spaceWeather/sun.js"
     ],
     "external": [
       "hls.js",
@@ -3753,7 +3769,9 @@
       "src/layers/airQuality/model.js",
       "src/layers/airQuality/source.js",
       "src/layers/radiation/source.js",
-      "src/layers/radiation/records.js"
+      "src/layers/radiation/records.js",
+      "src/layers/spaceWeather/records.js",
+      "src/layers/spaceWeather/source.js"
     ],
     "external": []
   },

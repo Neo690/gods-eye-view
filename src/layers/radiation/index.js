@@ -4,10 +4,12 @@ import { translateFeedError } from '../../ui/statusText.js';
 import {
   DOSE_BANDS,
   RADIATION_NETWORKS,
+  READING_LABEL_LIMIT,
   SPACE_BANDS,
   doseBand,
   formatDose,
   readingsInView,
+  selectReadingCohort,
 } from './records.js';
 import {
   radiationNetworkList,
@@ -25,6 +27,40 @@ export { createRadiationSource } from './source.js';
 const POINT_PIXELS = 8;
 /** Worst readings listed under the layer row. */
 const READOUT_LIMIT = 5;
+/** Ambient value labels are their own overlay source. */
+const RADIATION_OVERLAY_SOURCE_ID = 'radiation';
+
+/**
+ * One station's value as an ambient label.
+ *
+ * The number is the layer's whole point, so it rides on the marker instead of
+ * hiding behind a click: `0.120 µSv/h` over the dot, coloured by the same dose
+ * band. The strengthened readings win the cohort — see selectReadingCohort.
+ * @param {object} station
+ * @param {{x: number, y: number, z: number}} position
+ * @param {object} band Dose band for the value.
+ * @returns {object}
+ */
+function createReadingOverlayEntry(station, position, band) {
+  return {
+    id: `radiation:${station.network}:${station.id}`,
+    position,
+    variant: 'label',
+    // i18n-ignore: µSv/h is the SI unit and reads the same in every locale
+    title: `${formatDose(station.usvh)} µSv/h`,
+    accent: band?.color,
+    priority: Math.round(Math.max(0, station.usvh) * 1000),
+    collisionGroup: 'ambient-label',
+    paintLane: 'ambient-label',
+    interactive: false,
+    edgeFade: 'keyhole',
+    horizonCull: true,
+    terrainOcclusion: false,
+    gapPx: 12,
+    verticalOnly: true,
+    placement: 'above',
+  };
+}
 
 /**
  * Own the ambient dose-rate display and its refresh lifecycle.
@@ -38,9 +74,13 @@ const READOUT_LIMIT = 5;
  * @param {{getSnapshot: Function}} options.source
  * @returns {object} Layer module.
  */
-export function createRadiationLayer({ source } = {}) {
+export function createRadiationLayer({ source, overlayHost = null } = {}) {
   if (typeof source?.getSnapshot !== 'function')
     throw new TypeError('Radiation requires a snapshot source');
+  // Labels are optional: a surface without an overlay host (tests, tools)
+  // still gets the markers and the panel readout.
+  if (overlayHost != null && !overlayHost.setEntries)
+    throw new TypeError('Radiation overlay host must publish entries');
   let _viewer = null;
   let _request = null;
   let _dataSource = null;
@@ -100,6 +140,20 @@ export function createRadiationLayer({ source } = {}) {
         }),
       );
     }
+    if (!overlayHost) return;
+    // Only the cohort gets a label object: building four thousand of them to
+    // show two dozen would be work thrown away every refresh.
+    const labels = selectReadingCohort(_stations).map((station) =>
+      createReadingOverlayEntry(
+        station,
+        Cesium.Cartesian3.fromDegrees(station.lon, station.lat),
+        doseBand(station.usvh),
+      ),
+    );
+    overlayHost.setEntries(RADIATION_OVERLAY_SOURCE_ID, labels, {
+      cohortLimit: READING_LABEL_LIMIT,
+      moving: false,
+    });
   };
 
   const spaceLine = () => {
@@ -139,12 +193,14 @@ export function createRadiationLayer({ source } = {}) {
       _lastUpdate = null;
       _lastError = null;
       _enabled = false;
+      overlayHost?.setVisible(RADIATION_OVERLAY_SOURCE_ID, false);
       console.log('[Data:Radiation] Initialized');
     },
 
     enable() {
       _enabled = true;
       if (_dataSource) _dataSource.show = true;
+      overlayHost?.setVisible(RADIATION_OVERLAY_SOURCE_ID, true);
       notify();
     },
 
@@ -157,6 +213,8 @@ export function createRadiationLayer({ source } = {}) {
         _dataSource.show = false;
         _dataSource.entities.removeAll();
       }
+      overlayHost?.clearSource(RADIATION_OVERLAY_SOURCE_ID);
+      overlayHost?.setVisible(RADIATION_OVERLAY_SOURCE_ID, false);
       notify();
     },
 
@@ -287,6 +345,8 @@ export function createRadiationLayer({ source } = {}) {
       _stations = [];
       _space = null;
       rowControlsListener = null;
+      overlayHost?.clearSource(RADIATION_OVERLAY_SOURCE_ID);
+      overlayHost?.setVisible(RADIATION_OVERLAY_SOURCE_ID, false);
       if (_dataSource) {
         viewer.dataSources.remove(_dataSource, true);
         _dataSource = null;

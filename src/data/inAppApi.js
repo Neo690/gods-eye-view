@@ -29,6 +29,13 @@ import {
   normalizeSpaceReadings,
 } from '../layers/radiation/records.js';
 import {
+  geomagneticLevel,
+  normalizeAuroraGrid,
+  normalizeFlareRecords,
+  normalizeKpReading,
+  normalizeKpSeries,
+} from '../layers/spaceWeather/records.js';
+import {
   normalizeRadioBrowserStation,
   publicRadioStation,
 } from '../sources/radioBrowser.js';
@@ -937,6 +944,7 @@ const CANADA_URL =
 const SAFECAST_URL = 'https://api.safecast.org/measurements.json';
 const SAFECAST_LIMIT = 1000;
 const RADMON_URL = 'https://radmon.org/radmon.php?function=getcombinedlistjson';
+const URADMONITOR_URL = 'https://data.uradmonitor.com/api/v1/devices';
 const PROTON_URL =
   'https://services.swpc.noaa.gov/json/goes/primary/integral-protons-6-hour.json';
 const KP_URL = 'https://services.swpc.noaa.gov/json/planetary_k_index_1m.json';
@@ -945,17 +953,31 @@ const KP_URL = 'https://services.swpc.noaa.gov/json/planetary_k_index_1m.json';
  * `/api/radiation` — ambient dose-rate networks (BfS, Health Canada, Safecast,
  * radmon.org) plus NOAA SWPC space weather readings, normalized for the layer.
  *
+ * uRADMonitor answers only the units of one account, through two account
+ * headers. The shell's relay cannot attach them, but the service allows this
+ * origin and those two headers in CORS, so the page reads it directly with the
+ * pair Provider Settings stored — which is what makes the network work on a
+ * phone that has no server of its own.
+ *
  * @param {object} options
  * @param {(input: string) => Promise<Response>} options.upstream
  * @param {() => number} [options.now]
+ * @param {(name: string) => string} [options.getKey] Stored provider key.
  * @returns {Promise<Response>}
  */
 export async function radiationResponse({
   upstream,
   now = () => Date.now(),
+  getKey = (name) => getApiKey(name),
 } = {}) {
   const clock = now();
-  const readJson = async (url) => {
+  const readJson = async (url, headers) => {
+    if (headers) {
+      // Account-scoped: a direct read, because the relay cannot carry headers.
+      const response = await globalThis.fetch(url, { headers });
+      if (!response?.ok) throw new Error('upstream_unavailable');
+      return response.json();
+    }
     const response = await upstream(
       `/api/upstream?url=${encodeURIComponent(url)}`,
     );
@@ -988,9 +1010,23 @@ export async function radiationResponse({
     },
   ];
 
+  const uradmonitorId = getKey('URADMONITOR_USER_ID');
+  const uradmonitorHash = getKey('URADMONITOR_USER_HASH');
+  if (uradmonitorId && uradmonitorHash)
+    networks.push({
+      id: 'uradmonitor',
+      url: URADMONITOR_URL,
+      headers: {
+        'X-User-id': String(uradmonitorId),
+        'X-User-hash': String(uradmonitorHash),
+      },
+      decode: (payload) =>
+        normalizeUradmonitorSnapshot(payload, { now: clock }),
+    });
+
   const results = await Promise.allSettled(
     networks.map(async (net) => {
-      const payload = await readJson(net.url);
+      const payload = await readJson(net.url, net.headers);
       const rows = net.decode(payload, clock);
       if (!rows) throw new Error('invalid_snapshot');
       return { id: net.id, rows };
@@ -1044,6 +1080,101 @@ export async function radiationResponse({
       stations,
       sources,
       space: spaceReadings,
+    },
+    degraded ? { 'X-Data-Degraded': 'true' } : {},
+  );
+}
+
+/**
+ * `/api/space-weather` — the solar-storm layer's snapshot, built in the page
+ * from the same SWPC reads the server route makes.
+ *
+ * @param {object} options
+ * @param {(input: string) => Promise<Response>} options.upstream
+ * @param {() => number} [options.now]
+ * @returns {Promise<Response>}
+ */
+export async function spaceWeatherResponse({
+  upstream,
+  now = () => Date.now(),
+} = {}) {
+  const clock = now();
+  const readJson = async (url) => {
+    const response = await upstream(
+      `/api/upstream?url=${encodeURIComponent(url)}`,
+    );
+    if (!response?.ok) throw new Error('upstream_unavailable');
+    return response.json();
+  };
+
+  const products = [
+    {
+      id: 'flares',
+      url: 'https://services.swpc.noaa.gov/json/goes/primary/xray-flares-7-day.json',
+    },
+    {
+      id: 'kp-1m',
+      url: 'https://services.swpc.noaa.gov/json/planetary_k_index_1m.json',
+    },
+    {
+      id: 'kp-3h',
+      url: 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json',
+    },
+    {
+      id: 'aurora',
+      url: 'https://services.swpc.noaa.gov/json/ovation_aurora_latest.json',
+    },
+  ];
+  const results = await Promise.allSettled(
+    products.map((product) => readJson(product.url)),
+  );
+  const payloads = new Map();
+  const sources = products.map((product, index) => {
+    const result = results[index];
+    if (result.status === 'fulfilled') {
+      payloads.set(product.id, result.value);
+      return {
+        id: product.id,
+        ok: true,
+        count: Array.isArray(result.value)
+          ? result.value.length
+          : Array.isArray(result.value?.coordinates)
+            ? result.value.coordinates.length
+            : 1,
+        fetchedAt: clock,
+      };
+    }
+    return {
+      id: product.id,
+      ok: false,
+      count: 0,
+      error: 'upstream_unavailable',
+    };
+  });
+
+  const kpReading = normalizeKpReading(payloads.get('kp-1m'));
+  const series = normalizeKpSeries(payloads.get('kp-3h'));
+  const flares = normalizeFlareRecords(payloads.get('flares'), { now: clock });
+  const aurora = normalizeAuroraGrid(payloads.get('aurora'));
+  if (!kpReading && !series.length && !flares.length && !aurora) {
+    return jsonResponse(503, { error: 'space_weather_unavailable' });
+  }
+  const kpValue = kpReading?.kp ?? series.at(-1)?.kp ?? null;
+  const degraded = sources.some((source) => !source.ok);
+  return jsonResponse(
+    200,
+    {
+      fetchedAt: clock,
+      kp: {
+        value: kpValue,
+        at: kpReading?.at ?? series.at(-1)?.at ?? null,
+        observedKp: kpReading?.observedKp ?? null,
+        series,
+      },
+      flares,
+      aurora,
+      alert: geomagneticLevel(kpValue),
+      sources,
     },
     degraded ? { 'X-Data-Degraded': 'true' } : {},
   );
@@ -1266,6 +1397,8 @@ const ROUTES = {
     terrainHeightsResponse({ search, upstream: context.upstream }),
   '/api/radiation': (search, context) =>
     radiationResponse({ upstream: context.upstream }),
+  '/api/space-weather': (search, context) =>
+    spaceWeatherResponse({ upstream: context.upstream }),
   '/api/vessels': () => vesselsResponse(),
   '/api/vessels/track': (search) =>
     jsonResponse(200, { mmsi: '', samples: [], source: 'AISStream' }),

@@ -1,0 +1,56 @@
+/* ── Data Usage Readout ────────────────────────
+   Telemetry, not a control: one line of dim text inside the globe-action strip,
+   next to the window menu. No frame, no background of its own, no chevron — it
+   should read like the FPS counter, not like another button. */
+#top-center-actions .data-usage,
+#title-bar .data-usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: center;
+  padding: 0 2px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.6px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  opacity: 0.42;
+  white-space: nowrap;
+  user-select: none;
+  cursor: default;
+  transition: opacity 140ms ease;
+}
+
+#top-center-actions .data-usage:hover,
+#title-bar .data-usage:hover {
+  opacity: 0.8;
+}
+
+.data-usage-value {
+  /* A fixed minimum keeps the row from twitching as the rate changes width. */
+  min-width: 5ch;
+}
+
+.data-usage-rate {
+  text-align: end;
+}
+
+.data-usage-sep {
+  color: var(--accent);
+  opacity: 0.6;
+}
+
+/* On a phone the row already holds six 34px buttons; the live rate is the part
+   worth its width there, and the session total stays in the title. */
+@media (max-width: 700px) {
+  #top-center-actions .data-usage {
+    font-size: 8px;
+    gap: 3px;
+  }
+
+  #top-center-actions .data-usage-total,
+  #top-center-actions .data-usage-sep {
+    display: none;
+  }
+}

@@ -457,6 +457,12 @@ const layers = [
     noQuery: 'station readings are presented in the layer panel',
   },
   {
+    id: 'space-weather',
+    aliases: ['solar storms', 'space weather', 'aurora', 'kp index'],
+    context: false,
+    noQuery: 'conditions and flare markers; the fiche carries the readings',
+  },
+  {
     id: 'windy-weather',
     aliases: ['local weather', 'windy', 'point forecast'],
     context: false,

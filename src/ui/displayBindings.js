@@ -1,3 +1,4 @@
+import { createDataUsageMeter } from './dataUsageMeter.js';
 import { createFrameRateMonitor } from './frameRateMonitor.js';
 import { bindApplicationShortcuts } from './visualInput.js';
 import { bindDisplayControls } from './displayControls.js';
@@ -60,6 +61,8 @@ export class DisplayBindings {
       viewer: this.viewer,
       documentRef: document,
     });
+    this._dataUsageMeter?.destroy();
+    this._dataUsageMeter = createDataUsageMeter({ documentRef: document });
     this._applicationShortcuts = bindApplicationShortcuts({
       documentRef: document,
       searchInput: this._locationSearch,
@@ -224,6 +227,8 @@ export class DisplayBindings {
     this._applicationShortcuts = null;
     this._frameRateMonitor?.destroy();
     this._frameRateMonitor = null;
+    this._dataUsageMeter?.destroy();
+    this._dataUsageMeter = null;
     this._displayControls?.destroy();
     this._displayControls = null;
   }

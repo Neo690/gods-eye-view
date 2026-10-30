@@ -4,6 +4,7 @@ import { createWfigsPerimeterSource } from '../layers/perimeters/source.js';
 import { createBundledCableSource } from '../layers/submarineCables/bundledSource.js';
 import { createAdsbGnssSource } from '../layers/gnss/source.js';
 import { createRadiationSource } from '../layers/radiation/source.js';
+import { createSpaceWeatherSource } from '../layers/spaceWeather/source.js';
 
 /** Construct the existing reference feeds independently of application setup. */
 export function createReferenceSources() {
@@ -14,5 +15,6 @@ export function createReferenceSources() {
     cables: createBundledCableSource(),
     'gnss-integrity': createAdsbGnssSource(),
     radiation: createRadiationSource(),
+    'space-weather': createSpaceWeatherSource(),
   };
 }

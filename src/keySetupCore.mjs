@@ -134,6 +134,16 @@ export const KEY_SETUP_KEYS = Object.freeze([
     clientExposed: true,
   }),
   Object.freeze({
+    id: 'uradmonitor',
+    title: 'URADMONITOR', // i18n-ignore: provider product name
+    unlocks: msg(
+      'Your own radiation units in the Radiation layer — paste the User id and User hash from the uRADMonitor account',
+    ),
+    getUrl: 'https://www.uradmonitor.com/dashboard/',
+    envVars: Object.freeze(['URADMONITOR_USER_ID', 'URADMONITOR_USER_HASH']),
+    tier: 'free',
+  }),
+  Object.freeze({
     id: 'launch-library',
     title: 'LAUNCH LIBRARY', // i18n-ignore: provider product name
     unlocks: msg(

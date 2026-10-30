@@ -2,9 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DOSE_BANDS,
+  READING_LABEL_CELL_DEG,
+  READING_LABEL_LIMIT,
   SAFECAST_CPM_PER_USVH,
   doseBand,
   formatDose,
+  selectReadingCohort,
   normalizeBfsSnapshot,
   normalizeCanadaSnapshot,
   normalizeRadiationSnapshot,
@@ -298,4 +301,36 @@ test('dose text is precise enough to separate background from an elevation', () 
   assert.equal(formatDose(1.26), '1.3');
   assert.equal(formatDose(12.4), '12');
   assert.equal(formatDose(null), '—');
+});
+
+test('labels keep the strongest reading per cell, never a stack on one mine', () => {
+  const rows = [
+    // Three stations inside one 4° cell: only the strongest is labelled.
+    { id: 'a', lon: 10.1, lat: 50.1, usvh: 0.1 },
+    { id: 'b', lon: 11.2, lat: 50.8, usvh: 2.4 },
+    { id: 'c', lon: 10.4, lat: 51.9, usvh: 1.1 },
+    // Another cell, far away.
+    { id: 'd', lon: -70, lat: 10, usvh: 0.2 },
+    { id: 'e', lon: -69, lat: 11, usvh: 0.15 },
+    // No usable position or value: never labelled.
+    { id: 'f', lon: null, lat: 50, usvh: 9 },
+    { id: 'g', lon: 10, lat: 50, usvh: null },
+  ];
+  const cohort = selectReadingCohort(rows);
+  assert.deepEqual(
+    cohort.map((row) => row.id),
+    ['b', 'd'],
+    'one per cell, strongest first',
+  );
+  assert.equal(selectReadingCohort(rows, { limit: 1 }).length, 1);
+  assert.deepEqual(selectReadingCohort(rows, { limit: 0 }), []);
+  assert.deepEqual(selectReadingCohort([]), []);
+  assert.equal(READING_LABEL_LIMIT, 24);
+  assert.equal(READING_LABEL_CELL_DEG, 4);
+  // A tie inside a cell resolves on the id, so two snapshots agree.
+  const tied = [
+    { id: 'y', lon: 1, lat: 1, usvh: 1 },
+    { id: 'x', lon: 2, lat: 2, usvh: 1 },
+  ];
+  assert.equal(selectReadingCohort(tied)[0].id, 'x');
 });

@@ -76,6 +76,7 @@ const PANEL_GROUPS = [
       'rocket-launches',
       'earthquakes',
       'radiation',
+      'space-weather',
       'local-firms',
       'fire-perimeters',
       'gnss-integrity',
