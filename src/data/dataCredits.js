@@ -387,13 +387,6 @@ export const DATA_CREDITS = [
     html: 'Transit vehicles: operator GTFS-Realtime feeds (each operator is credited below when its vehicles are shown)',
   },
   {
-    key: 'osm-railway-stations',
-    html:
-      'Railway stations: mapped OpenStreetMap places, ' +
-      '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> ' +
-      '(<a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener">ODbL 1.0</a>)',
-  },
-  {
     key: 'sncf-rail',
     html:
       'Station departures: ' +

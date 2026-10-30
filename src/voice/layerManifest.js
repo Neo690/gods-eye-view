@@ -290,6 +290,43 @@ const layers = [
     },
   },
   {
+    id: 'railway-stations',
+    aliases: ['railway stations', 'train stations', 'rail stations', 'gares'],
+    context: true,
+    query: {
+      fields: {
+        name: ['t'],
+        operator: ['t'],
+        network: ['t'],
+        usage: ['t'],
+        platforms: ['n'],
+      },
+    },
+  },
+  {
+    // A curated reading list of documented sites, not a live feed: the fields
+    // are what a company card prints, so a question can name the company, the
+    // country or the sector and still get the right sites back.
+    id: 'israeli-transport',
+    aliases: [
+      'israeli transport',
+      'israeli companies',
+      'israeli ports',
+      'israeli transport sites',
+    ],
+    context: true,
+    query: {
+      fields: {
+        company: ['t'],
+        sector: ['t'],
+        country: ['t'],
+        place: ['t'],
+        status: ['t'],
+        period: ['t'],
+      },
+    },
+  },
+  {
     id: 'bikeshare',
     aliases: ['bike share', 'bikes', 'bike stations'],
     context: false,
