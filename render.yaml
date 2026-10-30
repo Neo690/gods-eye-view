@@ -18,6 +18,12 @@ services:
     region: frankfurt
     healthCheckPath: /
     autoDeploy: true
+    # Every `sync: false` key below is pushed from a repository secret of the
+    # same name by .github/workflows/render-deploy.yml, which reads the deployed
+    # value first and writes only on a difference. A key with no such secret
+    # keeps whatever the dashboard has, and the run says so once. Rotating a
+    # value therefore means updating the secret, never the dashboard.
+    # `value:` keys are not secrets and stay here.
     envVars:
       - key: GEV_ALLOWED_HOSTS
         sync: false

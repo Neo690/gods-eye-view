@@ -43,24 +43,53 @@ jobs:
       # fresh service or a rotated key needs no dashboard trip, and the deploy
       # that follows already has them.
       - name: Sync server-only keys onto the service
+        # One line per `sync: false` key in render.yaml. Adding a key to the
+        # blueprint means adding its `secrets.` reference here and its
+        # `sync_key` call below; nothing else changes. A key with no repository
+        # secret is left exactly as the dashboard has it and reported once, so
+        # a half-configured service still deploys. A write makes Render restart
+        # the service by itself, which is why only a difference is written and
+        # why the deploy right after supersedes those restarts.
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          GEV_ALLOWED_HOSTS: ${{ secrets.GEV_ALLOWED_HOSTS }}
+          GOOGLE_MAPS_SERVER_API_KEY: ${{ secrets.GOOGLE_MAPS_SERVER_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
+          AISSTREAM_API_KEY: ${{ secrets.AISSTREAM_API_KEY }}
+          FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+          OVERPASS_UPSTREAMS: ${{ secrets.OVERPASS_UPSTREAMS }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENSKY_CLIENT_ID: ${{ secrets.OPENSKY_CLIENT_ID }}
+          OPENSKY_CLIENT_SECRET: ${{ secrets.OPENSKY_CLIENT_SECRET }}
           N2YO_API_KEY: ${{ secrets.N2YO_API_KEY }}
           SPACETRACK_USER: ${{ secrets.SPACETRACK_USER }}
           SPACETRACK_PASSWORD: ${{ secrets.SPACETRACK_PASSWORD }}
+          URADMONITOR_USER_ID: ${{ secrets.URADMONITOR_USER_ID }}
+          URADMONITOR_USER_HASH: ${{ secrets.URADMONITOR_USER_HASH }}
         run: |
           set -euo pipefail
           base="https://api.render.com/v1/services/${RENDER_SERVICE_ID}/env-vars"
+          missing=""
+          changed=0
 
+          # Read, compare, write only on a difference. Render answers the
+          # stored value on a GET, so an unchanged key costs one read and no
+          # restart; a changed one is written once and reported.
           sync_key() {
             name="$1"
             value="$2"
             if [ -z "$value" ]; then
-              echo "::warning::$name is not a repository secret; its route will answer no_key."
+              missing="$missing $name"
               return 0
             fi
-            current=$(curl -sS -H "Authorization: Bearer $RENDER_API_KEY" \
-              "$base/$name" | jq -r '.value // ""')
+            # A read the API refuses must not cost the deploy: the key keeps
+            # its current value and the next run tries again.
+            if ! current=$(curl -sS -H "Authorization: Bearer $RENDER_API_KEY" \
+              "$base/$name" | jq -r '.value // ""'); then
+              echo "::warning::Could not read $name from Render; left unchanged."
+              return 0
+            fi
             if [ "$current" = "$value" ]; then
               echo "$name already up to date"
               return 0
@@ -72,7 +101,7 @@ jobs:
               "$base/$name")
             echo "PUT $name -> $code"
             case "$code" in
-              200|201) ;;
+              200|201) changed=$((changed + 1)) ;;
               *)
                 cat "$RUNNER_TEMP/env-var.json" || true
                 echo "::error::Render answered $code while setting $name"
@@ -81,9 +110,26 @@ jobs:
             esac
           }
 
+          sync_key GEV_ALLOWED_HOSTS "${GEV_ALLOWED_HOSTS:-}"
+          sync_key GOOGLE_MAPS_SERVER_API_KEY "${GOOGLE_MAPS_SERVER_API_KEY:-}"
+          sync_key OPENAI_API_KEY "${OPENAI_API_KEY:-}"
+          sync_key TOMTOM_API_KEY "${TOMTOM_API_KEY:-}"
+          sync_key AISSTREAM_API_KEY "${AISSTREAM_API_KEY:-}"
+          sync_key FIRMS_MAP_KEY "${FIRMS_MAP_KEY:-}"
+          sync_key OVERPASS_UPSTREAMS "${OVERPASS_UPSTREAMS:-}"
+          sync_key GEMINI_API_KEY "${GEMINI_API_KEY:-}"
+          sync_key OPENSKY_CLIENT_ID "${OPENSKY_CLIENT_ID:-}"
+          sync_key OPENSKY_CLIENT_SECRET "${OPENSKY_CLIENT_SECRET:-}"
           sync_key N2YO_API_KEY "${N2YO_API_KEY:-}"
           sync_key SPACETRACK_USER "${SPACETRACK_USER:-}"
           sync_key SPACETRACK_PASSWORD "${SPACETRACK_PASSWORD:-}"
+          sync_key URADMONITOR_USER_ID "${URADMONITOR_USER_ID:-}"
+          sync_key URADMONITOR_USER_HASH "${URADMONITOR_USER_HASH:-}"
+
+          echo "$changed key(s) written"
+          if [ -n "$missing" ]; then
+            echo "::warning::No repository secret for$missing — those keep whatever the Render dashboard has."
+          fi
 
       - name: Trigger the deploy
         id: trigger
