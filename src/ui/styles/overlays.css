@@ -213,6 +213,16 @@
   opacity: 0.95;
 }
 
+/* The data readout lives in this block of numbers rather than above the mic:
+   it keeps its session total on a phone and never covers the mic pill. */
+.hud-data-usage {
+  margin-top: 4px;
+}
+
+.hud-data-usage:empty {
+  display: none;
+}
+
 .hud-classification {
   font-size: 12px;
   letter-spacing: 2.5px;

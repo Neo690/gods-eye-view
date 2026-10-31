@@ -312,6 +312,9 @@ export class IntelHUD {
             <div id="hud-gsd">GSD: --m  NIIRS: --</div>
             <div id="hud-alt">ALT: --m   SUN: --° EL</div>
             <div id="hud-ais-vessel" class="hud-ais-vessel">${t('AIS: --')}</div>
+            <!-- The app's own traffic, in the same block of numbers: the meter
+                 mounts its readout here (see dataUsageMeter.js). -->
+            <div id="hud-data-usage" class="hud-data-usage"></div>
             <div id="hud-windy" class="hud-windy" style="display:none"></div>
           </div>
           <div class="hud-bracket">┘</div>

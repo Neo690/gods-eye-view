@@ -1,31 +1,27 @@
 /* ── Data Usage Readout ────────────────────────
-   One dim line floating just above the voice control, right-aligned with it.
-   Telemetry, not a control: no frame, no background of its own, no chevron —
-   the rate reads like a HUD number, and the mic keeps the corner.
+   One dim line in the HUD's telemetry window, under the AIS row. Telemetry,
+   not a control: no frame, no background of its own, no button — the rate
+   reads like the coordinates above it.
 
-   The control is a positioned box in every shell (fixed on the body, relative
-   inside the dock), so the line anchors to its top-right corner without a
-   wrapper. It yields the slot to the two things that also open there: the
-   hover hint (0.7rem above the pill) and the voice card. */
+   It lived above the voice control for a while. On a phone that slot is the
+   mic pill's own corner: the line was 31 px wide over it and dropped its
+   session total to fit. The telemetry window has the room on both layouts,
+   and the app's traffic belongs beside the numbers it is measured with. */
 
-#gev-voice-control .data-usage {
-  position: absolute;
-  right: 2px;
-  bottom: calc(100% + 1px);
+.data-usage {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1;
-  letter-spacing: 0.7px;
+  letter-spacing: 0.8px;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
-  opacity: 0.5;
+  opacity: 0.55;
   white-space: nowrap;
   user-select: none;
   pointer-events: none;
-  transition: opacity 140ms ease;
 }
 
 .data-usage-value {
@@ -37,32 +33,16 @@
   text-align: end;
 }
 
+.data-usage-label,
 .data-usage-sep {
   opacity: 0.6;
 }
 
-/* The help tray opens 0.7rem above the pill, which is where this line sits:
-   an approaching pointer asks for the hint, so the rate steps aside. */
-#gev-voice-control:hover .data-usage,
-#gev-voice-control:focus-within .data-usage {
-  opacity: 0;
-}
-
-/* The voice card covers the same slot and carries the conversation. */
-#gev-voice-control:has(.gev-voice-card:not([hidden])) .data-usage {
-  display: none;
-}
-
-/* On a phone the mic is a 92px pill in the dock: the rate alone clears it, and
-   the session total stays in the title. */
+/* A phone keeps both numbers: the window is centred and has the width for
+   them, so the session total no longer has to hide behind the title. */
 @media (max-width: 700px) {
-  #gev-voice-control .data-usage {
-    font-size: 8.5px;
+  .data-usage {
+    font-size: 9px;
     letter-spacing: 0.4px;
-  }
-
-  #gev-voice-control .data-usage-total,
-  #gev-voice-control .data-usage-sep {
-    display: none;
   }
 }

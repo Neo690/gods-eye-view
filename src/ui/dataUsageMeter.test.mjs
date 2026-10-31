@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   createDataUsageMeter,
   formatBytes,
+  installFetchByteTap,
   rateFromSamples,
   transferBytes,
 } from './dataUsageMeter.js';
@@ -113,16 +114,19 @@ function fakeDocument() {
   const titleBar = make('div');
   const actionRow = make('nav');
   const voiceControl = make('div');
+  const hudData = make('div');
   const byId = new Map([
     ['title-bar', titleBar],
     ['top-center-actions', actionRow],
     ['gev-voice-control', voiceControl],
+    ['hud-data-usage', hudData],
   ]);
   return {
     hidden: false,
     titleBar,
     actionRow,
     voiceControl,
+    hudData,
     make,
     byId,
     listeners,
@@ -144,7 +148,7 @@ function fakePerformance(entries) {
   };
 }
 
-test('the readout sits above the voice control and reports bytes already transferred', () => {
+test('the readout sits in the HUD telemetry window and reports bytes already transferred', () => {
   const documentRef = fakeDocument();
   const entries = [
     {
@@ -167,20 +171,37 @@ test('the readout sits above the voice control and reports bytes already transfe
     clearIntervalFn: () => {},
   });
 
-  const readout = documentRef.voiceControl.children.at(-1);
+  const readout = documentRef.hudData.children.at(-1);
   assert.equal(readout.id, 'data-usage');
-  // The application chrome keeps none of it: the line is anchored to the mic,
-  // not parked in the title bar or the action row.
+  // The window that holds the coordinates holds the traffic too; the mic pill
+  // and the application chrome stay empty.
+  assert.deepEqual(documentRef.voiceControl.children, []);
   assert.deepEqual(documentRef.actionRow.children, []);
   assert.deepEqual(documentRef.titleBar.children, []);
-  // Rate, separator, total — and no symbols the reader has to decode.
-  assert.equal(readout.children.length, 3);
-  assert.match(readout.children[0].textContent, /^0 B\/s$/);
-  assert.equal(readout.children[1].textContent, '·');
-  assert.match(readout.children[2].textContent, /^6 kB$/);
+  // Label, rate, separator, total — and no symbols the reader has to decode.
+  assert.equal(readout.children.length, 4);
+  assert.equal(readout.children[0].textContent, 'DATA:');
+  assert.match(readout.children[1].textContent, /^0 B\/s$/);
+  assert.equal(readout.children[2].textContent, '·');
+  assert.match(readout.children[3].textContent, /^6 kB$/);
 
   meter.destroy();
   assert.equal(readout.removed, true);
+});
+
+test('a shell without the telemetry window keeps the line above the mic', () => {
+  const documentRef = fakeDocument();
+  documentRef.byId.delete('hud-data-usage');
+  const meter = createDataUsageMeter({
+    documentRef,
+    performanceRef: fakePerformance([]),
+    setIntervalFn: () => 1,
+    clearIntervalFn: () => {},
+  });
+
+  const readout = documentRef.voiceControl.children.at(-1);
+  assert.equal(readout.id, 'data-usage');
+  meter.destroy();
 });
 
 test('without a timeline there is nothing to measure', () => {
@@ -192,12 +213,13 @@ test('without a timeline there is nothing to measure', () => {
   meter.destroy();
 });
 
-test('a voice control built after the meter still gets the line', () => {
-  // Voice is wired up when its runner exists, which is later than the shell's
-  // UI init: the meter must wait for the mic instead of giving up.
+test('a HUD built after the meter still gets the line', () => {
+  // The HUD renders after the shell's UI init: the meter must wait for its
+  // host instead of giving up, and adopt a rebuilt one rather than keep a
+  // line that no longer exists on screen.
   const documentRef = fakeDocument();
-  const late = documentRef.voiceControl;
-  documentRef.byId.delete('gev-voice-control');
+  const late = documentRef.hudData;
+  documentRef.byId.delete('hud-data-usage');
 
   let tick = null;
   const meter = createDataUsageMeter({
@@ -209,18 +231,99 @@ test('a voice control built after the meter still gets the line', () => {
     },
     clearIntervalFn: () => {},
   });
-  assert.deepEqual(documentRef.voiceControl.children, []);
+  assert.deepEqual(documentRef.hudData.children, []);
 
-  documentRef.byId.set('gev-voice-control', late);
+  documentRef.byId.set('hud-data-usage', late);
   tick();
-  assert.equal(documentRef.voiceControl.children.length, 1);
-  assert.equal(documentRef.voiceControl.children[0].id, 'data-usage');
+  assert.equal(documentRef.hudData.children.length, 1);
+  assert.equal(documentRef.hudData.children[0].id, 'data-usage');
 
-  // A rebuilt control is adopted again rather than left with a dead line.
+  // A rebuilt window is adopted again rather than left with a dead line.
   const rebuilt = documentRef.make('div');
-  documentRef.byId.set('gev-voice-control', rebuilt);
+  documentRef.byId.set('hud-data-usage', rebuilt);
   tick();
   assert.equal(rebuilt.children.length, 1);
 
   meter.destroy();
+});
+
+test('the fetch tap counts a declared length without touching the response', async () => {
+  const counted = [];
+  const target = {
+    fetch: async () =>
+      new Response('x'.repeat(50), {
+        headers: { 'content-length': '4096' },
+      }),
+  };
+  const tap = installFetchByteTap({
+    target,
+    onBytes: (bytes) => counted.push(bytes),
+  });
+  const response = await target.fetch('/api/feed');
+  assert.equal(await response.text(), 'x'.repeat(50), 'the body is unchanged');
+  assert.deepEqual(counted, [4096]);
+
+  tap.restore();
+  assert.equal(typeof target.fetch, 'function');
+  assert.deepEqual(counted, [4096], 'a restored tap stops counting');
+});
+
+test('the fetch tap counts a streamed body and never keeps it', async () => {
+  const counted = [];
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(700));
+      controller.enqueue(new Uint8Array(300));
+      controller.close();
+    },
+  });
+  const target = { fetch: async () => new Response(body) };
+  const tap = installFetchByteTap({
+    target,
+    onBytes: (bytes) => counted.push(bytes),
+  });
+
+  // Read the real response before the counting clone drains it.
+  const response = await target.fetch('/api/feed');
+  await response.arrayBuffer();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(counted, [1000]);
+  tap.restore();
+});
+
+test('a tapped fetch is not counted twice through Resource Timing', () => {
+  const documentRef = fakeDocument();
+  const entries = [
+    {
+      name: '/api/feed',
+      startTime: 12,
+      initiatorType: 'fetch',
+      transferSize: 9000,
+    },
+    {
+      name: '/assets/tile.png',
+      startTime: 13,
+      initiatorType: 'img',
+      transferSize: 1000,
+    },
+  ];
+  const target = {
+    fetch: async () =>
+      new Response('x', { headers: { 'content-length': '9000' } }),
+  };
+  const meter = createDataUsageMeter({
+    documentRef,
+    performanceRef: fakePerformance(entries),
+    fetchTarget: target,
+    setIntervalFn: () => 1,
+    clearIntervalFn: () => {},
+  });
+
+  const readout = documentRef.hudData.children.at(-1);
+  // The tile is counted from the entry, the fetch is not: 1 kB of a 10 kB
+  // session is on the wire through a layer the tap does not own.
+  assert.match(readout.children[3].textContent, /^1 kB$/);
+  // The tap restores what it replaced when the meter goes away.
+  meter.destroy();
+  assert.equal(typeof target.fetch, 'function');
 });

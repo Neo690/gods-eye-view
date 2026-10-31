@@ -2,24 +2,26 @@ import { t } from '../i18n/index.js';
 
 /**
  * Live HTTP data readout: what this app has pulled over the network, and how
- * fast. It is one dim line floating just above the voice control, right-aligned
- * with it — telemetry, not a control, so it carries no frame, no background and
- * no button of its own. It sat in the HUD telemetry window for a while, but
- * those numbers are read at a glance and this one is a running rate: above the
- * mic it stays in sight without pushing the coordinates down.
+ * fast. It is one dim line in the HUD's telemetry window, under the AIS row —
+ * that block already reads as one set of numbers (coordinates, imaging scale,
+ * AIS, traffic), and a phone shows the whole window, where a line floating
+ * above the mic collided with the mic pill and had to drop its session total.
  *
- * The voice control is built when voice is wired up, which can happen after
- * this module mounts, so the line attaches on the first tick that finds it and
- * re-attaches if the control is rebuilt.
+ * Numbers come from two sources, because one of them cannot see the app's own
+ * traffic. The browser's Resource Timing entries report bytes already on the
+ * wire for everything the engine loads (tiles, images, scripts), but they
+ * report `0` for a cross-origin response without Timing-Allow-Origin — which
+ * is every feed the app fetches, and every `appassets` answer the Android
+ * shell synthesises. So the app's own `fetch` is also tapped, once, and the
+ * body it reads is counted chunk by chunk as it is consumed: nothing is
+ * buffered, no response is replaced, and a measurement failure leaves the
+ * request untouched. Resource Timing then skips `fetch` entries, so a byte
+ * that both sources can see is counted once.
  *
- * Numbers come from the browser's own Resource Timing entries, which is the
- * only source that reports bytes already on the wire — no request is wrapped,
- * cloned or re-read, so measuring costs nothing and cannot change behaviour.
- * Two limits are honest rather than hidden: the browser withholds
- * `transferSize` for cross-origin resources without Timing-Allow-Origin (they
- * count as 0), and long-lived streams (audio radio, WebSocket voice) are not
- * Resource Timing entries at all. The readout therefore reports the app's own
- * HTTP traffic, which is what its tiles, feeds and routes spend.
+ * Two limits stay honest rather than hidden: long-lived streams (audio radio,
+ * WebSocket voice) are not counted, and Cesium's own tile traffic is counted
+ * only where Resource Timing exposes it. The readout therefore reports the
+ * app's HTTP traffic — its tiles, feeds and routes.
  *
  * The first scan only sets the baseline: the boot bundle is added to the
  * session total, never to the per-second rate, so the line does not open on a
@@ -76,10 +78,78 @@ export function rateFromSamples(samples, now, windowMs = RATE_WINDOW_MS) {
 }
 
 /**
- * Mount the readout above the voice control and keep it ticking.
+ * Count what one response delivered, preferring the declared length and
+ * otherwise reading a clone chunk by chunk so nothing is kept in memory.
+ * @param {Response} response
+ * @param {(bytes: number) => void} onBytes
+ */
+function countResponseBytes(response, onBytes) {
+  try {
+    const declared = Number(response?.headers?.get?.('content-length'));
+    if (Number.isFinite(declared) && declared > 0) {
+      onBytes(declared);
+      return;
+    }
+    const clone = response?.clone?.();
+    const body = clone?.body;
+    if (!body || typeof body.getReader !== 'function') return;
+    (async () => {
+      const reader = body.getReader();
+      let bytes = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytes += value?.byteLength ?? 0;
+      }
+      if (bytes > 0) onBytes(bytes);
+    })().catch(() => {});
+  } catch {
+    // Measuring a response must never change the response being measured.
+  }
+}
+
+/**
+ * Count the bytes the app's own fetches read.
+ *
+ * The tap returns the response it was given, unchanged, and restores the
+ * original `fetch` on teardown. A page whose fetch is not a function gets no
+ * tap, and the Resource Timing scan then reports everything it can see.
+ * @param {object} [options]
+ * @param {object} [options.target] Object owning `fetch` (`globalThis`).
+ * @param {(bytes: number) => void} [options.onBytes]
+ * @returns {{active: boolean, restore: Function}}
+ */
+export function installFetchByteTap({ target = globalThis, onBytes } = {}) {
+  const original = target?.fetch;
+  if (typeof original !== 'function' || typeof onBytes !== 'function') {
+    return { active: false, restore() {} };
+  }
+  const wrapped = function tappedFetch(input, init) {
+    const pending = original.call(this, input, init);
+    if (!pending || typeof pending.then !== 'function') return pending;
+    return pending.then((response) => {
+      countResponseBytes(response, onBytes);
+      return response;
+    });
+  };
+  target.fetch = wrapped;
+  let restored = false;
+  return {
+    active: true,
+    restore() {
+      if (restored) return;
+      restored = true;
+      if (target.fetch === wrapped) target.fetch = original;
+    },
+  };
+}
+
+/**
+ * Mount the readout in the HUD telemetry window and keep it ticking.
  * @param {object} [options]
  * @param {Document} [options.documentRef]
  * @param {Performance} [options.performanceRef]
+ * @param {object} [options.fetchTarget] Object owning `fetch` (`globalThis`).
  * @param {number} [options.tickMs]
  * @param {typeof globalThis.setInterval} [options.setIntervalFn]
  * @param {typeof globalThis.clearInterval} [options.clearIntervalFn]
@@ -88,17 +158,20 @@ export function rateFromSamples(samples, now, windowMs = RATE_WINDOW_MS) {
 export function createDataUsageMeter({
   documentRef = globalThis.document,
   performanceRef = globalThis.performance,
+  fetchTarget = globalThis,
   tickMs = TICK_MS,
   setIntervalFn = globalThis.setInterval,
   clearIntervalFn = globalThis.clearInterval,
 } = {}) {
-  // The voice control is the anchor: the readout sits above the mic. It may not
-  // exist yet (voice is wired up later), so attachment is retried on each tick.
-  const hostFor = () => documentRef?.getElementById?.('gev-voice-control');
+  // The telemetry window is the host. A shell without it (an embedded panel,
+  // an older layout) still gets the line above the mic, where it lived before.
+  const hostFor = () =>
+    documentRef?.getElementById?.('hud-data-usage') ||
+    documentRef?.getElementById?.('gev-voice-control');
   const timeline =
     typeof performanceRef?.now === 'function' ? performanceRef : null;
-  // A page with no place to measure from gets no readout at all; a page with no
-  // voice control yet is a different case — the line waits for it.
+  // A page with no place to measure from gets no readout at all; a page whose
+  // host has not rendered yet is a different case — the line waits for it.
   if (!timeline || !documentRef?.createElement) {
     return { destroy() {} };
   }
@@ -111,6 +184,12 @@ export function createDataUsageMeter({
   readout.setAttribute('role', 'group');
   readout.setAttribute('aria-label', t('Live data received by this app'));
   readout.title = t('Data usage');
+
+  const label = documentRef.createElement('span');
+  label.className = 'data-usage-label';
+  // i18n-ignore: the HUD's own column label, English like MGRS/GSD/ALT beside it
+  label.textContent = 'DATA:';
+  readout.append(label);
 
   const value = (className, title) => {
     const node = documentRef.createElement('span');
@@ -137,7 +216,7 @@ export function createDataUsageMeter({
   let destroyed = false;
   let attachedTo = null;
 
-  /** Put the line above the mic once the control exists; skip once attached. */
+  /** Put the line in its host once the host exists; skip once attached. */
   const attach = () => {
     const target = hostFor();
     if (!target || target === attachedTo) return;
@@ -146,12 +225,24 @@ export function createDataUsageMeter({
   };
   attach();
 
+  const tap = installFetchByteTap({
+    target: fetchTarget,
+    onBytes: (bytes) => {
+      if (destroyed) return;
+      total += bytes;
+      pending += bytes;
+    },
+  });
+
   const scan = () => {
     const entries = timeline.getEntriesByType?.('resource') ?? [];
     for (const entry of entries) {
       const key = `${entry.name}|${entry.startTime}|${entry.initiatorType}`;
       if (seen.has(key)) continue;
       seen.add(key);
+      // A tapped fetch already reported its bytes; counting its entry again
+      // would double the same response.
+      if (tap.active && entry.initiatorType === 'fetch') continue;
       const bytes = transferBytes(entry);
       if (bytes <= 0) continue;
       total += bytes;
@@ -210,6 +301,7 @@ export function createDataUsageMeter({
       if (destroyed) return;
       destroyed = true;
       stop();
+      tap.restore();
       documentRef.removeEventListener?.('visibilitychange', onVisibility);
       readout.remove();
     },
