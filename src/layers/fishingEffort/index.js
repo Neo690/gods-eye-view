@@ -211,11 +211,18 @@ export function createFishingEffortLayer({
 
     async update() {
       if (!_enabled || !_dataSource) return false;
+      // The manager reads `false` from update() as a *refused transition* and
+      // turns the layer back off (see lifecycle.js). A view that is too wide, a
+      // camera with no rectangle, a missing token or a failed refresh are states
+      // the row already reports — the layer handled the update, it simply has
+      // nothing to draw — so they resolve true and the layer stays on. Returning
+      // false here is what made "Zoom in to load fishing effort" unreachable:
+      // the layer was disabled before its own row could say it.
       const view = bounds();
       if (!view) {
         _note = t('No view to load');
         notify();
-        return false;
+        return true;
       }
       if (!viewportAllowed(view)) {
         // A hemisphere of daily aggregates is megabytes of ocean for a picture
@@ -224,7 +231,7 @@ export function createFishingEffortLayer({
         _snapshot = { cells: [], totalHours: 0, cellCount: 0 };
         render();
         notify();
-        return false;
+        return true;
       }
       _request?.abort();
       const request = new AbortController();
@@ -243,7 +250,9 @@ export function createFishingEffortLayer({
           _note = null;
           render();
           notify();
-          return false;
+          // A stated failure is an answer, not a refused transition: the row
+          // carries the reason and the refresh interval retries it.
+          return true;
         }
         _snapshot = answer;
         _error = null;
@@ -258,7 +267,7 @@ export function createFishingEffortLayer({
         _error = error?.message || msg('Fishing effort unavailable');
         console.warn('[Data:FishingEffort] Refresh failed:', _error);
         notify();
-        return false;
+        return true;
       } finally {
         if (_request === request) _request = null;
       }

@@ -118,11 +118,41 @@ test('a wide view asks for a closer one instead of a hemisphere of cells', async
   });
   layer.init(viewer(WIDE_VIEW));
   layer.enable();
-  assert.equal(await layer.update(), false);
+  // `true`: the layer handled the update. `false` is the manager's signal for a
+  // refused transition, and it would switch the layer back off — which is how
+  // the "Zoom in" row became unreachable from a global view.
+  assert.equal(await layer.update(), true);
   assert.equal(calls, 0);
   assert.match(layer.getRowControls().info, /Zoom in/);
   assert.equal(layer.getStats().count, 0);
   layer.destroy(viewer(WIDE_VIEW));
+});
+
+test('a camera with no rectangle is a note, not a refused transition', async () => {
+  const layer = createFishingEffortLayer({
+    source: { getSnapshot: async () => snapshot() },
+  });
+  layer.init(viewer(null));
+  layer.enable();
+  assert.equal(await layer.update(), true);
+  assert.match(layer.getRowControls().info, /No view/);
+  layer.destroy(viewer(null));
+});
+
+test('a failed refresh stays on and reports the error', async () => {
+  const layer = createFishingEffortLayer({
+    source: {
+      getSnapshot: async () => {
+        throw new Error('GFW answered 503');
+      },
+    },
+  });
+  const withView = viewer(SMALL_VIEW);
+  layer.init(withView);
+  layer.enable();
+  assert.equal(await layer.update(), true);
+  assert.equal(layer.getStats().error, 'GFW answered 503');
+  layer.destroy(withView);
 });
 
 test('a missing token is a stated key, not an empty ocean', async () => {
@@ -139,7 +169,9 @@ test('a missing token is a stated key, not an empty ocean', async () => {
   });
   layer.init(viewer(SMALL_VIEW));
   layer.enable();
-  assert.equal(await layer.update(), false);
+  // A missing token is a stated key, not a refusal: the layer stays on so its
+  // row can ask for one, instead of disappearing from the panel.
+  assert.equal(await layer.update(), true);
   const controls = layer.getRowControls();
   assert.match(controls.infoTitle, /Global Fishing Watch token/);
   assert.equal(layer.getStats().error, 'missing-key');
