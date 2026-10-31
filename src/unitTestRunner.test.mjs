@@ -19,12 +19,18 @@ const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
 function testFilesOnDisk(root) {
   // Build outputs and dependencies are not places a contributor writes a test,
   // and walking them would be slow enough to matter. Everything else counts.
+  // `desktop/release` is electron-builder's output, and the packaged app carries
+  // a copy of this repository — including every test file — so it is skipped by
+  // path rather than by name, where `release` could mean someone's source.
   const skip = new Set(['node_modules', 'dist', 'build', 'public']);
+  const skipPaths = new Set(['desktop/release']);
   const found = [];
   const visit = (directory) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       if (entry.name.startsWith('.') || skip.has(entry.name)) continue;
       const absolute = path.join(directory, entry.name);
+      const relative = path.relative(root, absolute).split(path.sep).join('/');
+      if (skipPaths.has(relative)) continue;
       if (entry.isDirectory()) visit(absolute);
       else if (entry.isFile() && entry.name.endsWith('.test.mjs')) {
         found.push(path.relative(root, absolute).split(path.sep).join('/'));

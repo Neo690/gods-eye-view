@@ -20,6 +20,9 @@ test('reference factories retain compatibility without starting acquisition or s
     'gnss-integrity',
     'radiation',
     'space-weather',
+    'orbit-changes',
+    'satellite-watch',
+    'fishing-effort',
   ]);
   assert.notEqual(first.earthquakes, second.earthquakes);
   assert.notEqual(first['air-quality'], second['air-quality']);
@@ -35,5 +38,11 @@ test('reference factories retain compatibility without starting acquisition or s
   assert.notEqual(first.radiation, second.radiation);
   assert.equal(typeof first['space-weather'].getSnapshot, 'function');
   assert.notEqual(first['space-weather'], second['space-weather']);
+  assert.equal(typeof first['orbit-changes'].readCatalog, 'function');
+  assert.notEqual(first['orbit-changes'], second['orbit-changes']);
+  assert.equal(typeof first['satellite-watch'].readCatalog, 'function');
+  assert.notEqual(first['satellite-watch'], second['satellite-watch']);
+  assert.equal(typeof first['fishing-effort'].getSnapshot, 'function');
+  assert.notEqual(first['fishing-effort'], second['fishing-effort']);
   assert.equal(requests, 0);
 });
