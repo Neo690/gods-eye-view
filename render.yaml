@@ -40,6 +40,15 @@ services:
       # sees this key.
       - key: FIRMS_MAP_KEY
         sync: false
+      # Apparent fishing effort (/api/fishing-effort). Unset, the route answers
+      # {"error":"no_key"} and the Fishing Effort layer says a key is missing
+      # while every other layer keeps working. Server-side only: the report
+      # endpoint runs one report per token at a time, so the token never travels
+      # to the phone. The deploy workflow pushes the value from the repository
+      # secret of the same name, so a fresh service or a rotated key needs no
+      # dashboard trip.
+      - key: GFW_API_TOKEN
+        sync: false
       # Detailed OpenStreetMap queries (/api/overpass). The Railway Stations
       # layer is the first caller: without an endpoint it answers
       # OVERPASS_NOT_CONFIGURED at the capability probe, and the layer reads as

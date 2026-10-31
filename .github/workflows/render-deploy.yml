@@ -58,6 +58,7 @@ jobs:
           TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
           AISSTREAM_API_KEY: ${{ secrets.AISSTREAM_API_KEY }}
           FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+          GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
           OVERPASS_UPSTREAMS: ${{ secrets.OVERPASS_UPSTREAMS }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENSKY_CLIENT_ID: ${{ secrets.OPENSKY_CLIENT_ID }}
@@ -116,6 +117,7 @@ jobs:
           sync_key TOMTOM_API_KEY "${TOMTOM_API_KEY:-}"
           sync_key AISSTREAM_API_KEY "${AISSTREAM_API_KEY:-}"
           sync_key FIRMS_MAP_KEY "${FIRMS_MAP_KEY:-}"
+          sync_key GFW_API_TOKEN "${GFW_API_TOKEN:-}"
           sync_key OVERPASS_UPSTREAMS "${OVERPASS_UPSTREAMS:-}"
           sync_key GEMINI_API_KEY "${GEMINI_API_KEY:-}"
           sync_key OPENSKY_CLIENT_ID "${OPENSKY_CLIENT_ID:-}"

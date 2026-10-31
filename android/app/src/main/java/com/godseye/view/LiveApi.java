@@ -214,6 +214,21 @@ final class LiveApi {
           headers()
         );
       }
+      if ("/api/fishing-effort".equals(route)) {
+        // The Global Fishing Watch token is server-side by design (the report
+        // endpoint runs one report per token at a time), so a shell cannot
+        // answer this from the phone. It declares the route anyway: the default
+        // below is a 404, and the rescue path accepts any answer under 500, so
+        // an unset server key arrived as "Fishing effort HTTP 404" — a wrong
+        // reason that hid the real one. A 5xx here leaves the server's own
+        // answer (200 with the token, 503 no_key without it) in place.
+        return json(
+          503,
+          "Service Unavailable",
+          "{\"error\":\"no_key\"}",
+          headers()
+        );
+      }
       if ("/api/launches".equals(route)) {
         return launches();
       }
