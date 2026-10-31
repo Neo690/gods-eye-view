@@ -212,11 +212,21 @@ function usableFrame(info) {
  * but showing a clock as a car's plate is worse than missing an unusual plate,
  * and the frame is on screen for anyone who wants to check by eye.
  *
+ * Length is the second filter, and it is what tiling made necessary: a tile
+ * read a green street sign ("Colorado / 300 ST 200") as `COI0T0Q00T`, ten
+ * characters of a caption, not of a registration. The longest registrations
+ * this reader can meet carry nine alphanumerics (`AB-123-CD` is eight, a Dutch
+ * `12-ABC-3` seven), so anything longer is a line of text on a sign or a
+ * watermark, and anything shorter than four is a fragment.
+ *
  * @param {string} text Decoded OCR text.
  * @returns {boolean} True when the text could be a plate.
  */
 export function looksLikePlate(text) {
-  return typeof text === 'string' && /\d/.test(text) && /[A-Z]/.test(text);
+  if (typeof text !== 'string') return false;
+  const glyphs = text.replace(/[^A-Za-z0-9]/g, '');
+  if (glyphs.length < 4 || glyphs.length > 9) return false;
+  return /\d/.test(glyphs) && /[A-Za-z]/.test(glyphs);
 }
 
 /**

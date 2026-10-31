@@ -16,6 +16,25 @@ test('a camera overlay that happens to look like a plate is dropped', () => {
   assert.equal(looksLikePlate('010526'), false);
 });
 
+test('a caption longer than any registration is not a plate', () => {
+  // A tile read a green street sign — "Colorado / 300 ST 200" — as this.
+  assert.equal(looksLikePlate('COI0T0Q00T'), false);
+  assert.equal(looksLikePlate('COLORADO ST 3RD'), false);
+});
+
+test('a registration of the longest shapes still passes', () => {
+  assert.equal(looksLikePlate('AB-123-CD'), true);
+  assert.equal(looksLikePlate('12-ABC-3'), true);
+  assert.equal(looksLikePlate('1-ABC-123'), true);
+  assert.equal(looksLikePlate('5AU5341'), true);
+});
+
+test('a fragment shorter than any registration is not a plate', () => {
+  // What a tile read of a plate cut by a seam used to produce.
+  assert.equal(looksLikePlate('13C'), false);
+  assert.equal(looksLikePlate('A1'), false);
+});
+
 test('text that is not text is not a plate', () => {
   assert.equal(looksLikePlate(''), false);
   assert.equal(looksLikePlate(null), false);
