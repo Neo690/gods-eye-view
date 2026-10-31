@@ -190,6 +190,11 @@ cd android
 GEV_API_BASE=http://127.0.0.1:5173 ./gradlew assembleRelease   # local server
 ```
 
+Plain http is refused by the shell except on the loopback name
+(`res/xml/network_security_config.xml`), which is what makes that local build
+work and nothing else: a phone pointed at an http host elsewhere on the network
+will not connect, and a shipped build only ever talks https.
+
 For the GitHub build it is a repository variable, so no secret and no code
 change is needed:
 

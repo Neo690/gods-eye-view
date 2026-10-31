@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Every request this shell makes is https. Its own origin is
+  https://appassets.androidplatform.net, and the data server it replays /api/*
+  to is a hosted https origin. Android's default already refuses cleartext, but
+  a manifest that says nothing is one edit away from a manifest that says "true"
+  for the whole internet, so the refusal is written down here.
+
+  The exception is the loopback name, and only the loopback name: the documented
+  local build (android/README.md) points GEV_API_BASE at http://127.0.0.1:5173
+  behind `adb reverse`, which never leaves the device or the USB cable. A phone
+  pointed at some other host over plain http still fails to connect.
+-->
+<network-security-config>
+  <base-config cleartextTrafficPermitted="false" />
+  <domain-config cleartextTrafficPermitted="true">
+    <domain includeSubdomains="false">localhost</domain>
+    <domain includeSubdomains="false">127.0.0.1</domain>
+  </domain-config>
+</network-security-config>
