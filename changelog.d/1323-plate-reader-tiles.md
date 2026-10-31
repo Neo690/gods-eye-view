@@ -9,8 +9,11 @@
   the downscale used to blur away — a station label came back as `T_F17` at
   0.21, a road marking as `1FF849` at 0.36, and a green street sign as
   `COI0T0Q00T` at 0.66 — so a reading is only called a plate above half the
-  OCR's confidence and inside the four-to-nine characters a registration can
-  have.
+  OCR's confidence, inside the four-to-nine characters a registration can
+  have, and in a box shaped like one: between 1.9 and 8 times wider than it is
+  tall, which is a single line of glyphs. A two-line street sign measures 1.8
+  and is dropped without reaching the OCR at all; square motorcycle plates
+  fall below the floor and go with it.
   Measured on a synthetic 1280×720 frame whose plate is invisible to the
   single pass, the tiled read returns it at 0.99 confidence, for about 0.4 s of
   detector time instead of 0.05 s (yourname, #1323).

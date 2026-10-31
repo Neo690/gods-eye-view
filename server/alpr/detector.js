@@ -199,6 +199,39 @@ function clip(value, max) {
 }
 
 /**
+ * Width to height a plate can have: one line of glyphs, and nothing else.
+ *
+ * A standard panel is 2:1 (a US 300×150 mm plate) to 4.7:1 (an EU 520×110), and
+ * the detector's box sits a few percent wide of the panel, so the band runs
+ * from 1.9 to 8. Below it is a shape whose height is two lines of text — the
+ * green "Colorado / 300 ST 200" street sign that tiled reads returned as
+ * `COI0T0Q00T` measured 1.8 — and above it is a strip, a caption or a run of
+ * pixels along a kerb. Square motorcycle plates fall below the floor and are
+ * dropped with the signs: missing one is the price of not printing a sign as a
+ * car's registration.
+ */
+export const PLATE_BAND_ASPECT = Object.freeze({ min: 1.9, max: 8 });
+
+/**
+ * Whether a box is shaped like a plate band rather than a sign or a caption.
+ *
+ * @param {{x1:number,y1:number,x2:number,y2:number}} box Box in frame pixels.
+ * @param {{min?:number, max?:number}} [range] Aspect bounds, replaced by the
+ *   tests.
+ * @returns {boolean}
+ */
+export function isPlateBand(
+  box,
+  { min = PLATE_BAND_ASPECT.min, max = PLATE_BAND_ASPECT.max } = {},
+) {
+  const width = Number(box?.x2) - Number(box?.x1);
+  const height = Number(box?.y2) - Number(box?.y1);
+  if (!(width > 0) || !(height > 0)) return false;
+  const aspect = width / height;
+  return aspect >= min && aspect <= max;
+}
+
+/**
  * Turn raw detector rows into boxes in original-image coordinates.
  *
  * The model answers in letterboxed pixels, so the padding comes off first and

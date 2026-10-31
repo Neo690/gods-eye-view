@@ -22,6 +22,7 @@ import {
   LETTERBOX_FILL,
   TILE_MAX_COUNT,
   decodeDetections,
+  isPlateBand,
   letterboxPose,
   mergeBoxes,
   planTiles,
@@ -232,6 +233,10 @@ export function looksLikePlate(text) {
 /**
  * Read every plate in one image.
  *
+ * Every box is also asked to be plate-shaped before it reaches the OCR: a
+ * plate is one line of glyphs in a wide band, a street sign is two lines in a
+ * squarer rectangle.
+ *
  * A frame larger than the detector's square input is read twice over: once
  * whole, which is how a plate close to the camera is found, and once per tile
  * at native resolution, which is the only way a plate 145 m away survives —
@@ -374,7 +379,14 @@ export async function readPlates(image, options = {}) {
   const detectorStarted = Date.now();
   const found = [];
   for (const rect of passes) found.push(...(await detectIn(rect)));
-  const boxes = mergeBoxes(found, { limit: maxPlates });
+  // Shape filtering happens before the merge so a street sign cannot take one
+  // of the plate slots and the OCR never spends a run on it.
+  const boxes = mergeBoxes(
+    found.filter((box) => isPlateBand(box)),
+    {
+      limit: maxPlates,
+    },
+  );
   const detectorMs = Date.now() - detectorStarted;
 
   const ocrStarted = Date.now();

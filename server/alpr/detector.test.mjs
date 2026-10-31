@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   decodeDetections,
+  isPlateBand,
   letterboxPose,
   mergeBoxes,
   planTiles,
@@ -127,6 +128,34 @@ test('an output with too few columns is refused rather than misread', () => {
       ),
     /expected 7/,
   );
+});
+
+/* Shape decides whether a box is a plate at all. */
+
+test('a standard plate panel is a plate band', () => {
+  // A US 300x150 mm plate and an EU 520x110 one, as the detector boxes them.
+  assert.equal(isPlateBand({ x1: 0, y1: 0, x2: 300, y2: 150 }), true);
+  assert.equal(isPlateBand({ x1: 0, y1: 0, x2: 520, y2: 110 }), true);
+  // The box of a plate 145 m away, tight around the panel.
+  assert.equal(isPlateBand({ x1: 0, y1: 0, x2: 60, y2: 20 }), true);
+});
+
+test('a two-line sign is not a plate band', () => {
+  // "Colorado / 300 ST 200", the reading that came back as COI0T0Q00T.
+  assert.equal(isPlateBand({ x1: 723, y1: 317, x2: 833, y2: 378 }), false);
+  assert.equal(isPlateBand({ x1: 0, y1: 0, x2: 100, y2: 90 }), false);
+});
+
+test('a strip or a caption is too wide to be a plate band', () => {
+  assert.equal(isPlateBand({ x1: 0, y1: 0, x2: 600, y2: 60 }), false);
+  assert.equal(isPlateBand({ x1: 0, y1: 0, x2: 900, y2: 40 }), false);
+});
+
+test('a degenerate box is not a plate band, whatever its numbers', () => {
+  assert.equal(isPlateBand({ x1: 10, y1: 10, x2: 10, y2: 30 }), false);
+  assert.equal(isPlateBand({ x1: 10, y1: 10, x2: 40, y2: 10 }), false);
+  assert.equal(isPlateBand(undefined), false);
+  assert.equal(isPlateBand({}), false);
 });
 
 /* The tile plan decides what a wide camera is worth reading at. */
