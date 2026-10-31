@@ -143,6 +143,31 @@ test('exported CelesTrak plugin coalesces refreshes, retains stale TLEs, and rea
   assert.equal(disk.body, tle);
 });
 
+test('CelesTrak answers one object by catalogue number under its own cache key', async (t) => {
+  isolateDisk(t);
+  t.mock.method(console, 'warn', () => {});
+  const debris = 'COSMOS 2251 DEB\n1 47311U fixture\n2 47311 fixture';
+  const asked = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    asked.push(String(url));
+    return new Response(debris);
+  });
+  const request = install(celestrakProxy());
+  // A conjunction names a bare number; nothing else may reach upstream.
+  assert.equal((await request('/api/celestrak', '/catnr/47311x')).status, 400);
+  assert.equal(asked.length, 0);
+
+  const first = await request('/api/celestrak', '/catnr/47311');
+  assert.equal(first.body, debris);
+  assert.equal(new URL(asked[0]).searchParams.get('CATNR'), '47311');
+  assert.equal(new URL(asked[0]).searchParams.get('GROUP'), null);
+  assert.equal(
+    (await request('/api/celestrak', '/catnr/47311')).headers['x-tle-cache'],
+    'HIT',
+  );
+  assert.equal(asked.length, 1, 'the second read is served from the cache');
+});
+
 test('CelesTrak keeps the generation a refresh replaced and serves it as the previous read', async (t) => {
   isolateDisk(t);
   let now = Date.now();

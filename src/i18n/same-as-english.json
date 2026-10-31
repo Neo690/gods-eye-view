@@ -122,7 +122,10 @@
     "ΔN",
     "▲ {frp} MW",
     "{radius} km",
-    "TCA"
+    "TCA",
+    "NORAD",
+    "Pc",
+    "Space-Track CDM"
   ],
   "ru": [
     "AIS: --",
@@ -139,7 +142,10 @@
     "REC",
     "VS",
     "WHOT/BHOT",
-    "TCA"
+    "TCA",
+    "NORAD",
+    "Pc",
+    "Space-Track CDM"
   ],
   "zh-CN": [
     "1090 MHz",
@@ -195,7 +201,10 @@
     "ΔE",
     "ΔN",
     "▲ {frp} MW",
-    "TCA"
+    "TCA",
+    "NORAD",
+    "Pc",
+    "Space-Track CDM"
   ],
   "fr": [
     "1090 MHz",
@@ -390,7 +399,10 @@
     "ΔN",
     "Ⅱ PAUSE",
     "▲ {frp} MW",
-    "TCA"
+    "TCA",
+    "NORAD",
+    "Pc",
+    "Space-Track CDM"
   ],
   "ar": [
     "1090 MHz",
@@ -444,6 +456,9 @@
     "{speed}KT",
     "ΔE",
     "ΔN",
-    "TCA"
+    "TCA",
+    "NORAD",
+    "Pc",
+    "Space-Track CDM"
   ]
 }

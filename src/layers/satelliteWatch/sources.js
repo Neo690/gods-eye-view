@@ -170,6 +170,34 @@ export function createSatelliteWatchSource({
     },
 
     /**
+     * Element sets for named objects, from the app's cached CelesTrak route.
+     * A conjunction's closing rate needs both sets at TCA and the GP window is
+     * a sample of the catalogue, so the missing half of a pair is read here.
+     * An object CelesTrak does not know is simply absent, never an error: the
+     * card then says the speed is unavailable.
+     */
+    async readElementSets(norads = [], { signal } = {}) {
+      const entries = [];
+      await Promise.all(
+        norads.map(async (norad) => {
+          try {
+            const response = await fetchImpl(`/api/celestrak/catnr/${norad}`, {
+              signal,
+            });
+            if (!response.ok) {
+              await response.body?.cancel?.().catch?.(() => {});
+              return;
+            }
+            entries.push(...parseTleCatalog(await response.text()));
+          } catch {
+            // A missing set costs this pair's speed, never the whole layer.
+          }
+        }),
+      );
+      return { entries };
+    },
+
+    /**
      * N2YO: satellites above one observer point, through the app's own route.
      * The key is the server's, never the bundle's; a deployment without one
      * answers `no_key`, which the layer reports as a missing key rather than as

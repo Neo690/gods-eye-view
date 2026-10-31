@@ -1,6 +1,9 @@
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
-import { celestrakTleUrl } from '../../../src/data/spaceProviderRequests.js';
+import {
+  celestrakCatnrUrl,
+  celestrakTleUrl,
+} from '../../../src/data/spaceProviderRequests.js';
 import { readResponseTextCapped } from '../common/http.js';
 
 /**
@@ -88,8 +91,19 @@ export function celestrakProxy() {
   /** The largest group (`active`) measures ~2.7 MB; this bounds a runaway body. */
   const CELESTRAK_MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
 
-  async function fetchUpstream(group) {
-    const url = celestrakTleUrl(group);
+  /**
+   * Cache keys are group names, or `catnr-<number>` for one object. A
+   * conjunction's closing rate needs the secondary's element set, which the
+   * group reads never carry (debris is not in `stations`/`visual`/`geo`), so
+   * that one lookup goes through the same cache and TTL as a group.
+   */
+  const urlFor = (cacheKey) =>
+    cacheKey.startsWith('catnr-')
+      ? celestrakCatnrUrl(cacheKey.slice('catnr-'.length))
+      : celestrakTleUrl(cacheKey);
+
+  async function fetchUpstream(cacheKey) {
+    const url = urlFor(cacheKey);
     const signal = AbortSignal.timeout(20000);
     const res = await fetch(url.toString(), {
       signal,
@@ -155,12 +169,16 @@ export function celestrakProxy() {
         }
         return;
       }
-      const group = target.replace(/^\//, '');
-      if (!/^[a-z0-9-]+$/i.test(group)) {
+      const byCatnr = target.startsWith('/catnr/');
+      const id = byCatnr
+        ? target.slice('/catnr/'.length)
+        : target.replace(/^\//, '');
+      if (byCatnr ? !/^\d{1,6}$/.test(id) : !/^[a-z0-9-]+$/i.test(id)) {
         res.writeHead(400, { 'Content-Type': 'text/plain' });
-        res.end('invalid group');
+        res.end(byCatnr ? 'invalid catalogue number' : 'invalid group');
         return;
       }
+      const group = byCatnr ? `catnr-${id}` : id;
       const send = (status, body, cacheStatus) => {
         // Guard against a double-send (e.g. a throw AFTER a response already
         // went out routing into the catch's send): writeHead after headersSent

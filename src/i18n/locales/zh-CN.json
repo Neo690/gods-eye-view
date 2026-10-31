@@ -3034,5 +3034,11 @@
   "Needs a Global Fishing Watch token": "需要 Global Fishing Watch 令牌",
   "Fishing Effort": "捕捞活动",
   "Apparent fishing effort in the Fishing Effort layer — paste the API token from your Global Fishing Watch account; it stays on the server": "捕捞活动图层中的表观捕捞强度——请粘贴 Global Fishing Watch 账户的 API 令牌；它保留在服务器上",
-  "A third military aircraft feed and the regional flights fallback when OpenSky is unavailable — paste the API key of your own ADS-B Exchange agreement. It stays on the server; their terms allow personal, non-commercial use only": "第三条军用飞机数据源，以及 OpenSky 不可用时民用航班的区域回退——请粘贴您自己的 ADS-B Exchange 协议中的 API 密钥。密钥保留在服务器上；其条款仅允许个人非商业使用"
+  "A third military aircraft feed and the regional flights fallback when OpenSky is unavailable — paste the API key of your own ADS-B Exchange agreement. It stays on the server; their terms allow personal, non-commercial use only": "第三条军用飞机数据源，以及 OpenSky 不可用时民用航班的区域回退——请粘贴您自己的 ADS-B Exchange 协议中的 API 密钥。密钥保留在服务器上；其条款仅允许个人非商业使用",
+  "Relative speed": "相对速度",
+  "NORAD": "NORAD",
+  "Pc": "Pc",
+  "Space-Track CDM": "Space-Track CDM",
+  "Zones: {count}": "区域：{count}",
+  "computed": "已计算"
 }

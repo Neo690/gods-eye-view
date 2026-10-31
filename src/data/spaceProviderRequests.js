@@ -6,6 +6,14 @@ export function celestrakTleUrl(group) {
   return url;
 }
 
+/** One object's element set by catalogue number, for a conjunction's pair. */
+export function celestrakCatnrUrl(catnr) {
+  const url = new URL('https://celestrak.org/NORAD/elements/gp.php');
+  url.searchParams.set('CATNR', String(catnr));
+  url.searchParams.set('FORMAT', 'tle');
+  return url;
+}
+
 export function launchLibraryRecentUrl(end) {
   // Stable minute boundaries let different installations share LL2's cache.
   const roundedEnd = new Date(Math.floor(end.getTime() / 60000) * 60000);

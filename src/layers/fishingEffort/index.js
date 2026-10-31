@@ -4,6 +4,7 @@ import { translateFeedError } from '../../ui/statusText.js';
 import {
   DEFAULT_DAYS,
   FISHING_EFFORT_LAYER_ID,
+  activityZones,
   boundsFromRadians,
   effortSummary,
   hoursCeiling,
@@ -42,6 +43,7 @@ export function createFishingEffortLayer({
   let _enabled = false;
   let _note = null;
   let _count = 0;
+  let _zoneCount = 0;
   let rowControlsListener = null;
 
   const notify = () => rowControlsListener?.();
@@ -50,6 +52,84 @@ export function createFishingEffortLayer({
     const rectangle = _viewer?.camera?.computeViewRectangle?.();
     if (!rectangle) return null;
     return boundsFromRadians(rectangle);
+  };
+
+  /** One ring's degrees flattened for Cesium, closed back onto its start. */
+  const ringArray = (positions) => {
+    const flat = [];
+    for (const point of positions) flat.push(point.lon, point.lat);
+    if (positions.length) flat.push(positions[0].lon, positions[0].lat);
+    return flat;
+  };
+
+  /**
+   * The activity zones: a translucent fill over each dense cluster and a bright
+   * outline on every ring. The cells stay underneath — the outline says where
+   * the effort is concentrated, the cells say how it is distributed inside.
+   */
+  const renderZones = (cells, ceiling) => {
+    const zones = activityZones(cells, { ceiling });
+    for (const zone of zones) {
+      zone.outlines.forEach((outline, outlineIndex) => {
+        const [outer, ...holes] = outline.rings;
+        if (!outer) return;
+        _dataSource.entities.add(
+          new Cesium.Entity({
+            id: `fishing-zone-fill:${zone.id}:${outlineIndex}`,
+            polygon: {
+              hierarchy: new Cesium.PolygonHierarchy(
+                Cesium.Cartesian3.fromDegreesArray(ringArray(outer.positions)),
+                holes.map(
+                  (ring) =>
+                    new Cesium.PolygonHierarchy(
+                      Cesium.Cartesian3.fromDegreesArray(
+                        ringArray(ring.positions),
+                      ),
+                    ),
+                ),
+              ),
+              material: Cesium.Color.fromCssColorString('#38B2C4').withAlpha(
+                0.05 + zone.intensity * 0.1,
+              ),
+              height: 0,
+            },
+            properties: {
+              source: FISHING_EFFORT_LAYER_ID,
+              zone: true,
+              hours: zone.totalHours,
+              cells: zone.cellCount,
+            },
+          }),
+        );
+        outline.rings.forEach((ring, ringIndex) => {
+          _dataSource.entities.add(
+            new Cesium.Entity({
+              id: `fishing-zone:${zone.id}:${outlineIndex}:${ringIndex}`,
+              polyline: {
+                positions: Cesium.Cartesian3.fromDegreesArray(
+                  ringArray(ring.positions),
+                ),
+                // A zone's border says "this is the area", so it is drawn wider
+                // than a cell's outline and never below visible width.
+                width: 1.2 + zone.intensity * 1.8,
+                material: Cesium.Color.fromCssColorString('#7FE3F0').withAlpha(
+                  0.4 + zone.intensity * 0.45,
+                ),
+                arcType: Cesium.ArcType.GEODESIC,
+              },
+              properties: {
+                source: FISHING_EFFORT_LAYER_ID,
+                zone: true,
+                ring: ringIndex,
+                hours: zone.totalHours,
+                cells: zone.cellCount,
+              },
+            }),
+          );
+        });
+      });
+    }
+    return zones.length;
   };
 
   const render = () => {
@@ -84,6 +164,9 @@ export function createFishingEffortLayer({
       painted++;
     }
     _count = painted;
+    // Zones are aggregates of the cells above: they are computed from the same
+    // snapshot, on the same ceiling, so the outline and the dots always agree.
+    _zoneCount = renderZones(cells, ceiling);
   };
 
   const layer = {
@@ -104,6 +187,7 @@ export function createFishingEffortLayer({
       _lastUpdate = null;
       _note = null;
       _count = 0;
+      _zoneCount = 0;
       _enabled = false;
       console.log('[Data:FishingEffort] Initialized');
     },
@@ -183,6 +267,7 @@ export function createFishingEffortLayer({
     getStats() {
       return {
         count: _count,
+        zoneCount: _zoneCount,
         totalHours: _snapshot?.totalHours || 0,
         lastUpdate: _lastUpdate,
         error: _error,
@@ -196,9 +281,17 @@ export function createFishingEffortLayer({
         days: DEFAULT_DAYS,
       });
       const stale = _snapshot?.stale ? t('Cached report') : null;
+      // The zone count is part of the row, not only of the globe: an outline
+      // is hard to count by eye, and "no zone" is the honest answer when the
+      // effort is spread too thin to group.
+      const zones = _zoneCount
+        ? t('Zones: {count}', { count: _zoneCount })
+        : null;
       return {
         info:
-          _note || [summary, stale].filter(Boolean).join(' · ') || undefined,
+          _note ||
+          [summary, zones, stale].filter(Boolean).join(' · ') ||
+          undefined,
         infoTitle: _error
           ? _error === 'missing-key'
             ? t('Needs a Global Fishing Watch token')
@@ -237,6 +330,7 @@ export function createFishingEffortLayer({
       _lastUpdate = null;
       _note = null;
       _count = 0;
+      _zoneCount = 0;
       rowControlsListener = null;
       if (_dataSource) {
         viewer.dataSources.remove(_dataSource, true);

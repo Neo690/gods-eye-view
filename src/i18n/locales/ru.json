@@ -3235,5 +3235,11 @@
   "Needs a Global Fishing Watch token": "Нужен токен Global Fishing Watch",
   "Fishing Effort": "Промысловое усилие",
   "Apparent fishing effort in the Fishing Effort layer — paste the API token from your Global Fishing Watch account; it stays on the server": "Наблюдаемое промысловое усилие в слое «Промысловое усилие» — вставьте токен API из вашей учётной записи Global Fishing Watch; он остаётся на сервере",
-  "A third military aircraft feed and the regional flights fallback when OpenSky is unavailable — paste the API key of your own ADS-B Exchange agreement. It stays on the server; their terms allow personal, non-commercial use only": "Третья лента военных самолётов и региональный резерв гражданских рейсов, когда OpenSky недоступен — вставьте ключ API из вашего собственного соглашения с ADS-B Exchange. Он остаётся на сервере; их условия допускают только личное некоммерческое использование"
+  "A third military aircraft feed and the regional flights fallback when OpenSky is unavailable — paste the API key of your own ADS-B Exchange agreement. It stays on the server; their terms allow personal, non-commercial use only": "Третья лента военных самолётов и региональный резерв гражданских рейсов, когда OpenSky недоступен — вставьте ключ API из вашего собственного соглашения с ADS-B Exchange. Он остаётся на сервере; их условия допускают только личное некоммерческое использование",
+  "Relative speed": "Относительная скорость",
+  "NORAD": "NORAD",
+  "Pc": "Pc",
+  "Space-Track CDM": "Space-Track CDM",
+  "Zones: {count}": "Зоны: {count}",
+  "computed": "вычислено"
 }

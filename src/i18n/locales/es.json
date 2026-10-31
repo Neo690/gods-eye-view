@@ -3168,5 +3168,11 @@
   "Needs a Global Fishing Watch token": "Se necesita un token de Global Fishing Watch",
   "Fishing Effort": "Esfuerzo pesquero",
   "Apparent fishing effort in the Fishing Effort layer — paste the API token from your Global Fishing Watch account; it stays on the server": "Esfuerzo pesquero aparente en la capa Esfuerzo pesquero: pega el token API de tu cuenta de Global Fishing Watch; permanece en el servidor",
-  "A third military aircraft feed and the regional flights fallback when OpenSky is unavailable — paste the API key of your own ADS-B Exchange agreement. It stays on the server; their terms allow personal, non-commercial use only": "Una tercera fuente de aeronaves militares y el respaldo regional de los vuelos civiles cuando OpenSky no está disponible: pega la clave API de tu propio acuerdo con ADS-B Exchange. Permanece en el servidor; sus condiciones solo permiten un uso personal y no comercial"
+  "A third military aircraft feed and the regional flights fallback when OpenSky is unavailable — paste the API key of your own ADS-B Exchange agreement. It stays on the server; their terms allow personal, non-commercial use only": "Una tercera fuente de aeronaves militares y el respaldo regional de los vuelos civiles cuando OpenSky no está disponible: pega la clave API de tu propio acuerdo con ADS-B Exchange. Permanece en el servidor; sus condiciones solo permiten un uso personal y no comercial",
+  "Relative speed": "Velocidad relativa",
+  "NORAD": "NORAD",
+  "Pc": "Pc",
+  "Space-Track CDM": "Space-Track CDM",
+  "Zones: {count}": "Zonas: {count}",
+  "computed": "calculada"
 }

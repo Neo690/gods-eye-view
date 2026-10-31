@@ -16,7 +16,7 @@
  */
 import { eciToGeodetic, gstime, propagate, twoline2satrec } from 'satellite.js';
 import { msg } from '../../i18n/marker.js';
-import { parseTleCatalog } from '../orbitChanges/model.js';
+import { formatEpoch, parseTleCatalog } from '../orbitChanges/model.js';
 
 /** Layer id; also the overlay source the labels are published under. */
 export const SATELLITE_WATCH_LAYER_ID = 'satellite-watch';
@@ -142,6 +142,60 @@ export function positionAt(line1, line2, date) {
   }
 }
 
+/**
+ * One element set's velocity vector at `date`, km/s in the frame SGP4 answers in.
+ * @param {string} line1
+ * @param {string} line2
+ * @param {Date} date
+ * @returns {{x:number, y:number, z:number}|null}
+ */
+function velocityAt(line1, line2, date) {
+  try {
+    const satrec = twoline2satrec(line1, line2);
+    if (!satrec || satrec.error) return null;
+    const state = propagate(satrec, date);
+    const velocity = state?.velocity;
+    if (!velocity) return null;
+    const { x, y, z } = velocity;
+    if (![x, y, z].every(Number.isFinite)) return null;
+    return { x, y, z };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * How fast two objects close on each other at one instant, in km/s.
+ *
+ * The public CDM feed does not publish `RELATIVE_SPEED` — measured on the live
+ * feed, none of its sixty rows carried the field — so the number the card shows
+ * has to come from the two element sets this layer already reads. Both vectors
+ * are taken at the same instant, the time of closest approach, which is the
+ * only pair of instants the two objects are known to be at the same place.
+ *
+ * This is a propagation, not a measurement: it inherits the element sets' own
+ * error (kilometres along-track for a days-old TLE), and it is only the closing
+ * rate at TCA, not the speed at any other moment.
+ *
+ * @param {string} line1A Primary's line 1
+ * @param {string} line2A Primary's line 2
+ * @param {string} line1B Secondary's line 1
+ * @param {string} line2B Secondary's line 2
+ * @param {Date} date
+ * @returns {number|null} km/s, or null when either set cannot be propagated.
+ */
+export function relativeSpeedAt(line1A, line2A, line1B, line2B, date) {
+  const first = velocityAt(line1A, line2A, date);
+  const second = velocityAt(line1B, line2B, date);
+  if (!first || !second) return null;
+  const speed = Math.hypot(
+    first.x - second.x,
+    first.y - second.y,
+    first.z - second.z,
+  );
+  return Number.isFinite(speed) ? speed : null;
+}
+
 /** One marker record. `at` is the propagation instant, not the TLE epoch. */
 function record(source, norad, name, position, at, eccentricity) {
   return {
@@ -241,12 +295,31 @@ export function fromSpaceTrackGp(entries, date, cap) {
 }
 
 /**
+ * A CDM number, or null when the row carries none.
+ *
+ * `Number(null)` is 0, and the public feed omits `RELATIVE_SPEED` on every row,
+ * so reading the fields with a bare `Number()` turns "absent" into "zero km/s"
+ * and "Pc 0" — both of which are measurements, and wrong ones. The field's
+ * absence is therefore kept as an absence.
+ * @param {unknown} value
+ * @returns {number|null}
+ */
+function finiteOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+/**
  * One public CDM row, normalised. Space-Track returns upper-case keys in the
  * documented JSON; lower-case variants are accepted so a format change costs a
  * field, not the layer.
+ *
+ * A field the feed omits stays `null`: the public feed publishes no
+ * `RELATIVE_SPEED`, and `Number(null)` would report that absence as 0 km/s.
  * @returns {{id:string, tca:number, primaryId:string, primaryName:string,
- *   secondaryId:string, secondaryName:string, minRangeKm:number,
- *   pc:number, relativeSpeedKmS:number}|null}
+ *   secondaryId:string, secondaryName:string, minRangeKm:number|null,
+ *   pc:number|null, relativeSpeedKmS:number|null}|null}
  */
 export function parseCdmMessage(row) {
   if (!row || typeof row !== 'object') return null;
@@ -270,9 +343,9 @@ export function parseCdmMessage(row) {
   const primaryId = String(pick('SAT_1_ID', 'sat_1_id') ?? '').trim();
   const secondaryId = String(pick('SAT_2_ID', 'sat_2_id') ?? '').trim();
   if (!primaryId) return null;
-  const minRange = Number(pick('MIN_RNG', 'min_rng', 'MISS_DISTANCE'));
-  const pc = Number(pick('PC', 'pc'));
-  const relativeSpeed = Number(pick('RELATIVE_SPEED', 'relative_speed'));
+  const minRange = finiteOrNull(pick('MIN_RNG', 'min_rng', 'MISS_DISTANCE'));
+  const pc = finiteOrNull(pick('PC', 'pc'));
+  const relativeSpeed = finiteOrNull(pick('RELATIVE_SPEED', 'relative_speed'));
   return {
     id: String(
       pick('CDM_ID', 'cdm_id') ?? `${primaryId}:${secondaryId}:${tca}`,
@@ -286,10 +359,55 @@ export function parseCdmMessage(row) {
     secondaryName: String(
       pick('SAT_2_NAME', 'sat_2_name') || `NORAD ${secondaryId}`,
     ),
-    minRangeKm: Number.isFinite(minRange) ? minRange : null,
-    pc: Number.isFinite(pc) ? pc : null,
-    relativeSpeedKmS: Number.isFinite(relativeSpeed) ? relativeSpeed : null,
+    minRangeKm: minRange,
+    pc,
+    relativeSpeedKmS: relativeSpeed,
   };
+}
+
+/**
+ * A catalogue number as an identity, not as text.
+ *
+ * Space-Track's GP element lines carry the number zero-padded to five digits
+ * (`"06121"`) while the CDM's `SAT_1_ID` is the bare number (`"6121"`), so a
+ * plain string lookup silently finds nothing for every object below 10 000.
+ * Measured on the live feed: 0 of 60 conjunctions matched before this, 7 after.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function noradKey(value) {
+  const text = String(value ?? '').trim();
+  return text.replace(/^0+(?=\d)/, '');
+}
+
+/**
+ * The element sets a closing rate needs that the read did not carry.
+ *
+ * The GP window is a sample of the catalogue (1 200 of ~30 000 objects) and the
+ * public conjunction feed pairs crewed/active primaries with debris, so on the
+ * live feed **none** of the secondaries is in it. These numbers are fetched
+ * individually to complete the pair; an event whose primary is itself unknown
+ * is skipped, since it cannot be placed anyway.
+ *
+ * @param {Array<{norad?:string}>} entries
+ * @param {Array<object>} messages `parseCdmMessage` output
+ * @param {number} [limit]
+ * @returns {string[]}
+ */
+export function missingSecondaryNorads(entries, messages, limit = 12) {
+  const cap = Math.max(0, Math.floor(limit) || 0);
+  if (!cap) return [];
+  const known = new Set((entries || []).map((entry) => noradKey(entry?.norad)));
+  const wanted = [];
+  for (const message of messages || []) {
+    if (Number.isFinite(message?.relativeSpeedKmS)) continue;
+    if (!known.has(noradKey(message?.primaryId))) continue;
+    const key = noradKey(message?.secondaryId);
+    if (!key || known.has(key) || wanted.includes(key)) continue;
+    wanted.push(key);
+    if (wanted.length >= cap) break;
+  }
+  return wanted;
 }
 
 /**
@@ -298,6 +416,8 @@ export function parseCdmMessage(row) {
  * so the point is the primary's sub-satellite point propagated from its own
  * element set at TCA. That is what the marker means, and the label says it.
  *
+ * The closing rate comes from the CDM when the feed publishes one, otherwise
+ * from propagating both element sets to TCA; `relativeSpeedSource` says which.
  * @param {Array<object>} messages Parsed CDM rows.
  * @param {Array<object>} gpEntries Space-Track element-set entries.
  * @param {number} [limit]
@@ -305,28 +425,48 @@ export function parseCdmMessage(row) {
 export function conjunctionsFromCdm(messages, gpEntries, limit = 24) {
   const byNorad = new Map();
   for (const entry of gpEntries || []) {
-    if (entry?.norad) byNorad.set(String(entry.norad), entry);
+    if (entry?.norad) byNorad.set(noradKey(entry.norad), entry);
   }
   const events = [];
   for (const message of messages || []) {
-    const entry = byNorad.get(String(message.primaryId));
+    const entry = byNorad.get(noradKey(message.primaryId));
     if (!entry?.line1 || !entry?.line2) continue;
-    const position = positionAt(
-      entry.line1,
-      entry.line2,
-      new Date(message.tca),
-    );
+    const at = new Date(message.tca);
+    const position = positionAt(entry.line1, entry.line2, at);
     if (!position) continue;
+    // The feed's own number wins when it has one: it is the operator's figure
+    // for this event. Only when the field is absent — which, on the public
+    // feed, is always — is the closing rate propagated from both element sets.
+    const secondary = message.secondaryId
+      ? byNorad.get(noradKey(message.secondaryId))
+      : null;
+    let relativeSpeedKmS = message.relativeSpeedKmS;
+    let relativeSpeedSource = Number.isFinite(relativeSpeedKmS) ? 'cdm' : null;
+    if (!relativeSpeedSource && secondary?.line1 && secondary?.line2) {
+      relativeSpeedKmS = relativeSpeedAt(
+        entry.line1,
+        entry.line2,
+        secondary.line1,
+        secondary.line2,
+        at,
+      );
+      relativeSpeedSource = Number.isFinite(relativeSpeedKmS)
+        ? 'elements'
+        : null;
+    }
     events.push({
       id: `cdm:${message.id}`,
-      norad: String(message.primaryId),
+      // The catalogue's own spelling of the number, so an event carries the
+      // same identity as its element set ("06121", not the CDM's "6121").
+      norad: String(entry.norad || message.primaryId),
       name: message.primaryName,
-      secondaryNorad: String(message.secondaryId || ''),
+      secondaryNorad: String(secondary?.norad || message.secondaryId || ''),
       secondaryName: message.secondaryName,
       tca: message.tca,
       minRangeKm: message.minRangeKm,
       pc: message.pc,
-      relativeSpeedKmS: message.relativeSpeedKmS,
+      relativeSpeedKmS,
+      relativeSpeedSource,
       lat: position.lat,
       lon: position.lon,
       altitudeKm: position.altitudeKm,
@@ -358,6 +498,86 @@ export function createConjunctionLabelEntry(
     priority: event.priority,
     collisionGroup: 'ambient-label',
     paintLane: 'ambient-label',
+    interactive: false,
+    edgeFade: 'keyhole',
+    horizonCull: true,
+    terrainOcclusion: false,
+    gapPx: 14,
+    verticalOnly: true,
+    placement: 'above',
+  };
+}
+
+/**
+ * A collision probability in the form the feed reports it: these are
+ * probabilities of order 1e-5 to 1e-3, and a fixed-point "0.000" would say
+ * "impossible" for every one of them.
+ * @param {unknown} value Raw Pc.
+ * @returns {string} Exponent form, or '' when the feed gave no number.
+ */
+export function formatCollisionProbability(value) {
+  const pc = Number(value);
+  if (value === null || value === undefined || value === '') return '';
+  if (!Number.isFinite(pc)) return '';
+  if (pc === 0) return '0';
+  return pc.toExponential(2);
+}
+
+/**
+ * Everything one conjunction knows, in the lines a click reveals.
+ *
+ * The ambient label carries the one number a glance needs (the expected miss);
+ * this card carries what a decision needs: both objects by name and catalog
+ * number, the probability of collision, the time of closest approach, the
+ * relative speed, and which feed said so. A value the CDM omitted reads
+ * "Unavailable" rather than a zero, because a zero Pc is a measurement.
+ *
+ * @param {object} event One entry from {@link conjunctionsFromCdm}.
+ * @param {*} position Cartesian3 of the marker.
+ * @param {(text: string) => string} [translate]
+ */
+export function createConjunctionDetailEntry(
+  event,
+  position,
+  translate = (t) => t,
+) {
+  const secondary = event.secondaryNorad ? ` × ${event.secondaryNorad}` : '';
+  const pc = formatCollisionProbability(event.pc);
+  // `Number(null)` is 0: an omitted speed would otherwise print "0.00 km/s",
+  // which claims the two objects are not moving relative to each other.
+  const rawSpeed = event.relativeSpeedKmS;
+  const speed =
+    rawSpeed === null || rawSpeed === undefined || rawSpeed === ''
+      ? Number.NaN
+      : Number(rawSpeed);
+  return {
+    id: String(event.id),
+    position,
+    variant: 'label',
+    title: `${event.name} × ${event.secondaryName}`,
+    details: [
+      `${translate(msg('NORAD'))} ${event.norad}${secondary}`,
+      `${translate(msg('Pc'))} ${pc || translate(msg('Unavailable'))}`,
+      `${translate(msg('TCA'))} ${formatEpoch(Number(event.tca))}`,
+      `${translate(msg('Relative speed'))} ${
+        Number.isFinite(speed)
+          ? `${speed.toFixed(2)} ${translate(msg('km'))}/s`
+          : translate(msg('Unavailable'))
+      }${
+        // A propagated number is marked as one: the feed did not say this.
+        event.relativeSpeedSource === 'elements'
+          ? ` (${translate(msg('computed'))})`
+          : ''
+      }`,
+      `${translate(msg('Source'))} ${translate(msg('Space-Track CDM'))}`,
+    ],
+    accent: '#B794F4',
+    priority: event.priority,
+    collisionGroup: 'conjunction-detail',
+    paintLane: 'ambient-label',
+    // The host draws a selected card with the wider frame and the brighter
+    // border, which is what makes the clicked conjunction read as opened.
+    selected: true,
     interactive: false,
     edgeFade: 'keyhole',
     horizonCull: true,

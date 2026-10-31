@@ -218,3 +218,39 @@ test('a deployment without the N2YO key reads as a missing key, not an outage', 
   assert.equal(answer.error, 'missing-key');
   assert.deepEqual(answer.above, []);
 });
+
+test('a conjunction pair is completed one catalogue number at a time', async () => {
+  const asked = [];
+  const source = createSatelliteWatchSource({
+    fetchImpl: async (url) => {
+      asked.push(url);
+      if (url.endsWith('/99999')) {
+        // CelesTrak does not know the object: an absence, not an error.
+        return {
+          ok: false,
+          status: 404,
+          body: { cancel: async () => {} },
+          headers: { get: () => null },
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          [
+            'COSMOS 2251 DEB',
+            '1 47311U 93036ACB 24001.50000000  .00001234  00000-0  35000-3 0  9994',
+            '2 47311  74.0500  12.3456 0012345 100.0000 260.0000 14.90000000  1234',
+          ].join('\n'),
+        headers: { get: () => null },
+      };
+    },
+  });
+  const { entries } = await source.readElementSets(['47311', '99999']);
+  assert.deepEqual(asked.sort(), [
+    '/api/celestrak/catnr/47311',
+    '/api/celestrak/catnr/99999',
+  ]);
+  assert.equal(entries.length, 1, 'only the known object is returned');
+  assert.equal(entries[0].norad, '47311');
+});

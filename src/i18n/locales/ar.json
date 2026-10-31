@@ -3369,5 +3369,11 @@
   "Needs a Global Fishing Watch token": "يلزم رمز Global Fishing Watch",
   "Fishing Effort": "جهد الصيد",
   "Apparent fishing effort in the Fishing Effort layer — paste the API token from your Global Fishing Watch account; it stays on the server": "جهد الصيد الظاهري في طبقة جهد الصيد — ألصق رمز API من حسابك في Global Fishing Watch؛ يبقى على الخادم",
-  "A third military aircraft feed and the regional flights fallback when OpenSky is unavailable — paste the API key of your own ADS-B Exchange agreement. It stays on the server; their terms allow personal, non-commercial use only": "مصدر ثالث للطائرات العسكرية والبديل الإقليمي للرحلات المدنية عند تعذّر OpenSky — ألصق مفتاح API من اتفاقك الخاص مع ADS-B Exchange. يبقى على الخادم؛ وشروطهم تسمح بالاستخدام الشخصي غير التجاري فقط"
+  "A third military aircraft feed and the regional flights fallback when OpenSky is unavailable — paste the API key of your own ADS-B Exchange agreement. It stays on the server; their terms allow personal, non-commercial use only": "مصدر ثالث للطائرات العسكرية والبديل الإقليمي للرحلات المدنية عند تعذّر OpenSky — ألصق مفتاح API من اتفاقك الخاص مع ADS-B Exchange. يبقى على الخادم؛ وشروطهم تسمح بالاستخدام الشخصي غير التجاري فقط",
+  "Relative speed": "السرعة النسبية",
+  "NORAD": "NORAD",
+  "Pc": "Pc",
+  "Space-Track CDM": "Space-Track CDM",
+  "Zones: {count}": "المناطق: {count}",
+  "computed": "محسوبة"
 }

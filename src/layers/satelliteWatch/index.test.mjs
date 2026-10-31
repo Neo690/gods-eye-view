@@ -26,6 +26,17 @@ const ISS_PREVIOUS = Object.freeze(
   )[0],
 );
 
+/** The secondary of the live feed's conjunctions: debris, never in a group. */
+const DEBRIS = Object.freeze(
+  parseTleCatalog(
+    [
+      'COSMOS 2251 DEB',
+      '1 47311U 93036ACB 24001.50000000  .00001234  00000-0  35000-3 0  9994',
+      '2 47311  74.0500  12.3456 0012345 100.0000 260.0000 14.90000000  1234',
+    ].join('\n'),
+  )[0],
+);
+
 const N2YO_ROW = Object.freeze({
   satid: 25544,
   satname: 'ISS (ZARYA)',
@@ -43,8 +54,15 @@ const recordingOverlay = () => ({
   clearSource() {},
 });
 
-function harness(readers = {}) {
-  const calls = { catalog: 0, previous: 0, tle: 0, n2yo: 0, spacetrack: 0 };
+function harness(readers = {}, { viewer: viewerExtras = {}, ...options } = {}) {
+  const calls = {
+    catalog: 0,
+    previous: 0,
+    tle: 0,
+    n2yo: 0,
+    spacetrack: 0,
+    elements: [],
+  };
   const source = {
     readCatalog: async () => {
       calls.catalog++;
@@ -71,6 +89,11 @@ function harness(readers = {}) {
       if (readers.spaceTrack) return readers.spaceTrack();
       return { ok: true, error: null, entries: [ISS], messages: [] };
     },
+    readElementSets: async (norads) => {
+      calls.elements.push(norads);
+      if (readers.elements) return readers.elements(norads);
+      return { entries: [] };
+    },
   };
   const dataSources = {
     add: (dataSource) => dataSource,
@@ -81,6 +104,7 @@ function harness(readers = {}) {
     camera: {
       positionCartographic: { latitude: 0, longitude: 0 },
     },
+    ...viewerExtras,
   };
   const storage = {
     _value: null,
@@ -99,6 +123,7 @@ function harness(readers = {}) {
     overlayHost: overlay,
     storage,
     now: () => Date.parse('2026-01-01T00:00:00.000Z'),
+    ...options,
   });
   layer.init(viewer);
   return { layer, calls, overlay, storage };
@@ -274,6 +299,136 @@ test('a Space-Track conjunction is placed at its close approach and counted', as
   assert.ok(Number.isFinite(conjunction.lat));
   assert.ok(Number.isFinite(conjunction.lon));
   layer.disable();
+});
+
+test('a pair missing its secondary fetches that set and gets a closing rate', async () => {
+  // The public feed never publishes RELATIVE_SPEED and the GP window holds no
+  // debris, so without this completion every card would read "Unavailable".
+  const { layer, calls } = harness({
+    spaceTrack: () => ({
+      ok: true,
+      error: null,
+      entries: [ISS],
+      messages: [
+        {
+          CDM_ID: 987655,
+          TCA: '2026-01-02 00:00:00',
+          SAT_1_ID: 25544,
+          SAT_1_NAME: 'ISS (ZARYA)',
+          SAT_2_ID: 47311,
+          SAT_2_NAME: 'COSMOS 2251 DEB',
+          MIN_RNG: 0.4,
+          PC: 0.0002,
+        },
+      ],
+    }),
+    elements: () => ({ entries: [DEBRIS] }),
+  });
+  layer.enable();
+  await layer.update();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(calls.elements, [['47311']], 'only the missing half is read');
+  const conjunction = layer
+    .getAnalystRecords()
+    .find((row) => row.conjunctionWith === 'COSMOS 2251 DEB');
+  assert.ok(conjunction, 'the conjunction is placed with the completed pair');
+  assert.ok(
+    Number.isFinite(conjunction.relativeSpeedKmS),
+    'the closing rate comes from both element sets',
+  );
+  assert.equal(conjunction.relativeSpeedSource, 'elements');
+  layer.disable();
+});
+
+test('clicking a conjunction opens its card, and empty space closes it', async () => {
+  const cdm = {
+    CDM_ID: 987654,
+    TCA: '2026-01-02 00:00:00',
+    SAT_1_ID: 25544,
+    SAT_1_NAME: 'ISS (ZARYA)',
+    SAT_2_ID: 47311,
+    SAT_2_NAME: 'COSMOS 2251 DEB',
+    MIN_RNG: 0.083,
+    PC: 0.000856,
+    RELATIVE_SPEED: 14.23,
+  };
+  // The pick Cesium returns for one of our marker entities is the Entity
+  // itself, so the id is one level in.
+  let pick = null;
+  const handler = {
+    fn: null,
+    destroyed: 0,
+    setInputAction(fn) {
+      this.fn = fn;
+    },
+    destroy() {
+      this.destroyed++;
+    },
+  };
+  const { layer, overlay } = harness(
+    {
+      spaceTrack: () => ({
+        ok: true,
+        error: null,
+        entries: [ISS],
+        messages: [cdm],
+      }),
+    },
+    {
+      viewer: {
+        scene: { pick: () => pick, canvas: {} },
+      },
+      eventHandlerFactory: () => handler,
+    },
+  );
+  layer.enable();
+  await layer.update();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const ambient = overlay.entries.find((entry) => entry.selected !== true);
+  assert.ok(ambient, 'the conjunction is labelled before the click');
+  assert.equal(ambient.details.length, 1);
+
+  // A click on the marker: the card carries the five fields.
+  pick = { id: { id: 'satwatch:conjunction:cdm:987654' } };
+  handler.fn({ position: { x: 10, y: 20 } });
+  const card = overlay.entries.find((entry) => entry.selected === true);
+  assert.ok(card, 'the clicked conjunction opens its card');
+  assert.equal(card.title, 'ISS (ZARYA) × COSMOS 2251 DEB');
+  assert.deepEqual(card.details, [
+    'NORAD 25544 × 47311',
+    'Pc 8.56e-4',
+    'TCA 2026-01-02 00:00Z',
+    'Relative speed 14.23 km/s',
+    'Source Space-Track CDM',
+  ]);
+  // The opened card replaces the one-line label rather than doubling it.
+  assert.equal(
+    overlay.entries.filter((entry) => /COSMOS 2251 DEB/.test(entry.title))
+      .length,
+    1,
+  );
+
+  // A click on another layer's entity leaves the card alone.
+  pick = { id: { id: 'aircraft:4ca123' } };
+  handler.fn({ position: { x: 10, y: 20 } });
+  assert.ok(overlay.entries.some((entry) => entry.selected === true));
+
+  // Empty space closes it.
+  pick = null;
+  handler.fn({ position: { x: 10, y: 20 } });
+  assert.equal(
+    overlay.entries.some((entry) => entry.selected === true),
+    false,
+    'a click on empty space closes the card',
+  );
+  assert.ok(
+    overlay.entries.some((entry) => /COSMOS 2251 DEB/.test(entry.title)),
+  );
+
+  layer.disable();
+  assert.equal(handler.destroyed, 1, 'the click handler goes with the layer');
 });
 
 test('turning a source back on fetches it now instead of waiting for the poll', async () => {

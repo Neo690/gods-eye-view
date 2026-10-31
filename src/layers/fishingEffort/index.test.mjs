@@ -16,8 +16,16 @@ const WIDE_VIEW = {
 };
 
 function viewer(view) {
+  const added = [];
   return {
-    dataSources: { add: (dataSource) => dataSource, remove() {} },
+    added,
+    dataSources: {
+      add: (dataSource) => {
+        added.push(dataSource);
+        return dataSource;
+      },
+      remove() {},
+    },
     camera: { computeViewRectangle: () => view },
   };
 }
@@ -49,6 +57,53 @@ test('an update draws the effort cells and reports the totals', async () => {
   assert.equal(layer.getStats().count, 1, 'disabling keeps the last totals');
   assert.equal(layer.getAnalystRecords().length, 0);
   layer.destroy(viewer(SMALL_VIEW));
+});
+
+test('dense cells are grouped into a zone, with a fill and an outline', async () => {
+  const cells = [
+    { lat: 0, lon: 0, hours: 10 },
+    { lat: 0, lon: 0.1, hours: 10 },
+    { lat: 0.1, lon: 0, hours: 10 },
+    { lat: 0.1, lon: 0.1, hours: 10 },
+  ];
+  const withZones = viewer(SMALL_VIEW);
+  const layer = createFishingEffortLayer({
+    source: { getSnapshot: async () => snapshot(cells) },
+  });
+  layer.init(withZones);
+  layer.enable();
+  assert.equal(await layer.update(), true);
+  assert.equal(layer.getStats().zoneCount, 1);
+  assert.match(layer.getRowControls().info, /Zones: 1/);
+
+  const ids = withZones.added[0].entities.values.map((entity) => entity.id);
+  assert.ok(
+    ids.some((id) => id.startsWith('fishing-zone-fill:')),
+    'the zone is filled',
+  );
+  assert.ok(
+    ids.some((id) => id.startsWith('fishing-zone:')),
+    'and outlined',
+  );
+  layer.destroy(withZones);
+
+  // Two cells only: still fishing, but not an area worth an outline.
+  const thin = viewer(SMALL_VIEW);
+  const sparse = createFishingEffortLayer({
+    source: {
+      getSnapshot: async () =>
+        snapshot([
+          { lat: 0, lon: 0, hours: 10 },
+          { lat: 0, lon: 0.1, hours: 10 },
+        ]),
+    },
+  });
+  sparse.init(thin);
+  sparse.enable();
+  assert.equal(await sparse.update(), true);
+  assert.equal(sparse.getStats().zoneCount, 0);
+  assert.doesNotMatch(sparse.getRowControls().info, /Zones/);
+  sparse.destroy(thin);
 });
 
 test('a wide view asks for a closer one instead of a hemisphere of cells', async () => {

@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium';
 import { msg, t } from '../../i18n/index.js';
+import { isPointerFree } from '../../data/inputOwnership.js';
 import { translateFeedError } from '../../ui/statusText.js';
 import {
   ORBIT_CHANGE_BASELINE_STORAGE_KEY,
@@ -12,12 +13,14 @@ import {
   WATCH_SOURCE_CAPS,
   WATCH_SOURCES,
   conjunctionsFromCdm,
+  createConjunctionDetailEntry,
   createConjunctionLabelEntry,
   createWatchLabelEntry,
   fromCatalogEntries,
   fromN2yoAbove,
   fromSpaceTrackGp,
   fromTleApiMembers,
+  missingSecondaryNorads,
   parseCdmMessage,
   watchSummary,
 } from './model.js';
@@ -44,6 +47,19 @@ const SOURCE_DETAILS = Object.freeze({
 const LABEL_LIMIT = 12;
 /** N2YO's free tier allows 1 000 calls an hour; five minutes is 12. */
 const UPDATE_MS = 300_000;
+
+/** Prefix of the conjunction marker entities this layer owns on the scene. */
+const CONJUNCTION_ENTITY_PREFIX = 'satwatch:conjunction:';
+
+/**
+ * The click handler a browser installs. Kept behind an option so a host
+ * without a canvas (the unit tests) can inject one instead of a viewer.
+ * @param {object} viewer Cesium viewer.
+ * @returns {object} Something with setInputAction/destroy.
+ */
+function defaultEventHandlerFactory(viewer) {
+  return new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+}
 
 function readDefaultStorage() {
   try {
@@ -121,6 +137,7 @@ export function createSatelliteWatchLayer({
   overlayHost = null,
   storage,
   now = () => Date.now(),
+  eventHandlerFactory = defaultEventHandlerFactory,
 } = {}) {
   if (typeof source?.readCatalog !== 'function')
     throw new TypeError('Satellite watch requires a catalog source');
@@ -145,6 +162,10 @@ export function createSatelliteWatchLayer({
   let _events = new Map();
   /** Space-Track conjunctions, already placed at their close approach. */
   let _conjunctions = [];
+  /** The conjunction whose detail card is open, by event id. */
+  let _selectedConjunctionId = null;
+  /** The click handler, while the layer is enabled. */
+  let _clickHandler = null;
   /** True while the Space-Track element sets being shown are a cached copy. */
   let _spaceTrackStale = false;
   /** Why a keyed source answers nothing, when that is the answer. */
@@ -287,20 +308,42 @@ export function createSatelliteWatchLayer({
     _count = painted;
     if (!overlayHost) return;
     // Conjunction labels come first: a predicted close approach is the rarest
-    // and most consequential thing this layer knows.
-    const entries = conjunctions
-      .slice(0, LABEL_LIMIT)
-      .map((event) =>
-        createConjunctionLabelEntry(
-          event,
+    // and most consequential thing this layer knows. The one the operator
+    // clicked comes before even those, and is the only one that carries the
+    // whole card, because it is the answer to that click.
+    const entries = [];
+    const selected = conjunctions.find(
+      (event) => event.id === _selectedConjunctionId,
+    );
+    if (selected) {
+      entries.push(
+        createConjunctionDetailEntry(
+          selected,
           Cesium.Cartesian3.fromDegrees(
-            event.lon,
-            event.lat,
-            event.altitudeKm * 1000,
+            selected.lon,
+            selected.lat,
+            selected.altitudeKm * 1000,
           ),
           t,
         ),
       );
+    }
+    entries.push(
+      ...conjunctions
+        .filter((event) => event.id !== _selectedConjunctionId)
+        .slice(0, Math.max(0, LABEL_LIMIT - entries.length))
+        .map((event) =>
+          createConjunctionLabelEntry(
+            event,
+            Cesium.Cartesian3.fromDegrees(
+              event.lon,
+              event.lat,
+              event.altitudeKm * 1000,
+            ),
+            t,
+          ),
+        ),
+    );
     const left = Math.max(0, LABEL_LIMIT - entries.length);
     entries.push(
       ...events
@@ -317,6 +360,82 @@ export function createSatelliteWatchLayer({
       cohortLimit: LABEL_LIMIT,
       moving: false,
     });
+  };
+
+  /**
+   * The conjunction a scene pick landed on, or null.
+   *
+   * A Cesium entity pick surfaces the Entity itself rather than an id string,
+   * so the marker's own id lives one level in; a primitive pick puts it on
+   * `picked.id`. Both shapes are read, because which one arrives depends on
+   * the pick path.
+   * @param {*} picked Result of `scene.pick()`.
+   * @returns {?string} The conjunction's event id.
+   */
+  const conjunctionIdFromPick = (picked) => {
+    const raw = picked?.id ?? picked?.primitive?.id;
+    const id = typeof raw === 'string' ? raw : raw?.id;
+    if (typeof id !== 'string') return null;
+    return id.startsWith(CONJUNCTION_ENTITY_PREFIX)
+      ? id.slice(CONJUNCTION_ENTITY_PREFIX.length)
+      : null;
+  };
+
+  /**
+   * Open one conjunction's detail card, or close it with null.
+   *
+   * A card is only ever opened for an event this layer currently holds: a
+   * stale id from the previous poll would draw a marker that no longer exists.
+   * @param {?string} id Conjunction event id.
+   */
+  const selectConjunction = (id) => {
+    const next =
+      id && _conjunctions.some((event) => event.id === id) ? id : null;
+    if (next === _selectedConjunctionId) return;
+    _selectedConjunctionId = next;
+    render();
+  };
+
+  /**
+   * Click behaviour, enable-time only: a conjunction marker opens its card,
+   * empty space closes it, and another layer's entity is left alone so this
+   * handler never fights that layer's own selection.
+   * @param {{position: {x: number, y: number}}} click
+   */
+  const onSceneClick = (click) => {
+    // A tool owns the pointer (src/data/inputOwnership.js): yield the click.
+    if (!_enabled || !isPointerFree()) return;
+    const picked = _viewer?.scene?.pick?.(click?.position);
+    const conjunctionId = conjunctionIdFromPick(picked);
+    if (conjunctionId) {
+      selectConjunction(conjunctionId);
+      return;
+    }
+    if (picked) return;
+    if (_selectedConjunctionId) selectConjunction(null);
+  };
+
+  const installClickHandler = () => {
+    if (_clickHandler || !_viewer) return;
+    let handler = null;
+    try {
+      handler = eventHandlerFactory(_viewer);
+    } catch {
+      // No canvas to bind (a headless host): the layer still paints, it just
+      // has no click to answer.
+      return;
+    }
+    if (typeof handler?.setInputAction !== 'function') return;
+    handler.setInputAction(
+      onSceneClick,
+      Cesium.ScreenSpaceEventType.LEFT_CLICK,
+    );
+    _clickHandler = handler;
+  };
+
+  const removeClickHandler = () => {
+    _clickHandler?.destroy?.();
+    _clickHandler = null;
   };
 
   /**
@@ -417,11 +536,33 @@ export function createSatelliteWatchLayer({
       seen.add(message.id);
       messages.push(message);
     }
+    // A CDM does not publish the closing rate, and the GP window never holds
+    // the debris a conjunction is against, so the pair is completed from the
+    // cached per-object route before the events are placed.
+    let entries = answer.entries;
+    const wanted = missingSecondaryNorads(entries, messages);
+    if (wanted.length && source.readElementSets) {
+      try {
+        const extra = await source.readElementSets(wanted, { signal });
+        if (extra.entries.length) entries = [...entries, ...extra.entries];
+      } catch {
+        // Without the secondaries the events still place; their card says the
+        // closing rate is unavailable.
+      }
+    }
     _conjunctions = conjunctionsFromCdm(
       messages,
-      answer.entries,
+      entries,
       WATCH_SOURCE_CAPS['orbital-radar'],
     );
+    // A card whose event the new read no longer carries would keep describing
+    // a conjunction that is gone, so the selection is dropped with it.
+    if (
+      _selectedConjunctionId &&
+      !_conjunctions.some((event) => event.id === _selectedConjunctionId)
+    ) {
+      _selectedConjunctionId = null;
+    }
   };
 
   const layer = {
@@ -441,6 +582,7 @@ export function createSatelliteWatchLayer({
       _errors = new Map();
       _events = new Map();
       _conjunctions = [];
+      _selectedConjunctionId = null;
       _spaceTrackStale = false;
       _n2yoNote = null;
       _spaceTrackNote = null;
@@ -458,6 +600,7 @@ export function createSatelliteWatchLayer({
       _enabled = true;
       if (_dataSource) _dataSource.show = true;
       overlayHost?.setVisible(SATELLITE_WATCH_LAYER_ID, true);
+      installClickHandler();
       notify();
     },
 
@@ -465,6 +608,8 @@ export function createSatelliteWatchLayer({
       _request?.abort();
       _request = null;
       _enabled = false;
+      _selectedConjunctionId = null;
+      removeClickHandler();
       if (_dataSource) {
         _dataSource.show = false;
         _dataSource.entities.removeAll();
@@ -676,6 +821,9 @@ export function createSatelliteWatchLayer({
           tca: event.tca,
           minRangeKm: event.minRangeKm,
           pc: event.pc,
+          // Null when neither the feed nor the element sets gave a rate.
+          relativeSpeedKmS: event.relativeSpeedKmS,
+          relativeSpeedSource: event.relativeSpeedSource,
         });
         if (rows.length >= limit) return rows;
       }
@@ -685,8 +833,10 @@ export function createSatelliteWatchLayer({
     destroy(viewer = _viewer) {
       _request?.abort();
       _request = null;
+      removeClickHandler();
       _viewer = null;
       _enabled = false;
+      _selectedConjunctionId = null;
       _objects = new Map();
       _errors = new Map();
       _events = new Map();
