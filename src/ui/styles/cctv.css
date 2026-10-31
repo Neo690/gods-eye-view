@@ -363,3 +363,54 @@ html:not([lang='en']) #cctv-camera-select {
   flex: 1 1 100%;
   order: -1;
 }
+
+/* ── Plate boxes over the frame ──────────────────
+   What the plate reader found, drawn where it found it. The boxes are the
+   detector's own, scaled into the still the panel already shows: an operator
+   can check the reading by eye instead of trusting a string in a row.
+
+   Nothing here takes a click — the picture underneath stays a picture — and
+   nothing here is announced, because the layer row already reads the plates
+   out. The overlay is measured in script (see layers/alprReader/overlay.js),
+   so these rules only carry the look. */
+.cctv-plate-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.cctv-plate-box {
+  position: absolute;
+  border: 1px solid rgba(0, 255, 255, 0.9);
+  border-radius: 2px;
+  box-shadow:
+    0 0 6px rgba(0, 255, 255, 0.5),
+    0 0 14px rgba(0, 212, 255, 0.25),
+    0 0 0 1px rgba(0, 24, 32, 0.55) inset;
+}
+
+.cctv-plate-box-label {
+  position: absolute;
+  left: -1px;
+  padding: 0 3px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1.35;
+  letter-spacing: 0.6px;
+  white-space: nowrap;
+  color: #d6ffff;
+  background: rgba(0, 22, 30, 0.86);
+  border: 1px solid rgba(0, 255, 255, 0.55);
+  border-radius: 2px;
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.55);
+}
+
+/* A phone shows the same boxes smaller, but the label is a text size, not a
+   fraction of the picture: it keeps a legible floor. */
+@media (max-width: 700px) {
+  .cctv-plate-box-label {
+    font-size: 7px;
+    letter-spacing: 0.3px;
+  }
+}

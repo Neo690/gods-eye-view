@@ -212,3 +212,91 @@ test('the layer survives the manager tick that has nothing to fetch', async () =
   assert.equal(typeof layer.update, 'function');
   assert.equal(await layer.update(), true);
 });
+test('a read draws its boxes over the frame it read', async () => {
+  const calls = [];
+  const overlay = {
+    show: (next) => calls.push(['show', next]),
+    clear: () => calls.push(['clear']),
+  };
+  const frame = { width: 640, height: 360 };
+  const plates = [
+    { text: 'AB-123-CD', confidence: 0.98, box: { x1: 10, y1: 20, x2: 60, y2: 40 } },
+  ];
+  const layer = createPlateReaderLayer({
+    source: { read: async (cameraId) => ({ camera: { id: cameraId }, plates, frame }) },
+    camera: cctv('cam-1'),
+    overlay,
+  });
+  layer.init({});
+  layer.enable();
+  layer.getRowControls().chips[0].onClick();
+  await settle();
+  assert.deepEqual(calls, [['show', { cameraId: 'cam-1', frame, plates }]]);
+});
+
+test('selecting another camera takes the boxes with it', async () => {
+  let listener = null;
+  const camera = {
+    getParams: () => ({ selectedCameraId: 'cam-1' }),
+    subscribe: (callback) => {
+      listener = callback;
+      callback({ activeCameraId: 'cam-1' });
+      return () => {
+        listener = null;
+      };
+    },
+  };
+  const cleared = [];
+  const layer = createPlateReaderLayer({
+    source: source(),
+    camera,
+    overlay: { show() {}, clear: () => cleared.push('clear') },
+  });
+  layer.init({});
+  layer.enable();
+  layer.getRowControls().chips[0].onClick();
+  await settle();
+  // The subscription's first state matches the read target, so the boxes a
+  // read has just drawn are not dropped at once.
+  assert.deepEqual(cleared, []);
+  listener({ activeCameraId: 'cam-2' });
+  assert.deepEqual(cleared, ['clear']);
+  layer.disable();
+  assert.equal(listener, null);
+});
+
+test('a failed read and a layer turned off both clear the boxes', async () => {
+  const cleared = [];
+  let offline = false;
+  const layer = createPlateReaderLayer({
+    source: {
+      read: async (cameraId) => {
+        if (offline) throw new Error('offline');
+        return {
+          camera: { id: cameraId },
+          frame: { width: 640, height: 360 },
+          plates: [{ text: 'AB1234', confidence: 0.9, box: { x1: 1, y1: 1, x2: 9, y2: 5 } }],
+        };
+      },
+    },
+    camera: cctv('cam-1'),
+    overlay: { show() {}, clear: () => cleared.push('clear') },
+  });
+  layer.init({});
+  layer.enable();
+  layer.getRowControls().chips[0].onClick();
+  await settle();
+  // Nothing has been drawn that could be stale, so an empty state stays quiet.
+  assert.deepEqual(cleared, []);
+
+  offline = true;
+  layer.getRowControls().chips[0].onClick();
+  await settle();
+  assert.deepEqual(cleared, ['clear']);
+
+  offline = false;
+  layer.getRowControls().chips[0].onClick();
+  await settle();
+  layer.disable();
+  assert.deepEqual(cleared, ['clear', 'clear']);
+});

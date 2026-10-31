@@ -31,13 +31,19 @@ export { createPlateReaderSource, PlateReaderError } from './sources.js';
  * @param {object} options
  * @param {{read: Function}} options.source Server reader (see `./sources.js`).
  * @param {{getParams?: Function}} [options.camera] The CCTV layer, asked for
- *   the camera it currently has selected.
+ *   the camera it currently has selected, and subscribed to so the boxes go
+ *   away when the selection moves.
  * @param {Function} [options.now] Clock, replaced by the tests.
+ * @param {{show: Function, clear: Function, destroy?: Function}} [options.overlay]
+ *   Where the plate boxes are drawn (see `./overlay.js`). Absent in a build
+ *   without the panel, and in most tests: the reader then answers in the row
+ *   only, which is what it always did.
  */
 export function createPlateReaderLayer({
   source,
   camera,
   now = () => Date.now(),
+  overlay = null,
 } = {}) {
   if (typeof source?.read !== 'function')
     throw new TypeError('Plate reader requires a read source');
@@ -50,9 +56,59 @@ export function createPlateReaderLayer({
   let _error = null;
   let _lastReadAt = null;
   let _readCameraId = null;
+  let _cameraUnsubscribe = null;
+  let _overlayShown = false;
   let rowControlsListener = null;
 
   const notify = () => rowControlsListener?.();
+
+  /** Take the boxes off the picture, once: a clear with nothing drawn is noise. */
+  const clearOverlay = () => {
+    if (!_overlayShown) return;
+    _overlayShown = false;
+    overlay?.clear?.();
+  };
+
+  /**
+   * Draw the boxes of one answer over the frame it came from.
+   *
+   * An answer with no plate in it clears instead: a read that finds nothing
+   * must not leave the previous read's boxes pointing at empty road.
+   */
+  const showOverlay = (payload, cameraId) => {
+    const plates = Array.isArray(payload?.plates) ? payload.plates : [];
+    if (!plates.length) {
+      clearOverlay();
+      return;
+    }
+    try {
+      overlay?.show?.({ cameraId, frame: payload?.frame, plates });
+      _overlayShown = true;
+    } catch (error) {
+      // A drawing failure must not turn a good read into a failed one.
+      console.warn('[Data:PlateReader] overlay failed:', error);
+      clearOverlay();
+    }
+  };
+
+  /**
+   * Forget the boxes as soon as they stop describing what is on screen.
+   *
+   * The panel follows the CCTV layer's selected camera, and a read is tied to
+   * the camera it was asked about: leaving boxes on the next camera's picture
+   * would point at cars nobody read.
+   */
+  const watchCamera = () => {
+    if (_cameraUnsubscribe || typeof camera?.subscribe !== 'function') return;
+    _cameraUnsubscribe = camera.subscribe((state) => {
+      if (state?.activeCameraId !== _readCameraId) clearOverlay();
+    });
+  };
+
+  const unwatchCamera = () => {
+    _cameraUnsubscribe?.();
+    _cameraUnsubscribe = null;
+  };
 
   /** The camera the CCTV layer has selected, or null when it has none. */
   const selectedCameraId = () => {
@@ -91,6 +147,7 @@ export function createPlateReaderLayer({
       _result = payload;
       _readCameraId = cameraId;
       _lastReadAt = now();
+      showOverlay(payload, cameraId);
       console.log(
         `[Data:PlateReader] ${cameraId}: ${payload.plates.length} plate(s)`,
       );
@@ -103,6 +160,7 @@ export function createPlateReaderLayer({
       };
       _result = null;
       _readCameraId = null;
+      clearOverlay();
       return null;
     } finally {
       _request = null;
@@ -127,10 +185,13 @@ export function createPlateReaderLayer({
       _error = null;
       _lastReadAt = null;
       _readCameraId = null;
+      unwatchCamera();
+      clearOverlay();
     },
 
     enable() {
       _enabled = true;
+      watchCamera();
       notify();
     },
 
@@ -143,6 +204,8 @@ export function createPlateReaderLayer({
       _result = null;
       _error = null;
       _readCameraId = null;
+      unwatchCamera();
+      clearOverlay();
       notify();
     },
 
@@ -221,6 +284,7 @@ export function createPlateReaderLayer({
 
     destroy(viewer = _viewer) {
       this.disable();
+      overlay?.destroy?.();
       _viewer = null;
     },
   };
