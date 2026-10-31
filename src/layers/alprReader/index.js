@@ -146,6 +146,19 @@ export function createPlateReaderLayer({
       notify();
     },
 
+    /**
+     * Nothing to fetch on a tick: a read happens when the row asks for one.
+     *
+     * The manager still calls this as the layer turns on, and reads `false` as
+     * a refused transition and switches the layer back off — which is exactly
+     * what a missing method did: `update is not a function`, the switch snapped
+     * back to off, and the row looked broken. There is nothing to draw and
+     * nothing to refuse, so it resolves true.
+     */
+    async update() {
+      return true;
+    },
+
     getStats() {
       return {
         plates: _result?.plates?.length || 0,

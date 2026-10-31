@@ -202,3 +202,13 @@ test('a reused frame says how old the answer is', async () => {
   assert.match(controls.info, /AB-123-CD · 98%/);
   assert.match(controls.info, /Same frame · 42s/);
 });
+
+test('the layer survives the manager tick that has nothing to fetch', async () => {
+  const layer = createPlateReaderLayer({ source: source(), camera: cctv('cam-1') });
+  layer.init({});
+  layer.enable();
+  // lifecycle.js reads `false` from update() as a refused transition and turns
+  // the layer back off; a missing method did the same on the phone.
+  assert.equal(typeof layer.update, 'function');
+  assert.equal(await layer.update(), true);
+});
