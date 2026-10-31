@@ -23,6 +23,7 @@ test('reference factories retain compatibility without starting acquisition or s
     'orbit-changes',
     'satellite-watch',
     'fishing-effort',
+    'plate-reader',
   ]);
   assert.notEqual(first.earthquakes, second.earthquakes);
   assert.notEqual(first['air-quality'], second['air-quality']);
