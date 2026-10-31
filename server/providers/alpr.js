@@ -229,11 +229,20 @@ export function alprProxy({
           retention: 'none',
           frameReuseMs: ALPR_FRAME_REUSE_MS,
         };
-        cache.set(cameraId, { at: clock, result: payload });
-        answers.set(cameraId, { hash: frameHash, at: clock, result: payload });
+        // Dated when the answer was finished, not when the request arrived: a
+        // cold instance spends seconds building the CCTV catalogue before the
+        // first frame is even fetched, and counting that as the answer's age
+        // would claim a minute of staleness after twenty seconds.
+        const completed = now();
+        cache.set(cameraId, { at: completed, result: payload });
+        answers.set(cameraId, {
+          hash: frameHash,
+          at: completed,
+          result: payload,
+        });
         if (answers.size > 64) {
           for (const [key, entry] of answers)
-            if (clock - entry.at > ALPR_FRAME_REUSE_MS) answers.delete(key);
+            if (completed - entry.at > ALPR_FRAME_REUSE_MS) answers.delete(key);
         }
         if (cache.size > 64) {
           for (const [key, entry] of cache)

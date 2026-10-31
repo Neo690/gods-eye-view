@@ -310,3 +310,29 @@ test('reuse runs from the read that looked, and stops after a minute', async () 
   assert.equal(reads, 2, 'the window has to end, even for an identical frame');
   assert.equal(expired.res.payload.cached, false);
 });
+
+test('the reuse window is dated from the read, not from the request', async () => {
+  let clock = 0;
+  let reads = 0;
+  const handler = install({
+    cctv: { readSnapshot: async () => CAMERA },
+    read: async () => {
+      reads += 1;
+      // A cold instance builds the CCTV catalogue before the frame arrives;
+      // that time is not the answer's age.
+      clock += 12_000;
+      return RESULT;
+    },
+    now: () => clock,
+  });
+  const first = post({ cameraId: 'cam-1' });
+  await handler(first.req, first.res);
+  assert.equal(first.res.payload.ageMs, undefined);
+
+  clock += 10_000;
+  const reused = post({ cameraId: 'cam-1' });
+  await handler(reused.req, reused.res);
+  assert.equal(reads, 1);
+  assert.equal(reused.res.payload.reusedFrame, true);
+  assert.equal(reused.res.payload.ageMs, 10_000);
+});
