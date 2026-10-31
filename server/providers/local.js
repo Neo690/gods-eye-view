@@ -68,7 +68,7 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     geocodeProxy(),
     weatherEffectsProxy(),
     cctv,
-    alprProxy({ cctv }),
+    alprProxy({ cctv, warm: true }),
     radioBrowserProxy(),
     gbfsProxy(),
     localReceiversProxy(),

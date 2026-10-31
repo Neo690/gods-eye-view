@@ -20,7 +20,7 @@
  * @module server/providers/alpr
  */
 import { admitSameSiteKeyless } from './common/same-site.js';
-import { AlprUnavailable, readPlates } from '../alpr/engine.js';
+import { AlprUnavailable, getEngine, readPlates } from '../alpr/engine.js';
 
 /** Largest request body accepted: a camera id and nothing else. */
 export const ALPR_BODY_LIMIT = 4096;
@@ -67,10 +67,53 @@ function readJsonBody(req) {
  *   without it the route refuses, because it would have nothing to read.
  * @param {Function} [options.read] Plate reader, replaced by the tests.
  * @param {Function} [options.now] Clock, replaced by the tests.
+ * @param {boolean} [options.warm] Build the sessions at boot instead of on the
+ *   first read; the application asks for it, the tests do not.
  */
-export function alprProxy({ cctv, read = readPlates, now = Date.now } = {}) {
+export function alprProxy({
+  cctv,
+  read = readPlates,
+  now = Date.now,
+  warm = false,
+} = {}) {
   /** cameraId -> { at, result } */
   const cache = new Map();
+  let warming = false;
+
+  /**
+   * Build the sessions before anyone asks for a read.
+   *
+   * Creating them reads 11 MB of weights: measured at ~1 s on a workstation and
+   * ~3.8 s on the free hosted instance, and until now the first read of each
+   * process paid it. Warming moves that cost to the boot, where the instance is
+   * waking anyway, and does not raise the peak: a read would have loaded the
+   * same sessions.
+   *
+   * A missing model set is not an error here — the route already answers 503
+   * with the install step, and repeating that at boot would only add noise.
+   */
+  const warmSessions = () => {
+    if (warming) return;
+    warming = true;
+    const timer = setTimeout(() => {
+      const started = Date.now();
+      getEngine().then(
+        () => console.log(`[alpr] models ready in ${Date.now() - started} ms`),
+        (error) => {
+          if (
+            error?.code === 'models_missing' ||
+            error?.code === 'models_mismatch'
+          )
+            console.log(
+              '[alpr] models not installed; the first read will say so',
+            );
+          else if (error?.code === 'runtime_missing')
+            console.log('[alpr] onnxruntime-node or sharp is missing');
+        },
+      );
+    }, 0);
+    timer.unref?.();
+  };
 
   const install = (server) => {
     server.middlewares.use('/api/alpr', async (req, res) => {
@@ -174,6 +217,7 @@ export function alprProxy({ cctv, read = readPlates, now = Date.now } = {}) {
         return json(502, { error: 'read_failed' });
       }
     });
+    if (warm) warmSessions();
   };
 
   return {
