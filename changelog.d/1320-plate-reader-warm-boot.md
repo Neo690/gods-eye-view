@@ -5,3 +5,7 @@
   sessions exist, so the first read no longer pays for them; the peak memory is
   unchanged, because that read would have loaded them anyway. A missing model
   set is still the route's 503 with `npm run alpr:models`, not a boot failure.
+- onnxruntime sizes its thread pool from the host's core count, which a
+  container is not given: the sessions now read the cgroup CPU quota and are
+  created with that many threads, so a tenth-of-a-core instance stops
+  scheduling a dozen threads onto a fraction of one.

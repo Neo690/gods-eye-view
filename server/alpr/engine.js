@@ -43,6 +43,52 @@ export class AlprUnavailable extends Error {
 /** Sessions for one model directory, kept between requests. */
 const engines = new Map();
 
+/**
+ * Threads a cgroup quota actually allows.
+ *
+ * A container is usually given a fraction of a core while `os.cpus()` still
+ * reports the host's full count, and onnxruntime sizes its intra-op pool from
+ * that count: a dozen threads on a tenth of a core spend their time switching
+ * instead of multiplying. The quota is the only honest source, and `null` means
+ * "no quota to read", where the runtime's own choice is right.
+ *
+ * @param {string} quota Contents of `cpu.max` (`"5000 100000"`, `"max 100000"`)
+ *   or of cgroup v1's `cpu.cfs_quota_us` / `cpu.cfs_period_us`.
+ * @param {number} [periodMicros] cgroup v1 period, when the quota is a number.
+ * @returns {number|null} Whole cores the quota allows, at least one.
+ */
+export function threadsForCgroupQuota(quota, periodMicros) {
+  const text = String(quota ?? '').trim();
+  if (!text || text.startsWith('max')) return null;
+  const parts = text.split(/\s+/);
+  const allowance = Number(parts[0]);
+  const period = Number(parts[1] ?? periodMicros);
+  if (!Number.isFinite(allowance) || allowance <= 0) return null;
+  if (!Number.isFinite(period) || period <= 0) return null;
+  return Math.max(1, Math.floor(allowance / period));
+}
+
+/** Read the cgroup's CPU quota, when the platform has one. */
+async function cpuQuotaThreads() {
+  const read = async (file) => {
+    try {
+      return await fs.readFile(file, 'utf8');
+    } catch {
+      return null;
+    }
+  };
+  const v2 = await read('/sys/fs/cgroup/cpu.max');
+  if (v2 !== null) return threadsForCgroupQuota(v2);
+  const quota = await read('/sys/fs/cgroup/cpu/cpu.cfs_quota_us');
+  const period = await read('/sys/fs/cgroup/cpu/cpu.cfs_period_us');
+  if (quota === null) return null;
+  const micros = Number(String(period ?? '').trim());
+  return threadsForCgroupQuota(
+    quota,
+    Number.isFinite(micros) ? micros : undefined,
+  );
+}
+
 async function importRuntime() {
   let ort = null;
   let sharp = null;
@@ -82,7 +128,17 @@ async function buildEngine(directory) {
 
   const files = modelPaths(directory);
   const config = parsePlateConfig(await fs.readFile(files.ocrConfig, 'utf8'));
-  const options = { executionProviders: ['cpu'] };
+  const threads = await cpuQuotaThreads();
+  const options = {
+    executionProviders: ['cpu'],
+    ...(threads
+      ? { intraOpNumThreads: threads, interOpNumThreads: threads }
+      : {}),
+  };
+  if (threads)
+    console.log(
+      `[alpr] cgroup allows ${threads} core(s); onnxruntime limited to that`,
+    );
   const [detector, ocr] = await Promise.all([
     ort.InferenceSession.create(files.detector, options),
     ort.InferenceSession.create(files.ocr, options),
