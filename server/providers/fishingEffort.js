@@ -82,7 +82,9 @@ export function fishingEffortProxy({
    */
   function rowsOf(payload) {
     const out = [];
-    for (const entry of Array.isArray(payload?.entries) ? payload.entries : []) {
+    for (const entry of Array.isArray(payload?.entries)
+      ? payload.entries
+      : []) {
       if (!entry || typeof entry !== 'object') continue;
       if (num(entry.lat) !== null) {
         out.push(entry);
