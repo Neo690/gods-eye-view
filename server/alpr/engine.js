@@ -37,6 +37,19 @@ export const ALPR_MAX_PLATES = 6;
 /** Detector floor. The model's own default is 0.25; a camera frame is noisier. */
 export const ALPR_DETECT_THRESHOLD = 0.4;
 
+/**
+ * How sure the OCR has to be before a reading is called a plate.
+ *
+ * Tiling made the detector fire on things a downscaled frame used to blur
+ * away: a camera's own station label came back as `T_F17` at 0.21, and a road
+ * marking as `1FF849` at 0.36. Both carry letters and digits, so `looksLikePlate`
+ * cannot tell them apart from a registration — only the OCR's confidence does.
+ * Read well, a plate lands near 0.9; half-sure is the line, because a guess
+ * shown as a car's registration is worse than a plate missed, and the frame is
+ * on screen for anyone who wants to check by eye.
+ */
+export const ALPR_MIN_PLATE_CONFIDENCE = 0.5;
+
 /** Why the reader cannot answer, in terms the route can translate. */
 export class AlprUnavailable extends Error {
   constructor(code, message, details = {}) {
@@ -388,6 +401,7 @@ export async function readPlates(image, options = {}) {
       config,
     );
     if (!plate) continue;
+    if (plate.confidence < ALPR_MIN_PLATE_CONFIDENCE) continue;
     if (!looksLikePlate(plate.text)) continue;
     plates.push({
       text: plate.text,
