@@ -3174,5 +3174,16 @@
   "Pc": "Pc",
   "Space-Track CDM": "Space-Track CDM",
   "Zones: {count}": "Zonas: {count}",
-  "computed": "calculada"
+  "computed": "calculada",
+  "Reading the selected camera…": "Leyendo la cámara seleccionada…",
+  "Select a CCTV camera first": "Seleccione primero una cámara CCTV",
+  "Plate reader unavailable": "Lector de matrículas no disponible",
+  "No plate found": "No se encontró ninguna matrícula",
+  "Nothing read yet": "Todavía no se ha leído nada",
+  "Cached answer": "Respuesta en caché",
+  "READ PLATE": "LEER MATRÍCULA",
+  "Read the plates of the selected camera": "Leer las matrículas de la cámara seleccionada",
+  "The plate reader could not answer": "El lector de matrículas no pudo responder",
+  "Read on the server, from the camera’s own frame; nothing is stored": "Leído en el servidor, desde la propia imagen de la cámara; no se guarda nada",
+  "Plate Reader": "Lector de matrículas"
 }

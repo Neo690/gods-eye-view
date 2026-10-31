@@ -3241,5 +3241,16 @@
   "Pc": "Pc",
   "Space-Track CDM": "Space-Track CDM",
   "Zones: {count}": "Зоны: {count}",
-  "computed": "вычислено"
+  "computed": "вычислено",
+  "Reading the selected camera…": "Чтение выбранной камеры…",
+  "Select a CCTV camera first": "Сначала выберите камеру CCTV",
+  "Plate reader unavailable": "Распознавание номеров недоступно",
+  "No plate found": "Номер не найден",
+  "Nothing read yet": "Пока ничего не прочитано",
+  "Cached answer": "Ответ из кеша",
+  "READ PLATE": "ПРОЧИТАТЬ НОМЕР",
+  "Read the plates of the selected camera": "Прочитать номера выбранной камеры",
+  "The plate reader could not answer": "Распознавание номеров не ответило",
+  "Read on the server, from the camera’s own frame; nothing is stored": "Читается на сервере, по кадру самой камеры; ничего не сохраняется",
+  "Plate Reader": "Распознавание номеров"
 }

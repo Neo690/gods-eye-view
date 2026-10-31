@@ -8,6 +8,7 @@ import { createSpaceWeatherSource } from '../layers/spaceWeather/source.js';
 import { createOrbitChangeSource } from '../layers/orbitChanges/source.js';
 import { createSatelliteWatchSource } from '../layers/satelliteWatch/sources.js';
 import { createFishingEffortSource } from '../layers/fishingEffort/sources.js';
+import { createPlateReaderSource } from '../layers/alprReader/sources.js';
 
 /** Construct the existing reference feeds independently of application setup. */
 export function createReferenceSources() {
@@ -22,5 +23,6 @@ export function createReferenceSources() {
     'orbit-changes': createOrbitChangeSource(),
     'satellite-watch': createSatelliteWatchSource(),
     'fishing-effort': createFishingEffortSource(),
+    'plate-reader': createPlateReaderSource(),
   };
 }

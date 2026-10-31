@@ -202,8 +202,8 @@ function encode(state) {
 
 test('production registry is exact, canonical, and rejects incomplete contracts', async () => {
   assert.equal(validateLayerStateRegistry(), true);
-  assert.equal(REGISTERED_LAYER_IDS.length, 40);
-  assert.equal(new Set(REGISTERED_LAYER_IDS).size, 40);
+  assert.equal(REGISTERED_LAYER_IDS.length, 41);
+  assert.equal(new Set(REGISTERED_LAYER_IDS).size, 41);
   assert.ok(REGISTERED_LAYER_IDS.includes('transit'));
   assert.ok(REGISTERED_LAYER_IDS.includes('radiation'));
   assert.deepEqual(REGISTERED_LAYER_IDS, [...REGISTERED_LAYER_IDS].sort());
@@ -243,19 +243,19 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   for (const [id, token] of Object.entries(LEGACY_LAYER_STATE_TOKENS)) {
     assert.equal(LAYER_STATE_TOKEN_RESERVATIONS[id], token);
   }
-  assert.equal(nextLayerStateToken(), '04');
+  assert.equal(nextLayerStateToken(), '05');
   // 6 and 7 belong to Radio Sites and Connected Objects, 8 to the mapped
   // railway stations and 9 to the transport-activity layer; every digit is
   // owned, so the allocator now works through the base-36 pairs, where 00 is
   // already the solar-storm layer, 01 the orbit-change layer, 02 the
-  // satellite-watch layer and 03 the fishing-effort layer.
+  // satellite-watch layer, 03 the fishing-effort layer and 04 the plate reader.
   assert.equal(
     nextLayerStateToken({
       ...LAYER_STATE_TOKEN_RESERVATIONS,
       alpha: '8',
       bravo: '9',
     }),
-    '04',
+    '05',
   );
   const digitsExhausted = {
     ...LAYER_STATE_TOKEN_RESERVATIONS,
@@ -263,10 +263,10 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
       [...'56789'].map((digit) => [`prior-${digit}`, digit]),
     ),
   };
-  assert.equal(nextLayerStateToken(digitsExhausted), '04');
+  assert.equal(nextLayerStateToken(digitsExhausted), '05');
   assert.equal(
-    nextLayerStateToken({ ...digitsExhausted, used: '04' }),
-    '05',
+    nextLayerStateToken({ ...digitsExhausted, used: '05' }),
+    '06',
   );
   assert.equal(
     nextLayerStateToken({
@@ -313,8 +313,8 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   assert.equal(
     validateLayerStateAllocations(LAYER_STATE_TOKEN_RESERVATIONS, {
       ...LAYER_STATE_TOKEN_RESERVATIONS,
-      future: '04',
-      next: '05',
+      future: '05',
+      next: '06',
     }),
     true,
   );
@@ -322,9 +322,9 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
     () =>
       validateLayerStateAllocations(LAYER_STATE_TOKEN_RESERVATIONS, {
         ...LAYER_STATE_TOKEN_RESERVATIONS,
-        future: '05',
+        future: '06',
       }),
-    /next free token 04/,
+    /next free token 05/,
   );
   // Hand the last digit back, which is what a ledger with one digit still
   // free looks like now that every real one is owned.
@@ -333,7 +333,7 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   assert.equal(
     validateLayerStateAllocations(beforeLastDigit, {
       ...beforeLastDigit,
-      futurePair: '04',
+      futurePair: '05',
       futureDigit: '9',
     }),
     true,
@@ -341,8 +341,8 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   assert.equal(
     validateLayerStateAllocations(digitsExhausted, {
       ...digitsExhausted,
-      pairB: '05',
-      pairA: '04',
+      pairB: '06',
+      pairA: '05',
     }),
     true,
   );
@@ -352,7 +352,7 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
         { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '5' },
         { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '5', competing: '5' },
       ),
-    /next free token 04/,
+    /next free token 05/,
   );
   assert.throws(
     () => validateLayerStateAllocations({ future: '00' }, { future: '01' }),

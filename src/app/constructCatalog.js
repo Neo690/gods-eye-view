@@ -11,6 +11,7 @@ import { createApplicationFlights } from './layers/flights.js';
 import { createApplicationMilitary } from './layers/militaryFlights.js';
 import { createApplicationVessels } from './layers/aisLiveVessels.js';
 import { createApplicationCctv } from './layers/cctv.js';
+import { createApplicationPlateReader } from './layers/alprReader.js';
 import { createApplicationRadio } from './layers/radio.js';
 import { createApplicationTraffic } from './layers/traffic.js';
 import { createApplicationBikeshare } from './layers/bikeshare.js';
@@ -119,6 +120,9 @@ export function createApplicationCatalog({
     const satellites = createApplicationSatellites({
       source: sources.satellites,
     });
+    // The plate reader asks this exact instance which camera is selected, so it
+    // is built before the catalog rather than inline in the list.
+    const cctv = createApplicationCctv({ surface, source: sources.cctv });
     const catalog = createLayerCatalog(
       [
         createBhoteKoshiEventLayer(),
@@ -159,7 +163,11 @@ export function createApplicationCatalog({
         satellites,
         createApplicationLaunches({ source: sources.launches, satellites }),
         createApplicationTraffic({ source: sources.traffic, surface }),
-        createApplicationCctv({ surface, source: sources.cctv }),
+        cctv,
+        createApplicationPlateReader({
+          source: sources['plate-reader'],
+          camera: cctv,
+        }),
         createApplicationRadio({ surface, source: sources.radio }),
         createApplicationTransit({ surface, source: sources.transit }),
         createApplicationRailwayStations(),

@@ -26,6 +26,11 @@ RUN npm run build
 # A failed download fails the build rather than shipping a server that claims
 # the layer but has no data to draw: the platform keeps the previous image up.
 RUN npm run towers:build
+# Plate-reader weights (YOLOv9 detector + CCT OCR, ~11 MB). Fetched with the
+# digests pinned in server/alpr/models.js, so the image carries exactly the
+# bytes the route accepts; a mismatch fails the build rather than shipping a
+# reader that answers 503 on a phone.
+RUN npm run alpr:models
 
 ENV NODE_ENV=production
 

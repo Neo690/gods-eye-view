@@ -510,6 +510,8 @@ const layers = [
 export const VOICE_OFF_LAYERS = Object.freeze({
   'bhote-koshi-2026': 'scene-driven event layer (control_scene)',
   'bhote-koshi-locator': 'scene-driven event layer (control_scene)',
+  'plate-reader':
+    'one on-demand read of the selected camera; nothing to toggle or query',
 });
 
 const TYPE_NAMES = Object.freeze({

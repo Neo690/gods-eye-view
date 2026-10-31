@@ -3040,5 +3040,16 @@
   "Pc": "Pc",
   "Space-Track CDM": "Space-Track CDM",
   "Zones: {count}": "区域：{count}",
-  "computed": "已计算"
+  "computed": "已计算",
+  "Reading the selected camera…": "正在读取所选摄像头…",
+  "Select a CCTV camera first": "请先选择摄像头",
+  "Plate reader unavailable": "车牌识别不可用",
+  "No plate found": "未发现车牌",
+  "Nothing read yet": "尚未读取",
+  "Cached answer": "缓存结果",
+  "READ PLATE": "读取车牌",
+  "Read the plates of the selected camera": "读取所选摄像头的车牌",
+  "The plate reader could not answer": "车牌识别无法作答",
+  "Read on the server, from the camera’s own frame; nothing is stored": "在服务器上读取摄像头本身的画面，不保存任何内容",
+  "Plate Reader": "车牌读取"
 }

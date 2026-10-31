@@ -22,6 +22,7 @@
   ["military-awareness", "g"],
   ["military-installations", "i"],
   ["orbit-changes", "01"],
+  ["plate-reader", "04"],
   ["radiation", "5"],
   ["radio", "r"],
   ["railway-stations", "8"],

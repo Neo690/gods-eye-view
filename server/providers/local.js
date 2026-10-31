@@ -14,6 +14,7 @@ import { regionalBriefProxy } from './regional/briefing.js';
 import { geocodeProxy } from './regional/place.js';
 import { weatherEffectsProxy } from './regional/weather-effects.js';
 import { cctvProxy } from './cctv.js';
+import { alprProxy } from './alpr.js';
 import { defaultSourceRoot } from './common/source-root.js';
 import { radioBrowserProxy } from './radio.js';
 import { gbfsProxy } from './gbfs.js';
@@ -44,6 +45,9 @@ import { cellTowersProxy } from './cellTowers.js';
  * `realtime` configures OpenAI; `gemini` explicitly opts into Gemini Live.
  */
 function localProviderPlugins({ realtime, gemini } = {}) {
+  // Built before the list so the plate reader can be handed the catalogue it
+  // must read frames from, rather than reaching into another module's state.
+  const cctv = cctvProxy({ sourceRoot: defaultSourceRoot });
   return [
     openSkyProxy(),
     celestrakProxy(),
@@ -63,7 +67,8 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     regionalBriefProxy(),
     geocodeProxy(),
     weatherEffectsProxy(),
-    cctvProxy({ sourceRoot: defaultSourceRoot }),
+    cctv,
+    alprProxy({ cctv }),
     radioBrowserProxy(),
     gbfsProxy(),
     localReceiversProxy(),

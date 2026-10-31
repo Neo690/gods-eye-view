@@ -51,6 +51,7 @@ export const CATALOG_SOURCE_CONTRACTS = Object.freeze({
   'gnss-integrity': contract(['gnss-integrity'], ['getSnapshot']),
   radiation: contract(['radiation'], ['getSnapshot']),
   'fishing-effort': contract(['fishing-effort'], ['getSnapshot']),
+  'plate-reader': contract(['plate-reader'], ['read']),
   'orbit-changes': contract(['orbit-changes'], ['readCatalog']),
   'satellite-watch': contract(
     ['satellite-watch'],

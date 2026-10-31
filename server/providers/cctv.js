@@ -86,6 +86,55 @@ export function cctvProxy({ sourceRoot = process.cwd() } = {}) {
   };
 
   /**
+   * Read a camera's own upstream frame, with no fallback.
+   *
+   * The plate reader asks for the real pixels an operator's camera published —
+   * never the Street View stand-in the frame route falls back to, which is a
+   * street, not a feed. A camera whose source is a video stream has no still to
+   * read, and one whose upstream is down answers `frame-unavailable` rather than
+   * a picture of somewhere else.
+   *
+   * Only server-registered sources are ever fetched: the caller names a camera
+   * id, never a URL, so this route cannot be turned into an SSRF hop.
+   *
+   * @param {string} cameraId Registered camera id.
+   * @returns {Promise<{ok:boolean, reason?:string, bytes?:Buffer,
+   *   contentType?:string, camera?:{id:string,name:string,city:string,
+   *   provider:string}}>} The frame bytes, or why there are none.
+   */
+  const readSnapshot = async (cameraId) => {
+    if (typeof cameraId !== 'string' || !cameraId.trim())
+      return { ok: false, reason: 'unknown-camera' };
+    const sources = await getCctvSources();
+    const source = sources.find((candidate) => candidate.id === cameraId);
+    if (!source) return { ok: false, reason: 'unknown-camera' };
+    const upstream =
+      source.snapshotUrl ||
+      (!isVideoFeedType(normalizeFeedType(source.feedType)) ? source.url : '');
+    if (!upstream) return { ok: false, reason: 'frame-unavailable' };
+    try {
+      const image =
+        source.sourceKind === 'txdot-its'
+          ? await fetchTxdotSnapshot(upstream)
+          : await fetchCctvImageFromUpstream(upstream);
+      if (!image?.ok) return { ok: false, reason: 'frame-unavailable' };
+      return {
+        ok: true,
+        bytes: image.body,
+        contentType: image.contentType,
+        camera: {
+          id: source.id,
+          name: source.name || source.id,
+          city: source.city || '',
+          provider: source.provider || '',
+        },
+      };
+    } catch {
+      return { ok: false, reason: 'frame-unavailable' };
+    }
+  };
+
+  /**
    * Fetch a Google Street View static image as a fallback frame. Server-side
    * call, never reaches the browser — prefers GOOGLE_MAPS_SERVER_API_KEY
    * (#33: a key scoped to Street View Static/Places, restricted by server IP
@@ -616,5 +665,12 @@ export function cctvProxy({ sourceRoot = process.cwd() } = {}) {
     name: 'cctv-proxy',
     configureServer: installMiddleware,
     configurePreviewServer: installMiddleware,
+    /**
+     * One camera's own frame, for the routes that need pixels rather than a
+     * display URL. Exposed on the plugin object so a provider that reads the
+     * image (`/api/alpr`) receives it explicitly instead of reaching into this
+     * module's state.
+     */
+    readSnapshot,
   };
 }
