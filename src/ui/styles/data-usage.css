@@ -1,24 +1,30 @@
 /* ── Data Usage Readout ────────────────────────
-   One dim line in the HUD's telemetry window, under the AIS row. Telemetry,
-   not a control: no frame, no background of its own, no button — the rate
-   reads like the coordinates above it.
+   One line in the HUD's telemetry window, under the AIS row. Telemetry, not a
+   control: no frame, no background of its own, no button — the rate reads like
+   the coordinates above it.
 
    It lived above the voice control for a while. On a phone that slot is the
    mic pill's own corner: the line was 31 px wide over it and dropped its
    session total to fit. The telemetry window has the room on both layouts,
-   and the app's traffic belongs beside the numbers it is measured with. */
+   and the app's traffic belongs beside the numbers it is measured with.
+
+   Everything but the numbers is inherited from that block on purpose. The line
+   used to set its own colour — the page's primary text, at 55 % opacity — while
+   MGRS, GSD and ALT beside it are the HUD's cyan at full strength, so the rate
+   read as a washed-out white line under a glowing teal block. Inheriting the
+   colour, the size and the tracking makes it the fourth line of the same
+   readout, in every theme, and in the voice control when the window is absent. */
 
 .data-usage {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 1;
-  letter-spacing: 0.8px;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
   font-variant-numeric: tabular-nums;
-  color: var(--text-primary);
-  opacity: 0.55;
+  color: inherit;
   white-space: nowrap;
   user-select: none;
   pointer-events: none;
@@ -33,16 +39,13 @@
   text-align: end;
 }
 
-.data-usage-label,
+/* The label is the block's own column name, like MGRS or GSD in front of their
+   numbers: it keeps their weight. Only the middot between the two figures is
+   allowed to recede. */
 .data-usage-sep {
   opacity: 0.6;
 }
 
 /* A phone keeps both numbers: the window is centred and has the width for
-   them, so the session total no longer has to hide behind the title. */
-@media (max-width: 700px) {
-  .data-usage {
-    font-size: 9px;
-    letter-spacing: 0.4px;
-  }
-}
+   them, so the session total no longer has to hide behind the title. The size
+   follows the block's own phone rule, so this readout keeps no override. */
