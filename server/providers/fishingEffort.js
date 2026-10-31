@@ -71,6 +71,29 @@ export function fishingEffortProxy({
   const cellKey = (view) =>
     `${view.west.toFixed(1)}:${view.east.toFixed(1)}:${view.south.toFixed(1)}:${view.north.toFixed(1)}:${view.days}:${new Date(now()).toISOString().slice(0, 10)}`;
 
+  /**
+   * The report's rows, whichever shape it answered in.
+   *
+   * The gateway groups its answer by dataset: `entries` is one object per
+   * dataset, each holding that dataset's rows. Reading `entries` as if it were
+   * the rows themselves found no `lat` on the wrapper and drew nothing, so the
+   * layers stayed empty while every call succeeded. A flat answer is still
+   * accepted, because it is what a single-dataset report used to return.
+   */
+  function rowsOf(payload) {
+    const out = [];
+    for (const entry of Array.isArray(payload?.entries) ? payload.entries : []) {
+      if (!entry || typeof entry !== 'object') continue;
+      if (num(entry.lat) !== null) {
+        out.push(entry);
+        continue;
+      }
+      for (const rows of Object.values(entry))
+        if (Array.isArray(rows)) out.push(...rows);
+    }
+    return out;
+  }
+
   /** One report, reduced to the cells a globe can actually draw. */
   function reduce(entries) {
     const totals = new Map();
@@ -125,11 +148,19 @@ export function fishingEffortProxy({
         },
       ],
     };
+    // `group-by` is not optional: without it the gateway answers 422
+    // ("group-by could be VESSEL_ID,FLAG,…") and the route was a permanent
+    // 502 even with a valid token. FLAG keeps the rows few enough to draw and
+    // `reduce` sums a cell's flags back into one number of hours.
+    //
+    // `spatial-aggregation` is deliberately absent: `true` merges the whole
+    // viewport into one row per group, with no coordinates at all, which is
+    // nothing a globe can place.
     const query = new URLSearchParams({
       format: 'JSON',
       'temporal-resolution': 'ENTIRE',
-      'spatial-aggregation': 'true',
       'spatial-resolution': 'LOW',
+      'group-by': 'FLAG',
       'date-range': dateRange,
     });
     query.append('datasets[0]', 'public-global-fishing-effort:latest');
@@ -143,7 +174,10 @@ export function fishingEffortProxy({
         Authorization: `Bearer ${String(token()).trim()}`,
         'User-Agent': 'gods-eye-view-fishing-effort/1.0',
       },
-      body: JSON.stringify({ geojson: JSON.stringify(polygon) }),
+      // `geojson` is an object, not a stringified one: stringifying it makes
+      // the gateway answer 422 "body malformed" before it ever looks at the
+      // token.
+      body: JSON.stringify({ geojson: polygon }),
     });
     if (!response.ok) {
       await response.body?.cancel?.().catch(() => {});
@@ -154,7 +188,7 @@ export function fishingEffortProxy({
       MAX_BYTES,
       undefined,
     );
-    return reduce(Array.isArray(payload?.entries) ? payload.entries : []);
+    return reduce(rowsOf(payload));
   }
 
   const install = (server) => {

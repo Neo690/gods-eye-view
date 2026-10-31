@@ -30,12 +30,18 @@ function install(plugin) {
   };
 }
 
+// The gateway answers one object per dataset, each holding that dataset's
+// rows; the rows are what carry lat/lon/hours.
 const ENTRIES = {
   entries: [
-    { lat: 10, lon: 20, hours: 2, flag: 'ESP', geartype: 'TRAWLERS' },
-    { lat: 10, lon: 20, hours: 3, flag: 'FRA', geartype: 'TRAWLERS' },
-    { lat: 11, lon: 21, hours: 0.5 },
-    { lat: 'x', lon: 22, hours: 4 },
+    {
+      'public-global-fishing-effort:v5.0': [
+        { lat: 10, lon: 20, hours: 2, flag: 'ESP', geartype: 'TRAWLERS' },
+        { lat: 10, lon: 20, hours: 3, flag: 'FRA', geartype: 'TRAWLERS' },
+        { lat: 11, lon: 21, hours: 0.5 },
+        { lat: 'x', lon: 22, hours: 4 },
+      ],
+    },
   ],
 };
 
@@ -90,13 +96,19 @@ test('a report is a polygon, authenticated, aggregated per cell and cached', asy
   assert.equal(url.origin, 'https://gateway.api.globalfishingwatch.org');
   assert.equal(url.searchParams.get('format'), 'JSON');
   assert.equal(url.searchParams.get('temporal-resolution'), 'ENTIRE');
-  assert.equal(url.searchParams.get('spatial-aggregation'), 'true');
+  // `group-by` is mandatory upstream: without it the gateway answers 422.
+  assert.equal(url.searchParams.get('group-by'), 'FLAG');
+  // `spatial-aggregation=true` erases the coordinates, so it must not be sent.
+  assert.equal(url.searchParams.get('spatial-aggregation'), null);
   assert.equal(url.searchParams.get('datasets[0]'), 'public-global-fishing-effort:latest');
   assert.match(url.searchParams.get('date-range'), /^\d{4}-\d\d-\d\d,\d{4}-\d\d-\d\d$/);
   assert.equal(call.init.method, 'POST');
   assert.equal(call.init.headers.Authorization, 'Bearer gfw-token');
   const body = JSON.parse(call.init.body);
-  const polygon = JSON.parse(body.geojson);
+  // The payload is a GeoJSON object; the gateway refuses a stringified one
+  // with 422 "body malformed".
+  assert.equal(typeof body.geojson, 'object');
+  const polygon = body.geojson;
   assert.deepEqual(polygon.features[0].geometry.coordinates[0][0], [-10, -5]);
 
   const again = await request('?west=-10&east=10&south=-5&north=5&days=7');
@@ -105,6 +117,19 @@ test('a report is a polygon, authenticated, aggregated per cell and cached', asy
   clock += 5 * 60_000;
   await request('?west=-10&east=10&south=-5&north=5&days=7');
   assert.equal(seen.length, 1);
+});
+
+test('a flat report shape still reduces', async () => {
+  const request = install(
+    fishingEffortProxy({
+      token: () => 'gfw-token',
+      fetchImpl: async () =>
+        reportOk({ entries: [{ lat: 1, lon: 2, hours: 1.5 }] }),
+    }),
+  );
+  const answer = await request('?west=-10&east=10&south=-5&north=5');
+  assert.equal(answer.status, 200);
+  assert.deepEqual(answer.json.cells, [{ lat: 1, lon: 2, hours: 1.5 }]);
 });
 
 test('reports are serialised: one token may run only one report at a time', async () => {
