@@ -18,7 +18,14 @@ import {
   modelsDirectory,
   inspectModels,
 } from './models.js';
-import { LETTERBOX_FILL, decodeDetections, letterboxPose } from './detector.js';
+import {
+  LETTERBOX_FILL,
+  TILE_MAX_COUNT,
+  decodeDetections,
+  letterboxPose,
+  mergeBoxes,
+  planTiles,
+} from './detector.js';
 import { decodePlate, parsePlateConfig } from './ocr.js';
 
 /** Longest side accepted, in pixels: a CCTV frame is never bigger than this. */
@@ -202,11 +209,19 @@ export function looksLikePlate(text) {
 /**
  * Read every plate in one image.
  *
+ * A frame larger than the detector's square input is read twice over: once
+ * whole, which is how a plate close to the camera is found, and once per tile
+ * at native resolution, which is the only way a plate 145 m away survives —
+ * shrunk into 384 px it is two pixels wide and the detector cannot see it. The
+ * passes are the same weights over different pixels, so their boxes are merged
+ * before OCR: one car is one answer.
+ *
  * @param {Buffer|Uint8Array} image Encoded JPEG/PNG/WebP bytes.
- * @param {{directory?:string, maxPlates?:number, threshold?:number}} [options]
+ * @param {{directory?:string, maxPlates?:number, threshold?:number,
+ *   maxTiles?:number}} [options] `maxTiles` at 1 reads the frame in one pass.
  * @returns {Promise<{plates:Array<{text:string, confidence:number,
  *   box:{x1:number,y1:number,x2:number,y2:number}, boxScore:number}>,
- *   frame:{width:number,height:number}, model:object,
+ *   frame:{width:number,height:number}, model:object, passes:number,
  *   ms:{decode:number,detector:number,ocr:number,total:number}}>}
  */
 export async function readPlates(image, options = {}) {
@@ -218,6 +233,9 @@ export async function readPlates(image, options = {}) {
   const threshold = Number.isFinite(options.threshold)
     ? options.threshold
     : ALPR_DETECT_THRESHOLD;
+  const maxTiles = Number.isFinite(options.maxTiles)
+    ? options.maxTiles
+    : TILE_MAX_COUNT;
 
   const decoded = await sharp(Buffer.from(image), {
     limitInputPixels: ALPR_MAX_PIXELS,
@@ -232,58 +250,108 @@ export async function readPlates(image, options = {}) {
     throw new AlprUnavailable('frame_too_small', 'Frame is too small to read');
   const decodeMs = Date.now() - started;
 
-  // Letterbox to the detector's square input, exactly as open-image-models
-  // does: bilinear resize, then pad with 114.
-  const pose = letterboxPose(frame.width, frame.height, ALPR_DETECTOR_SIZE);
-  const resized = await sharp(decoded.data, {
-    raw: { width: frame.width, height: frame.height, channels: 3 },
-  })
-    .resize({
-      width: pose.scaledWidth,
-      height: pose.scaledHeight,
-      kernel: 'linear',
-      fit: 'fill',
-    })
-    .raw()
-    .toBuffer();
-  const size = pose.size;
-  const canvas = Buffer.alloc(size * size * 3, LETTERBOX_FILL);
-  const left = Math.round(pose.padX - 0.1);
-  const top = Math.round(pose.padY - 0.1);
-  for (let row = 0; row < pose.scaledHeight; row += 1)
-    resized.copy(
-      canvas,
-      ((top + row) * size + left) * 3,
-      row * pose.scaledWidth * 3,
-      (row + 1) * pose.scaledWidth * 3,
-    );
+  const source = { width: frame.width, height: frame.height, channels: 3 };
 
-  const tensor = new Float32Array(3 * size * size);
-  const plane = size * size;
-  for (let index = 0; index < plane; index += 1) {
-    const pixel = index * 3;
-    tensor[index] = canvas[pixel] / 255; // R
-    tensor[plane + index] = canvas[pixel + 1] / 255; // G
-    tensor[2 * plane + index] = canvas[pixel + 2] / 255; // B
-  }
+  /**
+   * One detector run over one rectangle of the frame, in frame coordinates.
+   *
+   * The crop is cut from the already-decoded pixels rather than re-decoded, and
+   * is letterboxed exactly as open-image-models does: bilinear resize, then pad
+   * with 114.
+   */
+  const detectIn = async (rect) => {
+    const size = ALPR_DETECTOR_SIZE;
+    const whole =
+      rect.left === 0 &&
+      rect.top === 0 &&
+      rect.width === frame.width &&
+      rect.height === frame.height;
+    const pixels = whole
+      ? decoded.data
+      : await sharp(decoded.data, { raw: source })
+          .extract(rect)
+          .raw()
+          .toBuffer();
+
+    const pose = letterboxPose(rect.width, rect.height, size);
+    const resized = await sharp(pixels, {
+      raw: { width: rect.width, height: rect.height, channels: 3 },
+    })
+      .resize({
+        width: pose.scaledWidth,
+        height: pose.scaledHeight,
+        kernel: 'linear',
+        fit: 'fill',
+      })
+      .raw()
+      .toBuffer();
+    const canvas = Buffer.alloc(size * size * 3, LETTERBOX_FILL);
+    const left = Math.round(pose.padX - 0.1);
+    const top = Math.round(pose.padY - 0.1);
+    for (let row = 0; row < pose.scaledHeight; row += 1)
+      resized.copy(
+        canvas,
+        ((top + row) * size + left) * 3,
+        row * pose.scaledWidth * 3,
+        (row + 1) * pose.scaledWidth * 3,
+      );
+
+    const tensor = new Float32Array(3 * size * size);
+    const plane = size * size;
+    for (let index = 0; index < plane; index += 1) {
+      const pixel = index * 3;
+      tensor[index] = canvas[pixel] / 255; // R
+      tensor[plane + index] = canvas[pixel + 1] / 255; // G
+      tensor[2 * plane + index] = canvas[pixel + 2] / 255; // B
+    }
+
+    const output = await detector.run({
+      [detector.inputNames[0]]: new ort.Tensor('float32', tensor, [
+        1,
+        3,
+        size,
+        size,
+      ]),
+    });
+    const rows = output[detector.outputNames[0]] ?? output.output0;
+    // A box that reaches a tile edge which is not a frame edge was cut by the
+    // tiling: the plate continues into the neighbouring tile, which sees it
+    // whole. Marked here, where the tile's own coordinates are still known.
+    // Only the exact border counts — a box one pixel inside is a box the model
+    // ended where it meant to, and calling that truncated would throw away a
+    // plate the tile did read.
+    const cutLeft = rect.left > 0;
+    const cutTop = rect.top > 0;
+    const cutRight = rect.left + rect.width < frame.width;
+    const cutBottom = rect.top + rect.height < frame.height;
+    return decodeDetections(
+      { data: rows.data, dims: rows.dims },
+      pose,
+      { width: rect.width, height: rect.height },
+      { threshold, limit: maxPlates },
+    ).map((box) => ({
+      ...box,
+      truncated:
+        (cutLeft && box.x1 <= 0) ||
+        (cutTop && box.y1 <= 0) ||
+        (cutRight && box.x2 >= rect.width) ||
+        (cutBottom && box.y2 >= rect.height),
+      x1: box.x1 + rect.left,
+      y1: box.y1 + rect.top,
+      x2: box.x2 + rect.left,
+      y2: box.y2 + rect.top,
+    }));
+  };
+
+  const passes = [
+    { left: 0, top: 0, width: frame.width, height: frame.height },
+    ...planTiles(frame, { size: ALPR_DETECTOR_SIZE, maxTiles }),
+  ];
 
   const detectorStarted = Date.now();
-  const detectorOutput = await detector.run({
-    [detector.inputNames[0]]: new ort.Tensor('float32', tensor, [
-      1,
-      3,
-      size,
-      size,
-    ]),
-  });
-  const rawDetections =
-    detectorOutput[detector.outputNames[0]] ?? detectorOutput.output0;
-  const boxes = decodeDetections(
-    { data: rawDetections.data, dims: rawDetections.dims },
-    pose,
-    frame,
-    { threshold, limit: maxPlates },
-  );
+  const found = [];
+  for (const rect of passes) found.push(...(await detectIn(rect)));
+  const boxes = mergeBoxes(found, { limit: maxPlates });
   const detectorMs = Date.now() - detectorStarted;
 
   const ocrStarted = Date.now();
@@ -336,8 +404,11 @@ export async function readPlates(image, options = {}) {
     model: {
       detector: 'yolo-v9-t-384-license-plates-end2end',
       ocr: 'cct-xs-v2-global',
-      input: size,
+      input: ALPR_DETECTOR_SIZE,
     },
+    // How many detector runs this answer cost: one, or one per tile plus the
+    // whole-frame pass. Diagnostic only; the route does not forward it.
+    passes: passes.length,
     ms: {
       decode: decodeMs,
       detector: detectorMs,

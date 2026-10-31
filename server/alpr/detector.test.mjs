@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { decodeDetections, letterboxPose } from './detector.js';
+import {
+  decodeDetections,
+  letterboxPose,
+  mergeBoxes,
+  planTiles,
+} from './detector.js';
 
 const FRAME = { width: 518, height: 331 };
 
@@ -122,4 +127,121 @@ test('an output with too few columns is refused rather than misread', () => {
       ),
     /expected 7/,
   );
+});
+
+/* The tile plan decides what a wide camera is worth reading at. */
+
+/** Whether every tile sits inside the frame. */
+function insideFrame(tiles, frame) {
+  return tiles.every(
+    (tile) =>
+      tile.left >= 0 &&
+      tile.top >= 0 &&
+      tile.left + tile.width <= frame.width &&
+      tile.top + tile.height <= frame.height,
+  );
+}
+
+/** The furthest pixel any tile reaches, on each axis. */
+function reached(tiles) {
+  return {
+    x: Math.max(...tiles.map((tile) => tile.left + tile.width)),
+    y: Math.max(...tiles.map((tile) => tile.top + tile.height)),
+  };
+}
+
+test('a 1280x720 camera is read in 1:1 tiles, not shrunk into one input', () => {
+  const frame = { width: 1280, height: 720 };
+  const tiles = planTiles(frame);
+  assert.equal(tiles.length, 8, 'four columns, two rows');
+  assert.ok(insideFrame(tiles, frame));
+  assert.deepEqual(reached(tiles), { x: frame.width, y: frame.height });
+  // Every tile fits the detector input, so each is read without a downscale:
+  // the whole frame would have been scaled to 0.3 and lost the plate.
+  assert.ok(tiles.every((tile) => tile.width <= 384 && tile.height <= 384));
+  assert.deepEqual(tiles[0], { left: 0, top: 0, width: 384, height: 384 });
+});
+
+test('neighbouring tiles overlap, so no plate falls in a seam', () => {
+  const frame = { width: 1280, height: 720 };
+  const [first, second] = planTiles(frame);
+  assert.ok(second.left < first.left + first.width, 'columns overlap');
+  const sameColumn = planTiles(frame).find((tile) => tile.top > 0);
+  assert.ok(sameColumn.top < first.top + first.height, 'rows overlap');
+});
+
+test('a frame that already fits the detector input is read in one pass', () => {
+  assert.deepEqual(planTiles({ width: 352, height: 288 }), []);
+  assert.deepEqual(planTiles({ width: 384, height: 384 }), []);
+  assert.deepEqual(planTiles({ width: 300, height: 384 }), []);
+  // Taller than the input on one axis is not "fits": its single pass still
+  // loses a third of the picture's resolution, so it is cut into two.
+  assert.equal(planTiles({ width: 300, height: 600 }).length, 2);
+});
+
+test('the tile budget caps the runs without leaving the frame uncovered', () => {
+  for (const frame of [
+    { width: 1920, height: 1080 },
+    { width: 3840, height: 2160 },
+    { width: 800, height: 600 },
+    { width: 4096, height: 512 },
+  ]) {
+    const tiles = planTiles(frame, { maxTiles: 9 });
+    assert.ok(tiles.length <= 9, `${frame.width}x${frame.height}: ${tiles.length}`);
+    assert.ok(insideFrame(tiles, frame));
+    assert.deepEqual(reached(tiles), { x: frame.width, y: frame.height });
+  }
+});
+
+test('a tile plan needs a frame with area', () => {
+  assert.throws(() => planTiles({ width: 0, height: 100 }), /positive image size/);
+  assert.throws(() => planTiles(undefined), /positive image size/);
+});
+
+test('the same plate seen by two tiles is reported once, best score first', () => {
+  const merged = mergeBoxes([
+    { x1: 900, y1: 400, x2: 970, y2: 424, score: 0.91 },
+    // The neighbouring tile found it a couple of pixels off.
+    { x1: 902, y1: 401, x2: 968, y2: 423, score: 0.88 },
+    { x1: 100, y1: 100, x2: 170, y2: 124, score: 0.6 },
+  ]);
+  assert.deepEqual(
+    merged.map((box) => box.score),
+    [0.91, 0.6],
+  );
+});
+
+test('a plate cut by a tile edge is never reported as a plate', () => {
+  // What the tile beside the seam read: three letters of a longer plate.
+  const merged = mergeBoxes([
+    { x1: 0, y1: 400, x2: 39, y2: 436, score: 0.79, truncated: true },
+    { x1: 900, y1: 100, x2: 970, y2: 124, score: 0.6 },
+  ]);
+  assert.deepEqual(
+    merged.map((box) => box.x1),
+    [900],
+  );
+});
+
+test('two plates parked bumper to bumper stay two plates', () => {
+  const merged = mergeBoxes([
+    { x1: 100, y1: 100, x2: 160, y2: 124, score: 0.9 },
+    { x1: 164, y1: 100, x2: 224, y2: 124, score: 0.8 },
+  ]);
+  assert.equal(merged.length, 2);
+});
+
+test('the merged list keeps the requested number of plates', () => {
+  const boxes = [0.9, 0.8, 0.7].map((score, index) => ({
+    x1: index * 100,
+    y1: 0,
+    x2: index * 100 + 60,
+    y2: 24,
+    score,
+  }));
+  assert.deepEqual(
+    mergeBoxes(boxes, { limit: 2 }).map((box) => box.score),
+    [0.9, 0.8],
+  );
+  assert.deepEqual(mergeBoxes([], { limit: 2 }), []);
 });

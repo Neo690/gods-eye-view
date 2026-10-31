@@ -19,6 +19,16 @@ export const LETTERBOX_FILL = 114;
 export const DETECTOR_COLUMNS = 7;
 
 /**
+ * Tiles a wide frame is split into, at most.
+ *
+ * A tile is one detector run, so this is also the cost ceiling of one read:
+ * nine tiles plus the whole-frame pass is ten runs, measured at about 0.4 s of
+ * detector time for a 1280×720 frame on a workstation — a few seconds on the
+ * hosted instance — against twenty runs for a 4K frame tiled one-to-one.
+ */
+export const TILE_MAX_COUNT = 9;
+
+/**
  * Where the resized image sits inside the square model input.
  *
  * Mirrors the Python `letterbox`: the scale is the smaller of the two axis
@@ -45,6 +55,130 @@ export function letterboxPose(width, height, size = ALPR_DETECTOR_SIZE) {
     padY: (size - scaledHeight) / 2,
     size,
   };
+}
+
+/**
+ * Cover one axis with `count` tiles of the detector's own size.
+ *
+ * The model is trained on plates a few dozen pixels wide, so a tile is cut at
+ * native resolution rather than shrunk into the input: a 1280×720 frame read
+ * whole is scaled to 0.3, which erases a plate 145 m away, while the same frame
+ * cut into 384 px tiles is read at 1:1. When the frame is too large for the tile
+ * budget, tiles grow past the input size and are downscaled again — coverage
+ * wins over resolution there, because a gap is a blind spot and a soft tile is
+ * not.
+ *
+ * The step is even, so neighbouring tiles always overlap: the last tile ends on
+ * the frame's edge, not short of it, and a plate straddling a seam is whole in
+ * the tile beside it.
+ */
+function coverAxis(total, count, size) {
+  // One tile on this axis spans it whole — including a frame taller than the
+  // detector input, where the tile is downscaled into the input instead of
+  // leaving a strip the reader never looks at.
+  if (count <= 1) return [{ start: 0, length: total }];
+  const length = Math.min(total, Math.max(size, Math.ceil(total / count)));
+  const step = (total - length) / (count - 1);
+  const spans = [];
+  for (let index = 0; index < count; index += 1)
+    spans.push({ start: Math.round(index * step), length });
+  return spans;
+}
+
+/**
+ * Cut a frame too large for the detector input into overlapping tiles.
+ *
+ * Returns an empty list for a frame that already fits: its single pass is at
+ * 1:1 or better, and cutting it would only spend runs on the same pixels.
+ *
+ * @param {{width:number, height:number}} frame Source image size.
+ * @param {{size?:number, maxTiles?:number}} [options] Detector input side and
+ *   the tile budget.
+ * @returns {Array<{left:number, top:number, width:number, height:number}>}
+ */
+export function planTiles(
+  frame,
+  { size = ALPR_DETECTOR_SIZE, maxTiles = TILE_MAX_COUNT } = {},
+) {
+  if (!(frame?.width > 0) || !(frame?.height > 0))
+    throw new TypeError('Tiling needs a positive image size');
+  if (frame.width <= size && frame.height <= size) return [];
+
+  const budget = Math.max(1, Math.floor(maxTiles));
+  let cols = Math.ceil(frame.width / size);
+  let rows = Math.ceil(frame.height / size);
+  if (cols * rows > budget) {
+    const shrink = Math.sqrt(budget / (cols * rows));
+    cols = Math.max(1, Math.min(cols, Math.round(cols * shrink)));
+    rows = Math.max(1, Math.min(rows, Math.round(rows * shrink)));
+    // Rounding can overshoot the budget by one: give the extra back to the
+    // longer axis, where a wider tile loses the least detail.
+    while (cols * rows > budget) {
+      if (rows >= cols && rows > 1) rows -= 1;
+      else if (cols > 1) cols -= 1;
+      else break;
+    }
+  }
+
+  // A budget of one tile lands back on the whole frame, which the reader
+  // already runs: returning it would read the same pixels twice.
+  if (cols === 1 && rows === 1) return [];
+
+  const tiles = [];
+  for (const row of coverAxis(frame.height, rows, size))
+    for (const col of coverAxis(frame.width, cols, size))
+      tiles.push({
+        left: col.start,
+        top: row.start,
+        width: col.length,
+        height: row.length,
+      });
+  return tiles;
+}
+
+/** Overlap of two boxes over their union; 0 when they miss each other. */
+function iou(a, b) {
+  const width = Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1);
+  const height = Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1);
+  if (width <= 0 || height <= 0) return 0;
+  const overlap = width * height;
+  const areaA = (a.x2 - a.x1) * (a.y2 - a.y1);
+  const areaB = (b.x2 - b.x1) * (b.y2 - b.y1);
+  const union = areaA + areaB - overlap;
+  return union > 0 ? overlap / union : 0;
+}
+
+/**
+ * Collapse the boxes several passes found into one list, best first.
+ *
+ * Overlapping tiles see the same plate twice, and the whole-frame pass sees it
+ * a third time; without this a row would list one car two or three times. Two
+ * boxes that cover more than half of each other are the same plate — a plate
+ * seen from two tiles differs by a few pixels at its edges, never by half its
+ * area — so the weaker one is dropped. Distinct plates never overlap that much,
+ * even parked bumper to bumper.
+ *
+ * A box cut by a tile edge (`truncated`) is dropped outright: the plate
+ * continues into the tile beside it, and the letters that fell inside this one
+ * are not a registration. Tiles overlap by more than a plate is wide, so every
+ * plate narrow enough to matter is seen whole by at least one of them — the
+ * fragment is never the only copy, and reporting it was how a plate on a seam
+ * came out as `13C`.
+ *
+ * @param {Array<{x1:number,y1:number,x2:number,y2:number,score:number,
+ *   truncated?:boolean}>} boxes
+ * @param {{limit?:number, overlap?:number}} [options]
+ * @returns {Array<object>} At most `limit` boxes, highest score first.
+ */
+export function mergeBoxes(boxes, { limit = 8, overlap = 0.5 } = {}) {
+  const kept = [];
+  for (const box of [...(boxes || [])].sort((a, b) => b.score - a.score)) {
+    if (kept.length >= Math.max(1, limit)) break;
+    if (box.truncated) continue;
+    if (kept.some((other) => iou(box, other) > overlap)) continue;
+    kept.push(box);
+  }
+  return kept;
 }
 
 /** Row count and stride of a `[1, n, 7]` or `[n, 7]` detector output. */
