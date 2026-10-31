@@ -17,7 +17,12 @@
  * @module layers/alprReader
  */
 import { t } from '../../i18n/index.js';
-import { PLATE_READER_LAYER_ID, isCachedAnswer, plateLines } from './model.js';
+import {
+  PLATE_READER_LAYER_ID,
+  frameAgeSeconds,
+  isCachedAnswer,
+  plateLines,
+} from './model.js';
 
 export { PLATE_READER_LAYER_ID } from './model.js';
 export { createPlateReaderSource, PlateReaderError } from './sources.js';
@@ -162,7 +167,13 @@ export function createPlateReaderLayer({
       else if (answer)
         info = lines.length ? lines.join(' · ') : t('No plate found');
       else info = t('Nothing read yet');
-      const cached = isCachedAnswer(answer) ? t('Cached answer') : null;
+      const age = frameAgeSeconds(answer);
+      const cached =
+        age !== null
+          ? `${t('Same frame')} · ${age}s`
+          : isCachedAnswer(answer) && t('Cached answer');
+      // A reused frame is still the same answer, so the row says how old it
+      // is rather than letting a minute-old read look like a fresh one.
       return {
         chips: [
           {

@@ -8,10 +8,13 @@
  * the ported YOLOv9 + CCT ONNX pair over it, and answers with the plates it
  * found. Three deliberate constraints:
  *
- *   - Nothing is stored. A result lives in memory for a few seconds so a panel
- *     that redraws does not spend a second inference, and is gone with the
- *     process; no plate text is written to disk, to the log, or to the app's
- *     layer state.
+ *   - Nothing is stored. A result lives in memory so a panel that redraws, or a
+ *     camera still publishing the same bytes, does not spend a second
+ *     inference; it is gone with the process and no plate text is written to
+ *     disk, to the log, or to the app's layer state. Two windows bound it: an
+ *     answer is reused for 8 s whatever happens, and for at most a minute while
+ *     the frame bytes are identical — identical pixels cannot mean a different
+ *     plate.
  *   - The caller names a camera, never a URL. The image comes from the CCTV
  *     catalogue this server already serves, so the route cannot be used to make
  *     the host fetch an arbitrary address.
@@ -19,6 +22,7 @@
  *     the rest of the app keeps working without the reader.
  * @module server/providers/alpr
  */
+import { createHash } from 'node:crypto';
 import { admitSameSiteKeyless } from './common/same-site.js';
 import { AlprUnavailable, getEngine, readPlates } from '../alpr/engine.js';
 
@@ -33,6 +37,22 @@ export const ALPR_CACHE_MS = 8000;
 
 /** Shortest gap between two reads of the same camera, before caching. */
 export const ALPR_MIN_INTERVAL_MS = 1200;
+
+/**
+ * How long an answer may be reused while the camera republishes the same bytes.
+ *
+ * A still camera serves one image for tens of seconds and a detector run over
+ * identical pixels cannot answer differently, so the answer is kept — and then
+ * dropped — for this long from the read that computed it. The clock is never
+ * refreshed by a reuse: a camera that never changes must still be read again a
+ * minute later, which is what keeps this a window rather than a store.
+ */
+export const ALPR_FRAME_REUSE_MS = 60_000;
+
+/** Fingerprint of a frame, to tell a republished still from a new one. */
+function fingerprint(bytes) {
+  return createHash('sha256').update(bytes).digest('base64url');
+}
 
 /** Read a small JSON body; `null` when it is over the limit or unreadable. */
 function readJsonBody(req) {
@@ -76,8 +96,10 @@ export function alprProxy({
   now = Date.now,
   warm = false,
 } = {}) {
-  /** cameraId -> { at, result } */
+  /** cameraId -> { at, result }: the answer reuse window. */
   const cache = new Map();
+  /** cameraId -> { hash, at, result }: answers tied to one set of pixels. */
+  const answers = new Map();
   let warming = false;
 
   /**
@@ -171,6 +193,28 @@ export function alprProxy({
         return json(status, { error: frame?.reason || 'frame_unavailable' });
       }
 
+      // Identical bytes are the same picture: whatever the last read found in
+      // it is still what is there, and a detector run cannot disagree. The
+      // entry is never re-dated here, so the window runs from the read that
+      // actually looked, not from the last request that asked.
+      const frameHash = fingerprint(frame.bytes);
+      const previous = answers.get(cameraId);
+      if (
+        previous &&
+        previous.hash === frameHash &&
+        clock - previous.at < ALPR_FRAME_REUSE_MS
+      )
+        return json(
+          200,
+          {
+            ...previous.result,
+            cached: true,
+            ageMs: clock - previous.at,
+            reusedFrame: true,
+          },
+          { 'x-alpr-cache': 'HIT', 'x-alpr-frame': 'SAME' },
+        );
+
       try {
         const result = await read(frame.bytes);
         const payload = {
@@ -180,10 +224,17 @@ export function alprProxy({
           model: result.model,
           ms: result.ms,
           // Said in the answer rather than only in a document: whoever reads
-          // this response should know the server kept nothing.
+          // this response should know the server kept nothing, and for how long
+          // it may answer from an unchanged frame.
           retention: 'none',
+          frameReuseMs: ALPR_FRAME_REUSE_MS,
         };
         cache.set(cameraId, { at: clock, result: payload });
+        answers.set(cameraId, { hash: frameHash, at: clock, result: payload });
+        if (answers.size > 64) {
+          for (const [key, entry] of answers)
+            if (clock - entry.at > ALPR_FRAME_REUSE_MS) answers.delete(key);
+        }
         if (cache.size > 64) {
           for (const [key, entry] of cache)
             if (clock - entry.at > ALPR_CACHE_MS * 4) cache.delete(key);

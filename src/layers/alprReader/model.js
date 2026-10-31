@@ -59,3 +59,22 @@ export function plateLines(payload) {
 export function isCachedAnswer(payload) {
   return Boolean(payload?.cached);
 }
+
+/**
+ * Seconds since the server last actually looked, when the answer was reused
+ * because the camera republished the same frame.
+ *
+ * A reused answer can be a minute old, so the row has to say how old it is:
+ * "same frame" alone would read as "just checked". Returns null for a fresh
+ * read and for the eight-second answer cache, where the difference does not
+ * matter.
+ *
+ * @param {{reusedFrame?:boolean, ageMs?:number}} payload
+ * @returns {number|null} Whole seconds, or null.
+ */
+export function frameAgeSeconds(payload) {
+  if (!payload?.reusedFrame) return null;
+  const age = Number(payload.ageMs);
+  if (!Number.isFinite(age) || age < 0) return null;
+  return Math.round(age / 1000);
+}

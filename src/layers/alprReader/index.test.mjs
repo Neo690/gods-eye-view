@@ -182,3 +182,23 @@ test('the reader reports no analysable records', () => {
   const layer = createPlateReaderLayer({ source: source(), camera: cctv() });
   assert.deepEqual(layer.getAnalystRecords(), []);
 });
+
+test('a reused frame says how old the answer is', async () => {
+  const reader = {
+    read: async (cameraId) => ({
+      camera: { id: cameraId },
+      plates: [{ text: 'AB-123-CD', confidence: 0.98 }],
+      cached: true,
+      reusedFrame: true,
+      ageMs: 42_400,
+    }),
+  };
+  const layer = createPlateReaderLayer({ source: reader, camera: cctv('cam-1') });
+  layer.init({});
+  layer.enable();
+  layer.getRowControls().chips[0].onClick();
+  await settle();
+  const controls = layer.getRowControls();
+  assert.match(controls.info, /AB-123-CD · 98%/);
+  assert.match(controls.info, /Same frame · 42s/);
+});

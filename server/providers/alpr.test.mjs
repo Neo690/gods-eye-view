@@ -3,7 +3,12 @@ import { EventEmitter } from 'node:events';
 import test from 'node:test';
 
 import { AlprUnavailable } from '../alpr/engine.js';
-import { ALPR_CACHE_MS, ALPR_MIN_INTERVAL_MS, alprProxy } from './alpr.js';
+import {
+  ALPR_CACHE_MS,
+  ALPR_FRAME_REUSE_MS,
+  ALPR_MIN_INTERVAL_MS,
+  alprProxy,
+} from './alpr.js';
 
 /** Capture the middleware the plugin installs on a Vite server. */
 function install(options) {
@@ -218,4 +223,90 @@ test('a foreign origin is refused before any read', async () => {
   await handler(req, res);
   assert.equal(res.statusCode, 403);
   assert.equal(reads, 0);
+});
+
+test('a camera still showing the same frame is not read twice', async () => {
+  let reads = 0;
+  let clock = 0;
+  const handler = install({
+    cctv: { readSnapshot: async () => CAMERA },
+    read: async () => {
+      reads += 1;
+      return RESULT;
+    },
+    now: () => clock,
+  });
+  const first = post({ cameraId: 'cam-1' });
+  await handler(first.req, first.res);
+  // Past both the answer window and the refusal after it, so only the frame
+  // fingerprint can save this read.
+  clock += ALPR_CACHE_MS + ALPR_MIN_INTERVAL_MS + 1_000;
+  const second = post({ cameraId: 'cam-1' });
+  await handler(second.req, second.res);
+  assert.equal(reads, 1, 'identical bytes must not run the detector twice');
+  assert.equal(second.res.statusCode, 200);
+  assert.equal(second.res.payload.cached, true);
+  assert.equal(second.res.payload.reusedFrame, true);
+  assert.equal(second.res.payload.ageMs, clock);
+  assert.equal(second.res.headers['x-alpr-frame'], 'SAME');
+  assert.deepEqual(second.res.payload.plates, RESULT.plates);
+});
+
+test('a new frame is read again', async () => {
+  let reads = 0;
+  let clock = 0;
+  let bytes = Buffer.from('frame-one');
+  const handler = install({
+    cctv: { readSnapshot: async () => ({ ...CAMERA, bytes }) },
+    read: async () => {
+      reads += 1;
+      return RESULT;
+    },
+    now: () => clock,
+  });
+  const first = post({ cameraId: 'cam-1' });
+  await handler(first.req, first.res);
+  bytes = Buffer.from('frame-two');
+  clock += ALPR_CACHE_MS + ALPR_MIN_INTERVAL_MS + 1_000;
+  const second = post({ cameraId: 'cam-1' });
+  await handler(second.req, second.res);
+  assert.equal(reads, 2);
+  assert.equal(second.res.payload.cached, false);
+  assert.equal(second.res.payload.reusedFrame, undefined);
+  assert.equal(second.res.headers['x-alpr-frame'], undefined);
+});
+
+test('reuse runs from the read that looked, and stops after a minute', async () => {
+  let reads = 0;
+  let clock = 0;
+  const handler = install({
+    cctv: { readSnapshot: async () => CAMERA },
+    read: async () => {
+      reads += 1;
+      return RESULT;
+    },
+    now: () => clock,
+  });
+  const first = post({ cameraId: 'cam-1' });
+  await handler(first.req, first.res);
+
+  clock = 30_000;
+  const reused = post({ cameraId: 'cam-1' });
+  await handler(reused.req, reused.res);
+  assert.equal(reads, 1);
+  // The age is measured from the read, so asking again does not re-date the
+  // answer and cannot keep a frozen camera alive forever.
+  assert.equal(reused.res.payload.ageMs, 30_000);
+
+  clock = ALPR_FRAME_REUSE_MS - 1;
+  const nearEdge = post({ cameraId: 'cam-1' });
+  await handler(nearEdge.req, nearEdge.res);
+  assert.equal(reads, 1, 'still inside the window');
+  assert.equal(nearEdge.res.payload.ageMs, ALPR_FRAME_REUSE_MS - 1);
+
+  clock = ALPR_FRAME_REUSE_MS + 1_000;
+  const expired = post({ cameraId: 'cam-1' });
+  await handler(expired.req, expired.res);
+  assert.equal(reads, 2, 'the window has to end, even for an identical frame');
+  assert.equal(expired.res.payload.cached, false);
 });

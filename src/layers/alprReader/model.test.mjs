@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   confidencePercent,
   formatPlate,
+  frameAgeSeconds,
   isCachedAnswer,
   isPlatePayload,
   plateLines,
@@ -55,4 +56,14 @@ test('a payload without a plate array is not an answer', () => {
 test('a cached answer says so', () => {
   assert.equal(isCachedAnswer({ plates: [], cached: true }), true);
   assert.equal(isCachedAnswer({ plates: [] }), false);
+});
+
+test('a reused frame reports how old the last real read is', () => {
+  assert.equal(frameAgeSeconds({ reusedFrame: true, ageMs: 42_400 }), 42);
+  assert.equal(frameAgeSeconds({ reusedFrame: true, ageMs: 0 }), 0);
+  // The eight-second answer cache is fresh enough to say nothing about.
+  assert.equal(frameAgeSeconds({ cached: true, ageMs: 3_000 }), null);
+  assert.equal(frameAgeSeconds({ plates: [] }), null);
+  assert.equal(frameAgeSeconds({ reusedFrame: true, ageMs: -1 }), null);
+  assert.equal(frameAgeSeconds({ reusedFrame: true, ageMs: 'soon' }), null);
 });
