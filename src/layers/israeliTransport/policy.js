@@ -30,6 +30,13 @@ export const ACTIVITY_SELECTED_OVERLAY_SOURCE_ID = `${LAYER_ID}:selected`;
 export const CARD_COHORT_LIMIT = 24;
 
 /**
+ * Company hubs out-rank every site, so an unbounded hub cohort would crowd
+ * every site label out of the painter. A registered hub shares one budgeted
+ * slice of the cohort and the rest of the room goes to its sites.
+ */
+export const HUB_COHORT_LIMIT = 8;
+
+/**
  * Company nodes ride the same entity namespace as sites, under their own
  * marker, so one pick resolver can tell a hub from a site without a second
  * registry.
@@ -40,6 +47,9 @@ export const COMPANY_ENTITY_MARKER = 'company:';
 export const COMPANY_COLOR = '#7FD1FF';
 export const COMPANY_HUB_PIXEL_SIZE = 10;
 export const COMPANY_HUB_SELECTED_PIXEL_SIZE = 14;
+
+/** The hub label weight: every site card loses to it, and it only rises. */
+export const COMPANY_HUB_PRIORITY = 1000;
 
 /** Card words, kept in English until a locale translates them. */
 const CARD_TEXT = Object.freeze({
@@ -230,20 +240,38 @@ export function createSelectedActivityEntry(record, position, copy) {
 
 /**
  * Keep the most significant labels, with a stable tie-break.
+ *
+ * Company hubs always outrank sites, so the hub cohort is budgeted to
+ * `hubLimit` and the remaining room goes to the sites: with the company
+ * registry in the dataset, an unbounded selection would make every ambient
+ * label read as a company and hide the sites the layer exists to show.
+ *
  * @param {object[]} entries
  * @param {number} [limit=CARD_COHORT_LIMIT]
+ * @param {number} [hubLimit=HUB_COHORT_LIMIT]
  * @returns {object[]}
  */
-export function selectActivityCohort(entries, limit = CARD_COHORT_LIMIT) {
+export function selectActivityCohort(
+  entries,
+  limit = CARD_COHORT_LIMIT,
+  hubLimit = HUB_COHORT_LIMIT,
+) {
   const cap = Math.max(0, Math.floor(Number(limit) || 0));
   if (!Array.isArray(entries) || cap === 0) return [];
-  return entries
-    .slice()
-    .sort(
-      (a, b) =>
-        b.priority - a.priority || String(a.id).localeCompare(String(b.id)),
-    )
-    .slice(0, cap);
+  const rank = (a, b) =>
+    b.priority - a.priority || String(a.id).localeCompare(String(b.id));
+  const isHub = (entry) => String(entry?.id || '').startsWith('company-');
+  const hubCap = Math.max(0, Math.floor(Number(hubLimit) || 0));
+  const hubs = [];
+  const sites = [];
+  for (const entry of entries.slice().sort(rank)) {
+    (isHub(entry) ? hubs : sites).push(entry);
+  }
+  const hubShare = Math.min(hubs.length, hubCap);
+  return hubs
+    .slice(0, hubShare)
+    .concat(sites.slice(0, cap - hubShare))
+    .sort(rank);
 }
 
 /**
@@ -322,20 +350,21 @@ export function buildCompanyCard(
 }
 
 /**
- * A hub reads above its sites: one per company, so it is never crowded out by
- * a cluster of its own markers.
+ * The hub weight grows with the sites it is credited on, so the biggest
+ * constellation claims a hub label slot ahead of a three-site entity.
  * @param {object} company
  * @param {{x:number,y:number,z:number}} position
+ * @param {number} [siteCount=0]
  * @returns {object}
  */
-export function createCompanyOverlayEntry(company, position) {
+export function createCompanyOverlayEntry(company, position, siteCount = 0) {
   return {
     id: `company-${company.key}`,
     position,
     variant: 'label',
     title: String(company.name),
     accent: COMPANY_COLOR,
-    priority: 1000,
+    priority: COMPANY_HUB_PRIORITY + Math.min(99, Number(siteCount) || 0),
     collisionGroup: 'ambient-label',
     paintLane: 'ambient-label',
     interactive: false,

@@ -40,7 +40,7 @@ import {
   createSelectedActivityEntry,
   selectActivityCohort,
 } from './policy.js';
-import { COMPANIES, companyFor } from './companies.js';
+import { COMPANIES, COMPANIES_BY_KEY, companyFor } from './companies.js';
 import { SECTOR_COLORS, TRANSPORT_ACTIVITIES } from './data.js';
 import { isPointerFree } from '../../data/inputOwnership.js';
 import { t, tn } from '../../i18n/index.js';
@@ -139,7 +139,9 @@ export function createIsraeliTransportLayer({
     const companies = [];
     for (const company of COMPANIES) {
       const sites = sitesOfCompany(company.key);
-      if (!sites.length) continue;
+      // A company with no site record yet still stands on the map at its
+      // published head office, so the registry reads as one constellation —
+      // not as a page that hides its own entries.
       const hubPosition = Cesium.Cartesian3.fromDegrees(
         company.hq.lon,
         company.hq.lat,
@@ -162,6 +164,32 @@ export function createIsraeliTransportLayer({
             },
           }),
         );
+      }
+
+      // The ownership the sources state joins two hubs, so a subsidiary's
+      // constellation reaches its parent even before it has a site of its
+      // own: the neural map reads as a group, not as isolated clusters.
+      if (company.parent) {
+        const parent = COMPANIES_BY_KEY[company.parent];
+        if (parent && parent.key !== company.key) {
+          _dataSource.entities.add(
+            new Cesium.Entity({
+              id: `${companyEntityId(company.key)}:parent-link:${parent.key}`,
+              polyline: {
+                positions: [
+                  Cesium.Cartesian3.fromDegrees(parent.hq.lon, parent.hq.lat),
+                  hubPosition,
+                ],
+                width: COMPANY_LINK_WIDTH,
+                clampToGround: true,
+                material:
+                  Cesium.Color.fromCssColorString(COMPANY_LINK_COLOR).withAlpha(
+                    0.55,
+                  ),
+              },
+            }),
+          );
+        }
       }
       _dataSource.entities.add(
         new Cesium.Entity({
@@ -186,7 +214,7 @@ export function createIsraeliTransportLayer({
         }),
       );
       companies.push({ company, sites, position: hubPosition });
-      cards.push(createCompanyOverlayEntry(company, hubPosition));
+      cards.push(createCompanyOverlayEntry(company, hubPosition, sites.length));
     }
     _companiesByKey = new Map(
       companies.map((entry) => [entry.company.key, entry]),
@@ -197,7 +225,11 @@ export function createIsraeliTransportLayer({
       selectActivityCohort(cards, CARD_COHORT_LIMIT),
       {
         cohortLimit: CARD_COHORT_LIMIT,
-        moving: false,
+        // The labels are pinned to their dots on the ground, so the arbiter
+        // re-solves on its bounded cadence while the camera moves. Without it
+        // the placement only refreshes on camera-change thresholds and the
+        // cards visibly slide behind their dots during a continuous drag.
+        moving: true,
       },
     );
     _lastUpdate = Date.now();
@@ -229,7 +261,7 @@ export function createIsraeliTransportLayer({
       overlayHost.setEntries(ACTIVITY_SELECTED_OVERLAY_SOURCE_ID, [entry], {
         cohortLimit: 1,
         collisionCapacity: 1,
-        moving: false,
+        moving: true,
       });
   }
 
@@ -263,7 +295,7 @@ export function createIsraeliTransportLayer({
       overlayHost.setEntries(ACTIVITY_SELECTED_OVERLAY_SOURCE_ID, [card], {
         cohortLimit: 1,
         collisionCapacity: 1,
-        moving: false,
+        moving: true,
       });
   }
 

@@ -182,6 +182,31 @@ test('the cohort keeps the cap and breaks ties deterministically', () => {
   assert.deepEqual(first, again);
 });
 
+test('the hub cohort shares its budget so the site labels survive', () => {
+  const sites = Array.from({ length: 30 }, (_, index) => ({
+    id: `site-${index}`,
+    priority: 60,
+  }));
+  const hubs = Array.from({ length: 45 }, (_, index) => ({
+    id: `company-${index}`,
+    priority: 1000,
+  }));
+  const cohort = selectActivityCohort(sites.concat(hubs));
+  assert.equal(cohort.length, CARD_COHORT_LIMIT);
+  const hubCount = cohort.filter((entry) => entry.id.startsWith('company-')).length;
+  assert.ok(hubCount > 0 && hubCount <= 8, `hub labels occupy ${hubCount} slots`);
+  assert.ok(
+    cohort.filter((entry) => entry.id.startsWith('site-')).length >
+      hubCount,
+    'the majority of the cohort still reads and labels a site',
+  );
+  // UN-bounded selection (no hub budget) would spam only with company cards.
+  assert.ok(
+    cohort.some((entry) => entry.id.startsWith('site-')),
+    'a hub cap is what keeps the site labels publishable at all',
+  );
+});
+
 test('every company behind a site has a node, and every node has a site', () => {
   const keys = new Set();
   for (const company of COMPANIES) {
@@ -203,14 +228,48 @@ test('every company behind a site has a node, and every node has a site', () => 
     assert.ok(company, `no company node for ${record.company}`);
     assert.ok(company.matches.includes(record.company) || record.company.startsWith(company.matches[0]), record.company);
   }
-  for (const company of COMPANIES) {
+});
+
+test('the security companies sit in Israel in the registry', () => {
+  const security = [
+    'accubeat',
+    'ashot',
+    'asio',
+    'cti-intl',
+    'dagan-optics',
+    'imco',
+    'infinidome',
+    'lowental-hybrid',
+    'magam',
+    'orbit-cs',
+    'parazero',
+    'paxis',
+    'redler',
+    'sol-security',
+    'solarpaint',
+    'steadicopter',
+    'supergum',
+    'thermal-beacon',
+    'tracense',
+  ];
+  for (const key of security) {
+    const company = COMPANIES_BY_KEY[key];
+    assert.ok(company, `${key} missing from COMPANIES`);
+    assert.equal(company.hq.country, 'Israel', `${key} hq country`);
     assert.ok(
-      TRANSPORT_ACTIVITIES.some(
-        (record) => companyFor(record.company)?.key === company.key,
-      ),
-      `${company.key} has no site in the layer`,
+      company.hq.lat > 29.4 && company.hq.lat < 33.3 &&
+        company.hq.lon > 34.2 && company.hq.lon < 36,
+      `${key} hq is not inside Israel`,
     );
+    assert.ok(company.business.trim(), `${key} business`);
   }
+  // A company with no site record still draws, at its head office.
+  assert.equal(
+    buildCompanyCard(COMPANIES_BY_KEY.accubeat, [], translate).details.includes(
+      'No site in this layer',
+    ),
+    true,
+  );
 });
 
 test('a record that names its group first still resolves to that group', () => {
