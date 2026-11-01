@@ -14,7 +14,10 @@
   border-radius: 10px;
   background: rgba(4, 10, 18, 0.94);
   color: #d6ecff;
-  font: 12px/1.45 'Rajdhani', system-ui, sans-serif;
+  font:
+    12px/1.45 'Rajdhani',
+    system-ui,
+    sans-serif;
   letter-spacing: 0.02em;
   box-shadow: 0 18px 46px rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(6px);
@@ -99,6 +102,51 @@
 
 .app-update-action:not([disabled]):hover {
   background: rgba(127, 209, 255, 0.25);
+}
+
+/* The shell's own channel, emphasized: the amber accent is the panel's
+   existing "update available" state color, carried onto one dedicated
+   button above the rows. */
+.app-update-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 10px 0 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 209, 102, 0.5);
+  border-radius: 8px;
+  background: rgba(255, 209, 102, 0.08);
+}
+
+.app-update-hero-state {
+  font-weight: 600;
+  color: #ffd166;
+}
+
+.app-update-hero:not(.app-update-hero-open) .app-update-hero-state,
+.app-update-hero-action:not(.app-update-hero-open) {
+  color: rgba(214, 236, 255, 0.6);
+  font-weight: 500;
+}
+
+.app-update-hero-action {
+  margin-left: auto;
+  padding: 5px 14px;
+  border: 1px solid rgba(255, 209, 102, 0.6);
+  border-radius: 5px;
+  background: rgba(255, 209, 102, 0.18);
+  color: #ffe9b3;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.app-update-hero-action:hover {
+  background: rgba(255, 209, 102, 0.3);
+}
+
+.app-update-hero-action:not(.app-update-hero-open) {
+  border-color: rgba(127, 209, 255, 0.35);
+  background: rgba(127, 209, 255, 0.08);
 }
 
 /* ── Top-center Globe Actions ────────────────── */

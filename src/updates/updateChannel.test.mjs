@@ -339,6 +339,83 @@ test('the panel renders one row per channel and opens the artefact on click', as
   assert.deepEqual(opened, [
     `https://github.com/${REPO}/releases/download/x/gods-eye-view.apk`,
   ]);
+  // The harness shell is Windows, whose channel resolved as current: the hero
+  // exists but stays dimmed, offering the release page and not a fake
+  // "update waiting" state.
+  const hero = dialog.children.find((c) =>
+    String(c.className).includes('app-update-hero'),
+  );
+  assert.ok(hero, 'the current platform still gets its dedicated button');
+  assert.equal(
+    String(hero.children[1].textContent).includes('Windows'),
+    false,
+    'a dimmed hero does not promise an update',
+  );
+  panel.destroy();
+});
+
+test('the shell\'s own platform gets an amber hero button that opens its artefact', async () => {
+  const { doc, button } = makeDoc();
+  const opened = [];
+  let info;
+  const panel = installUpdatePanel(
+    { document: doc },
+    {
+      openExternal: (url) => opened.push(url),
+      checkForUpdate: () => info,
+    },
+  );
+  info = resolveUpdateInfo(
+    [
+      release('desktop-latest', NEWER, [asset('GEV Setup 1.1.0.exe')]),
+      release('apk-latest', OLD, [asset('gods-eye-view.apk')]),
+    ],
+    bundled,
+  );
+  button.dispatch('click');
+  await drain();
+  const dialog = doc.body.children.find((c) => c.tagName === 'DIV');
+  const hero = dialog.children.find((c) =>
+    String(c.className).includes('app-update-hero'),
+  );
+  assert.ok(hero, 'the available current platform gets the hero');
+  const heroAction = hero.children.find((c) => c.tagName === 'BUTTON');
+  assert.match(
+    String(heroAction.textContent),
+    /Windows/,
+    'the hero names the platform it serves',
+  );
+  heroAction.dispatch('click');
+  assert.deepEqual(opened, [
+    `https://github.com/${REPO}/releases/download/x/GEV Setup 1.1.0.exe`,
+  ]);
+  // The rows stay one per channel next to the hero.
+  const list = dialog.children.find((c) => c.className === 'app-update-rows');
+  assert.equal(list.children.length, CHANNELS.length);
+  panel.destroy();
+});
+
+test('the hero is absent when the shell\'s channel was never published', async () => {
+  const { doc, button } = makeDoc();
+  let info;
+  const panel = installUpdatePanel(
+    { document: doc },
+    {
+      openExternal: () => {},
+      checkForUpdate: () => info,
+    },
+  );
+  info = resolveUpdateInfo([release('apk-latest', NEWER, [asset('gods-eye-view.apk')])], bundled);
+  button.dispatch('click');
+  await drain();
+  const dialog = doc.body.children.find((c) => c.tagName === 'DIV');
+  assert.equal(
+    dialog.children.some((c) =>
+      String(c.className).includes('app-update-hero'),
+    ),
+    false,
+    'no hero can be offered for a channel with no release at all',
+  );
   panel.destroy();
 });
 

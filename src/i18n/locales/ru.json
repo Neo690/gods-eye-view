@@ -3269,6 +3269,7 @@
   "The release list could not be read (network or rate limit).": "Не удалось прочитать список релизов (сеть или лимит запросов).",
   "Check for app updates": "Проверить обновления приложения",
   "Check for updates on the app channels": "Проверить обновления в каналах приложения",
+  "Get the {platform} update": "Скачать обновление для {platform}",
   "Android": "Android",
   "iOS": "iOS",
   "Windows": "Windows"

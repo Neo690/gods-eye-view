@@ -3403,6 +3403,7 @@
   "The release list could not be read (network or rate limit).": "تعذّرت قراءة قائمة الإصدارات (الشبكة أو حد الطلبات).",
   "Check for app updates": "التحقق من تحديثات التطبيق",
   "Check for updates on the app channels": "التحقق من التحديثات في قنوات التطبيق",
+  "Get the {platform} update": "احصل على تحديث {platform}",
   "Android": "Android",
   "iOS": "iOS",
   "Windows": "Windows"

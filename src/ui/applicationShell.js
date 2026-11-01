@@ -1839,7 +1839,8 @@ export class StyleManager extends ShellFacade {
     this._updatePanel = installUpdatePanel(
       { document: window.document },
       {
-        openExternal: (url) => window.open(url, '_blank', 'noopener,noreferrer'),
+        openExternal: (url) =>
+          window.open(url, '_blank', 'noopener,noreferrer'),
       },
     );
   }

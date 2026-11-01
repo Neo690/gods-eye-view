@@ -3068,6 +3068,7 @@
   "The release list could not be read (network or rate limit).": "无法读取发布列表(网络或请求受限)。",
   "Check for app updates": "检查应用更新",
   "Check for updates on the app channels": "检查应用各频道的更新",
+  "Get the {platform} update": "获取 {platform} 更新",
   "Android": "Android",
   "iOS": "iOS",
   "Windows": "Windows"

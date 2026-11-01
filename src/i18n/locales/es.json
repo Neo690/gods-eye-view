@@ -3202,6 +3202,7 @@
   "The release list could not be read (network or rate limit).": "No se pudo leer la lista de publicaciones (red o límite de peticiones).",
   "Check for app updates": "Comprobar actualizaciones de la aplicación",
   "Check for updates on the app channels": "Comprobar actualizaciones en los canales de la aplicación",
+  "Get the {platform} update": "Obtener la actualización de {platform}",
   "Android": "Android",
   "iOS": "iOS",
   "Windows": "Windows"

@@ -5,7 +5,11 @@
  * panel that runs `checkForUpdate` and lists the three published channels:
  * each line names the platform, its rolling release's publish time and the
  * action that takes it — opening the artefact on the channel the console is
- * running from, or the release page for the others. Opening happens through
+ * running from, or the release page for the others. The shell's own channel
+ * is additionally answered by a dedicated hero button above the rows — the
+ * one measure that matters on this machine: an amber "get the update" when a
+ * newer build is published, a dimmed "open release" when the console is
+ * current. Opening happens through
  * `openExternal`, supplied by the shell that owns this document: on Android a
  * tap lands on the download via `ACTION_VIEW` (MainActivity already routes
  * non-asset popups to the system), on desktop Electron hands the popup to
@@ -154,9 +158,38 @@ export function installUpdatePanel(services = {}, hooks) {
         ? t('Releases from Neo690/gods-eye-view:')
         : t('The release list could not be read (network or rate limit).');
 
+      // The shell's own channel is the one this console can actually take, so
+      // it gets a dedicated, emphasized button above the per-channel rows:
+      // amber when an update is waiting, dimmed when the console is current,
+      // and absent when the channel has not been published at all.
+      const platform = shellPlatform();
+      const own = info.channels.find((c) => c.id === platform);
+      if (own?.ok) {
+        const hero = doc.createElement('div');
+        hero.className = 'app-update-hero';
+        const state = doc.createElement('span');
+        state.textContent = own.available
+          ? t('update available')
+          : t(CURRENT_LABEL);
+        state.className = 'app-update-hero-state';
+        hero.appendChild(state);
+
+        const heroAction = doc.createElement('button');
+        heroAction.className = 'app-update-hero-action';
+        if (own.available) heroAction.classList?.add('app-update-hero-open');
+        heroAction.textContent = own.available
+          ? t('Get the {platform} update', { platform: t(own.label) })
+          : t('Open release');
+        heroAction.title = String(own.openUrl);
+        heroAction.addEventListener?.('click', () => {
+          hooks.openExternal(String(own.openUrl));
+        });
+        hero.appendChild(heroAction);
+        panel.appendChild(hero);
+      }
+
       const list = doc.createElement('div');
       list.className = 'app-update-rows';
-      const platform = shellPlatform();
       for (const channel of info.channels) {
         list.appendChild(channelRow(doc, channel, platform, hooks));
       }
@@ -180,7 +213,8 @@ export function installUpdatePanel(services = {}, hooks) {
   const onClickOutside = (event) => {
     if (!open || !panel) return;
     const target = event.target;
-    if (panel.contains(target) || target === btn || btn.contains?.(target)) return;
+    if (panel.contains(target) || target === btn || btn.contains?.(target))
+      return;
     open = false;
     panel.setAttribute('hidden', '');
   };
