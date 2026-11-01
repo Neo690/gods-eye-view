@@ -225,11 +225,15 @@ export function createIsraeliTransportLayer({
       selectActivityCohort(cards, CARD_COHORT_LIMIT),
       {
         cohortLimit: CARD_COHORT_LIMIT,
-        // The labels are pinned to their dots on the ground, so the arbiter
-        // re-solves on its bounded cadence while the camera moves. Without it
-        // the placement only refreshes on camera-change thresholds and the
-        // cards visibly slide behind their dots during a continuous drag.
+        // The labels are pinned to their dots on the ground, so the synced
+        // cohort re-solves on every rendered frame while the camera moves.
+        // The default moving cadence (125 ms) lets the placement lag its
+        // projection by the drag speed times that interval — at whole-globe
+        // framing the cards visibly slide ~30 px behind their dots before
+        // catching up. Zero means "solve when the domain renders", which is
+        // every frame the camera is actually drawing.
         moving: true,
+        solveIntervalMs: 0,
       },
     );
     _lastUpdate = Date.now();
@@ -261,7 +265,10 @@ export function createIsraeliTransportLayer({
       overlayHost.setEntries(ACTIVITY_SELECTED_OVERLAY_SOURCE_ID, [entry], {
         cohortLimit: 1,
         collisionCapacity: 1,
+        // Same reasoning as the cohort: the selection must not trail its dot
+        // during a continuous camera drag.
         moving: true,
+        solveIntervalMs: 0,
       });
   }
 
@@ -295,7 +302,10 @@ export function createIsraeliTransportLayer({
       overlayHost.setEntries(ACTIVITY_SELECTED_OVERLAY_SOURCE_ID, [card], {
         cohortLimit: 1,
         collisionCapacity: 1,
+        // Same reasoning as the cohort: the company fiche must not trail its
+        // hub dot during a continuous camera drag.
         moving: true,
+        solveIntervalMs: 0,
       });
   }
 
