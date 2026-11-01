@@ -111,9 +111,10 @@ const release = (tag, published, assets = []) => ({
   published_at: published,
   assets,
 });
-const asset = (name) => ({
+const asset = (name, stamps = {}) => ({
   name,
   browser_download_url: `https://github.com/${REPO}/releases/download/x/${name}`,
+  ...stamps,
 });
 
 const OLD = '2026-10-20T12:00:00Z';
@@ -186,6 +187,68 @@ test('the windows matcher only takes the .exe, not any asset named SETUP', () =>
   );
   const windows = info.channels.find((c) => c.id === 'windows');
   assert.equal(windows.artefactName, 'GEV Setup 1.0.exe');
+});
+
+test('a --clobber republication is an update despite the frozen release date', () => {
+  // Real shape of apk-latest on 2026-11-01: the workflow created the release
+  // on 2026-10-22 and replaces the APK in place on every run, so
+  // release.published_at never moves again — only the asset's own stamps
+  // carry the moment the current build was published. A bundle built between
+  // the two must still see the replacement as an update it can take.
+  const info = resolveUpdateInfo(
+    [
+      {
+        tag_name: 'apk-latest',
+        published_at: '2026-10-22T18:49:11Z',
+        updated_at: '2026-11-01T13:26:17Z',
+        assets: [
+          asset('gods-eye-view.apk', {
+            created_at: '2026-11-01T13:26:14Z',
+            updated_at: '2026-11-01T13:26:16Z',
+          }),
+        ],
+      },
+    ],
+    { buildTime: '2026-10-28T09:00:00Z', buildSha: 'feedbeef6789' },
+  );
+  const android = info.channels.find((c) => c.id === 'android');
+  assert.equal(android.available, true, 'the replacement counts as an update');
+  // The panel's own line dates the artefact, not the page it sits on.
+  assert.equal(android.publishedAt, '2026-11-01T13:26:16.000Z');
+});
+
+test('an artefact older than the bundle stays current even from a later page date', () => {
+  // Guard on the inverse face: a page touched on release-editing churn after
+  // the artefact shipped must not turn the same APK into an update.
+  const info = resolveUpdateInfo(
+    [
+      {
+        tag_name: 'apk-latest',
+        published_at: '2026-10-22T18:49:11Z',
+        updated_at: '2026-11-01T13:26:17Z',
+        assets: [asset('gods-eye-view.apk', {
+          created_at: '2026-11-01T13:26:14Z',
+          updated_at: '2026-11-01T13:26:16Z',
+        })],
+      },
+    ],
+    { buildTime: '2026-11-02T00:00:00Z', buildSha: 'feedbeef6789' },
+  );
+  const android = info.channels.find((c) => c.id === 'android');
+  assert.equal(android.available, false);
+  assert.equal(android.publishedAt, '2026-11-01T13:26:16.000Z');
+});
+
+test('assets without stamps fall back to the release page timestamps', () => {
+  // The stamp candidates never throw on an asset whose dates were stripped,
+  // and resolve to the page's published_at as before.
+  const info = resolveUpdateInfo(
+    [release('apk-latest', NEWER, [asset('gods-eye-view.apk')])],
+    bundled,
+  );
+  const android = info.channels.find((c) => c.id === 'android');
+  assert.equal(android.available, true);
+  assert.equal(android.publishedAt, new Date(Date.parse(NEWER)).toISOString());
 });
 
 // ── shellPlatform ────────────────────────────

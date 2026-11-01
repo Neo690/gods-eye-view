@@ -61,14 +61,27 @@ export function shellPlatform(userAgent = String(navigator?.userAgent || '')) {
   return 'windows';
 }
 
+/** First date among the candidate stamps, or 0 when none parses. */
+function firstStamp(values) {
+  for (const value of values) {
+    const parsed = Date.parse(String(value || ''));
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return 0;
+}
+
 /**
  * Reduce a GitHub releases payload to per-channel facts.
  *
  * A rolling release has no semver — each publication replaces the one before
- * it, so the only honest comparison is its `published_at` against the moment
- * this bundle was built. A channel whose release predates the bundle is a
- * channel the bundle is up to date with; one that is newer is an update; one
- * that is missing (iOS without signing) is reported as unavailable.
+ * it. Its channels are republished in place (`upload --clobber` + `gh release
+ * edit`), so `release.published_at` stays frozen at the channel's first-ever
+ * upload and can never measure a later replacement; the honest comparison is
+ * the published artefact's own timestamp, which an upload refreshes, against
+ * the moment this bundle was built. A channel whose newest artefact predates
+ * the bundle is a channel the bundle is up to date with; one that is newer is
+ * an update; one that is missing (iOS without signing) is reported as
+ * unavailable.
  *
  * @param {Array} releases decoded api.github.com releases payload
  * @param {{ buildTime: string, buildSha: string }} current this bundle's stamps
@@ -78,7 +91,12 @@ export function resolveUpdateInfo(
   releases,
   current = { buildTime: '', buildSha: '' },
 ) {
-  const byTag = new Map((Array.isArray(releases) ? releases : []).map((r) => [String(r?.tag_name || ''), r]));
+  const byTag = new Map(
+    (Array.isArray(releases) ? releases : []).map((r) => [
+      String(r?.tag_name || ''),
+      r,
+    ]),
+  );
   const buildMs = Date.parse(current.buildTime) || 0;
   return {
     buildTime: current.buildTime,
@@ -94,11 +112,25 @@ export function resolveUpdateInfo(
         const name = String(a?.name || '').toLowerCase();
         return (
           name.includes(channel.assetMatch) &&
-          (!channel.assetMatchExtension || name.endsWith(channel.assetMatchExtension))
+          (!channel.assetMatchExtension ||
+            name.endsWith(channel.assetMatchExtension))
         );
       });
-      const publishedAt = String(release.published_at || '');
-      const publishedMs = Date.parse(publishedAt) || 0;
+      // The channel's published moment is when its artefact last shipped:
+      // an in-place republication refreshes the asset's `updated_at` while
+      // leaving `release.published_at` at the first-ever upload. Assets
+      // without stamps (hand-uploaded, or a payload shape that omits them)
+      // fall back to the release page's own stamps, newest candidate first.
+      const publishedMs = firstStamp(
+        artefact
+          ? [
+              artefact.updated_at,
+              artefact.created_at,
+              release.published_at,
+              release.updated_at,
+            ]
+          : [release.published_at, release.updated_at],
+      );
       return {
         ...channel,
         ok: true,
@@ -106,9 +138,8 @@ export function resolveUpdateInfo(
         openUrl: artefact
           ? String(artefact.browser_download_url)
           : `https://github.com/${REPO}/releases/${tag}`,
-        publishedAt,
-        available:
-          buildMs > 0 && publishedMs > 0 && publishedMs > buildMs,
+        publishedAt: publishedMs ? new Date(publishedMs).toISOString() : '',
+        available: buildMs > 0 && publishedMs > 0 && publishedMs > buildMs,
       };
     }),
   };
