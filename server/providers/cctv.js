@@ -22,6 +22,7 @@ import { sanitizeCctvRangeHeader } from './cctv/range.js';
 import { admitSameSiteKeyless } from './common/same-site.js';
 import { PROXY_SIGNALS } from '../../src/localRequestGate.mjs';
 import { createHlsPuller } from './cctv/stream.js';
+import { createHlsFrameReader, isHlsMediaUrl } from './cctv/hlsFrame.js';
 import { googleServerApiKey } from './places/google-key.js';
 export { CCTV_FRAME_FETCH_TIMEOUT_MS, fetchCctvImageFromUpstream };
 /**
@@ -47,6 +48,8 @@ export function cctvProxy({ sourceRoot = process.cwd() } = {}) {
   const HEALTH_MAX_ENTRIES = CCTV_MAX_SOURCES_CEILING;
   /** Live HLS strategies (see ./cctv/stream.js). Shared across dev and preview. */
   const puller = createHlsPuller();
+  /** Frame reads for the same sessions (see ./cctv/hlsFrame.js). */
+  const hlsFrames = createHlsFrameReader({ puller });
 
   /** Update the health entry for a camera, evicting the oldest entry if at capacity. */
   const setHealth = (cameraId, patch) => {
@@ -90,9 +93,13 @@ export function cctvProxy({ sourceRoot = process.cwd() } = {}) {
    *
    * The plate reader asks for the real pixels an operator's camera published —
    * never the Street View stand-in the frame route falls back to, which is a
-   * street, not a feed. A camera whose source is a video stream has no still to
-   * read, and one whose upstream is down answers `frame-unavailable` rather than
-   * a picture of somewhere else.
+   * street, not a feed. A camera whose upstream is down answers
+   * `frame-unavailable` rather than a picture of somewhere else.
+   *
+   * A live HLS camera has no still URL to fetch, so instead of answering
+   * unavailable outright its own stream is asked for one frame ([./cctv/
+   * hlsFrame.js](./cctv/hlsFrame.js)): the reader's pixels are the camera's
+   * pixels, minutes nobody else's.
    *
    * Only server-registered sources are ever fetched: the caller names a camera
    * id, never a URL, so this route cannot be turned into an SSRF hop.
@@ -108,10 +115,33 @@ export function cctvProxy({ sourceRoot = process.cwd() } = {}) {
     const sources = await getCctvSources();
     const source = sources.find((candidate) => candidate.id === cameraId);
     if (!source) return { ok: false, reason: 'unknown-camera' };
+    const feedType = normalizeFeedType(source.feedType);
     const upstream =
-      source.snapshotUrl ||
-      (!isVideoFeedType(normalizeFeedType(source.feedType)) ? source.url : '');
-    if (!upstream) return { ok: false, reason: 'frame-unavailable' };
+      source.snapshotUrl || (!isVideoFeedType(feedType) ? source.url : '');
+    if (!upstream) {
+      // A video-only camera with no still of its own: one frame out of the
+      // stream the media route already knows how to pull, still undefined
+      // by any URL this request could have named.
+      if (feedType === 'hls' && isHlsMediaUrl(source.url)) {
+        const frame = await hlsFrames
+          .read({ cameraId, url: source.url })
+          .catch(() => null);
+        if (frame) {
+          return {
+            ok: true,
+            bytes: frame,
+            contentType: 'image/jpeg',
+            camera: {
+              id: source.id,
+              name: source.name || source.id,
+              city: source.city || '',
+              provider: source.provider || '',
+            },
+          };
+        }
+      }
+      return { ok: false, reason: 'frame-unavailable' };
+    }
     try {
       const image =
         source.sourceKind === 'txdot-its'

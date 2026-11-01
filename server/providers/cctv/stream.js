@@ -292,6 +292,29 @@ export function createHlsPuller({
     }
     return false;
   };
+  /**
+   * The most recently buffered segment bodies, newest first.
+   *
+   * The map keeps its insertion order and eviction always removes the oldest
+   * key, so the tail of the map is literally the newest material. A frame read
+   * asks for a bounded handful: the newest enough to be current, and the one
+   * before it as a fallback when the newest will not decode. Bodies are shared
+   * Buffer references, never copies and never mutated by a reader.
+   */
+  const getRecentSegments = (cameraId, token, leaseId = 'legacy', max = 2) => {
+    const entry = active.get(cameraId);
+    if (!entry || entry.token !== token || !entry.leases.has(leaseId))
+      return [];
+    const bodies = [...entry.segments.values()]
+      .slice(-Math.max(1, max))
+      .reverse()
+      .map((segment) => segment.body)
+      .filter(Boolean);
+    if (!bodies.length) return [];
+    touch(entry, leaseId);
+    return bodies;
+  };
+
   const buildPlaylist = async (entry, cameraId, leaseId = 'legacy') => {
     if (entry.stopping || entry.segments.size < 2) return null;
     touch(entry, leaseId);
@@ -337,6 +360,7 @@ export function createHlsPuller({
     waitReady,
     buildPlaylist,
     getSegment,
+    getRecentSegments,
     stop,
     release,
     shutdown,
