@@ -193,6 +193,33 @@ export function createBrowserViteConfig({
       'import.meta.env.MAPILLARY_CLIENT_TOKEN': JSON.stringify(
         mapillaryToken ?? '',
       ),
+      // The update check compares these two stamps against the published GitHub
+      // releases (apk-latest / ios-latest / desktop-latest): a bundle built
+      // before the newest published build of its channel knows a newer one
+      // exists. Both are build inputs, never runtime state, so a rebuild always
+      // moves them and a cached stale copy keeps its older stamp.
+      'import.meta.env.GEV_BUILD_TIME': JSON.stringify(
+        new Date().toISOString(),
+      ),
+      'import.meta.env.GEV_BUILD_SHA': JSON.stringify(
+        // Short commit sha of the checkout the bundle was built from; empty in
+        // sandboxes without git — the UI then falls back to the timestamp.
+        (function () {
+          try {
+            const { execFileSync } = require('node:child_process');
+            return execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], {
+              cwd: __dirname,
+              stdio: ['ignore', 'pipe', 'ignore'],
+              timeout: 5000,
+            })
+              .toString()
+              .trim()
+              .slice(0, 12);
+          } catch {
+            return process.env.GEV_BUILD_SHA || '';
+          }
+        })(),
+      ),
     },
     build: { chunkSizeWarningLimit: 1500 },
   };

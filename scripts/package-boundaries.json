@@ -844,6 +844,8 @@
       "src/ui/visualPresets.js",
       "src/ui/visualSettings.js",
       "src/ui/weatherPanel.js",
+      "src/updates/updateChannel.js",
+      "src/updates/updatePanel.js",
       "src/worldFocus.js"
     ],
     "external": ["cesium"]
@@ -2678,6 +2680,8 @@
       "src/ui/visualPresets.js",
       "src/ui/visualSettings.js",
       "src/ui/weatherPanel.js",
+      "src/updates/updateChannel.js",
+      "src/updates/updatePanel.js",
       "src/view/index.js",
       "src/voice/actionSchemas.js",
       "src/voice/cloudVoiceAuth.js",

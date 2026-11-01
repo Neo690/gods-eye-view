@@ -1,3 +1,4 @@
+import { installUpdatePanel } from '../updates/updatePanel.js';
 import { resolveImageryHost } from '../layers/weather/imageryHost.js';
 import { ShellFacade } from './shellFacade.js';
 import { AircraftDisplay } from './aircraftDisplay.js';
@@ -593,6 +594,7 @@ export class StyleManager extends ShellFacade {
     this._initGlobalContextPanel();
     this._initLocationBar();
     this._initShareButton();
+    this._initUpdatePanel();
     this._initCameraOrientationControls();
     this._initMapViewControls();
     this._initClearSelectedLayersButton();
@@ -1823,7 +1825,26 @@ export class StyleManager extends ShellFacade {
     });
   }
 
-  // ── HUD Toggle ───────────────────────────────
+  // ── App Update Panel ───────────────────────
+
+  /**
+   * Wires the chrome-top update button. The panel resolves the published
+   * channels against this bundle's build stamps, and every download it offers
+   * leaves through the shell's external route: `window.open` is what Android
+   * already knows how to route (routeWindow → ACTION_VIEW), iOS opens Safari
+   * on target="_blank", and desktop hands the popup to the system browser
+   * (setWindowOpenHandler in desktop/main.js).
+   */
+  _initUpdatePanel() {
+    this._updatePanel = installUpdatePanel(
+      { document: window.document },
+      {
+        openExternal: (url) => window.open(url, '_blank', 'noopener,noreferrer'),
+      },
+    );
+  }
+
+  // ── HUD Toggle ────────────────────────────────
 
   /**
    * Wires the HUD toggle button, initializes the default HUD variant to 'tactical',
@@ -1908,6 +1929,7 @@ export class StyleManager extends ShellFacade {
     this._disposed = true;
     this._navigation.stop();
     this._shareState.destroy();
+    this._updatePanel?.destroy();
     this._locationNavigation.destroy();
     this._lifetime.destroy();
     for (const unregister of this._unsavedWorkChecks?.splice(0) ?? [])

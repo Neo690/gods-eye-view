@@ -1,3 +1,106 @@
+/* ── App update panel ─────────────────────────
+   The chrome-top system_update button opens this dialog over the status
+   region. Fixed, small, theme colors only — no new palette. */
+#app-update-panel {
+  position: fixed;
+  top: 120px;
+  right: 50%;
+  transform: translateX(50%);
+  z-index: 120; /* over the chrome row, under the modal layers */
+  min-width: min(420px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  padding: 14px 16px;
+  border: 1px solid rgba(120, 200, 255, 0.35);
+  border-radius: 10px;
+  background: rgba(4, 10, 18, 0.94);
+  color: #d6ecff;
+  font: 12px/1.45 'Rajdhani', system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+}
+
+#app-update-panel h2 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #7fd1ff;
+}
+
+#app-update-panel[hidden] {
+  display: none;
+}
+
+.app-update-build,
+.app-update-status {
+  margin: 4px 0 8px;
+  color: rgba(214, 236, 255, 0.75);
+}
+
+.app-update-rows {
+  display: grid;
+  gap: 6px;
+}
+
+.app-update-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(127, 209, 255, 0.14);
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+
+.app-update-row-current {
+  border-color: rgba(127, 209, 255, 0.45);
+  background: rgba(127, 209, 255, 0.07);
+}
+
+.app-update-platform {
+  font-weight: 700;
+  color: #9fdcff;
+  min-width: 64px;
+}
+
+.app-update-state {
+  color: rgba(214, 236, 255, 0.8);
+}
+
+.app-update-state-open {
+  color: #ffd166;
+}
+
+.app-update-state-absent {
+  color: rgba(214, 236, 255, 0.4);
+}
+
+.app-update-published,
+.app-update-artefact {
+  color: rgba(214, 236, 255, 0.55);
+  font-size: 11px;
+}
+
+.app-update-action {
+  margin-left: auto;
+  padding: 3px 10px;
+  border: 1px solid rgba(127, 209, 255, 0.5);
+  border-radius: 5px;
+  background: rgba(127, 209, 255, 0.12);
+  color: #d6ecff;
+  cursor: pointer;
+}
+
+.app-update-action[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.app-update-action:not([disabled]):hover {
+  background: rgba(127, 209, 255, 0.25);
+}
+
 /* ── Top-center Globe Actions ────────────────── */
 #top-center-actions {
   position: fixed;

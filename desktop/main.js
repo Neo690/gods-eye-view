@@ -8,7 +8,7 @@
 // window loads comes from 127.0.0.1 — the shell itself never reaches the
 // network.
 
-const { app, BrowserWindow, Menu, dialog } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -87,6 +87,22 @@ function createWindow(error) {
     });
   }
 
+  // The console's own external links (update downloads, provider key pages)
+  // belong to the system browser, not to a second Electron window that has no
+  // server or keys: any popup target off the local origin opens outside.
+  const isAppOrigin = (url) => url.startsWith('http://127.0.0.1:') || url.startsWith('http://localhost:');
+  const openExternally = (url) => {
+    if (isAppOrigin(String(url || ''))) return { action: 'allow' };
+    shell.openExternal(String(url || '')).catch(() => {});
+    return { action: 'deny' };
+  };
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => openExternally(url));
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (isAppOrigin(url)) return;
+    event.preventDefault();
+    shell.openExternal(url).catch(() => {});
+  });
+
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -111,6 +127,25 @@ function buildMenu() {
             click: () =>
               mainWindow &&
               mainWindow.setFullScreen(!mainWindow.isFullScreen()),
+          },
+          {
+            label: 'Check for update',
+            // The console owns the update UI (the chrome-top update button);
+            // the menu item just puts the same dialog on screen.
+            click: () =>
+              mainWindow &&
+              mainWindow.webContents
+                .executeJavaScript(
+                  "document.getElementById('update-check-btn')?.click()",
+                )
+                .catch(() => {}),
+          },
+          {
+            label: 'Latest desktop release',
+            click: () =>
+              openExternally(
+                'https://github.com/Neo690/gods-eye-view/releases/desktop-latest',
+              ),
           },
           { type: 'separator' },
           { label: 'Quit', click: () => app.quit() },
