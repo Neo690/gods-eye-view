@@ -40,9 +40,10 @@ function evictOldestTextMeasureEntry() {
   _textMeasureCacheSize--;
 }
 
-/** Clear cached text widths after web-font availability changes. */
+/** Clear cached text widths (and their derived wraps) after font changes. */
 export function clearWorldOverlayTextMeasureCache() {
   _textMeasureCache.clear();
+  clearWorldOverlayWrapCache();
   _textMeasureCacheSize = 0;
   _textMeasureClock = 0;
 }
@@ -304,6 +305,88 @@ function trackDisplayText(entry) {
   return entry._overlayTrackDisplayText || '';
 }
 
+// Fiche wrap: word-wrapped lines for cards measured against a viewport-bounded
+// width. Cached per font + text + limit and cleared with the width cache, so a
+// font load never leaves stale wraps. Shares the recency/eviction philosophy of
+// the width cache: text shapes are finite, and a hard clear at the cap is cheap
+// next to the O(lines) wrap itself.
+const OVERLAY_WRAP_CACHE_LIMIT = 2048;
+const _overlayWrapCache = new Map();
+let _overlayWrapCacheSize = 0;
+
+/** Drop every derived wrap; called with the font-width cache invalidation. */
+export function clearWorldOverlayWrapCache() {
+  _overlayWrapCache.clear();
+  _overlayWrapCacheSize = 0;
+}
+
+/**
+ * Word-wrap one fiche line to `maxWidth` in the font it will be drawn with.
+ * A single unbreakable word wider than the limit is hard-chopped so a URL or
+ * an unbroken catalogue code can never widen the card past the viewport.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {string} text
+ * @param {string} font
+ * @param {number} maxWidth CSS/device px this font measures against
+ * @returns {string[]} At least one line; empty text yields [''].
+ */
+export function overlayWrappedLines(ctx, text, font, maxWidth) {
+  const normalized = String(text ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const limit = Math.floor(Number(maxWidth));
+  if (!normalized || !Number.isFinite(limit) || limit <= 0) return [normalized];
+  let fontCache = _overlayWrapCache.get(font);
+  if (!fontCache) {
+    fontCache = new Map();
+    _overlayWrapCache.set(font, fontCache);
+  }
+  let textCache = fontCache.get(normalized);
+  if (!textCache) {
+    textCache = new Map();
+    fontCache.set(normalized, textCache);
+  }
+  const cached = textCache.get(limit);
+  if (cached) return cached;
+  ctx.font = font;
+  const words = normalized.split(' ');
+  const lines = [];
+  let current = '';
+  for (let w = 0; w < words.length; w++) {
+    const word = words[w];
+    const candidate = current ? `${current} ${word}` : word;
+    if (current && ctx.measureText(candidate).width > limit) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+    while (ctx.measureText(current).width > limit && current.length > 1) {
+      let low = 1;
+      let high = current.length - 1;
+      let fit = 0;
+      while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (ctx.measureText(current.slice(0, mid)).width <= limit) {
+          fit = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+      if (fit === 0) break;
+      lines.push(current.slice(0, fit));
+      current = current.slice(fit);
+    }
+  }
+  if (current || lines.length === 0) lines.push(current);
+  if (_overlayWrapCacheSize >= OVERLAY_WRAP_CACHE_LIMIT)
+    clearWorldOverlayWrapCache();
+  textCache.set(limit, lines);
+  _overlayWrapCacheSize++;
+  return lines;
+}
+
 /**
  * Measure the selected entry variant into a caller-owned layout object.
  * @param {CanvasRenderingContext2D} ctx
@@ -311,11 +394,11 @@ function trackDisplayText(entry) {
  * @param {object} [out]
  * @returns {{w:number,h:number,padX:number,padY:number,titleH:number,lineH:number,thumbW:number,thumbH:number}}
  */
-export function measureOverlayEntry(ctx, entry, out = {}) {
+export function measureOverlayEntry(ctx, entry, out = {}, maxWidth = 0) {
   const variant = entry?.selected
     ? 'selected'
     : String(entry?.variant || 'label');
-  const details = Array.isArray(entry?.details) ? entry.details : [];
+  const rawDetails = Array.isArray(entry?.details) ? entry.details : [];
   const selected = variant === 'selected';
   const tracked = variant === 'tracked';
   const tactical = entry?.cardStyle === 'tactical';
@@ -324,32 +407,9 @@ export function measureOverlayEntry(ctx, entry, out = {}) {
     : selected
       ? WORLD_OVERLAY_STYLE.fontSelected
       : WORLD_OVERLAY_STYLE.fontTitle;
-  let titleWidth = measureWorldOverlayText(
-    ctx,
-    entry?.title || '',
-    variant === 'label' ? WORLD_OVERLAY_STYLE.fontLabel : titleFont,
-  );
-  if (variant === 'track' && details[0]) {
-    titleWidth = measureWorldOverlayText(
-      ctx,
-      trackDisplayText(entry),
-      WORLD_OVERLAY_STYLE.fontTrack,
-    );
-  }
-  let detailWidth = 0;
-  for (let i = 0; i < details.length; i++) {
-    detailWidth = Math.max(
-      detailWidth,
-      measureWorldOverlayText(
-        ctx,
-        details[i],
-        tracked
-          ? WORLD_OVERLAY_STYLE.fontTrackedDetail
-          : WORLD_OVERLAY_STYLE.fontDetail,
-      ),
-    );
-  }
-
+  const useFont = tracked
+    ? WORLD_OVERLAY_STYLE.fontTrackedDetail
+    : WORLD_OVERLAY_STYLE.fontDetail;
   out.padX = tracked
     ? 13
     : selected
@@ -379,6 +439,100 @@ export function measureOverlayEntry(ctx, entry, out = {}) {
   out.thumbW = 0;
   out.thumbH = 0;
 
+  // Fiche hardening: when the host passes a viewport-bounded width for the
+  // fiche variants, wrap the title and detail lines to it so the longest line
+  // can no longer size the card past the screen edge, where the placement
+  // clamp has no room left. Thumbnail, track, tactical and CCTV entries keep
+  // their own metric ownership. Measurement and painting agree by construction:
+  // the wrap stores its lines on the entry and drawCardText reads them back.
+  let wrappedTitleLines = null;
+  let details = rawDetails;
+  const wrapLimit = Number(maxWidth);
+  const canWrap =
+    (variant === 'label' || selected) &&
+    Number.isFinite(wrapLimit) &&
+    wrapLimit > 24;
+  if (canWrap) {
+    const textLimit = Math.max(24, Math.floor(wrapLimit - out.padX * 2));
+    // The folded lines are cached on the entry and rebuilt only when an input
+    // changes. The checks below are all identity comparisons, so a steady
+    // repaint reuses the arrays the line cache already owns instead of folding
+    // fresh ones every frame — the allocation probe would count that.
+    const title = String(entry?.title || '');
+    let wrap = entry._overlayWrap;
+    if (
+      !wrap ||
+      wrap.limit !== textLimit ||
+      wrap.title !== title ||
+      wrap.sourceDetails !== rawDetails
+    ) {
+      const titleLines = overlayWrappedLines(ctx, title, titleFont, textLimit);
+      const detailLines = [];
+      for (const detail of rawDetails) {
+        for (const line of overlayWrappedLines(
+          ctx,
+          detail,
+          useFont,
+          textLimit,
+        )) {
+          detailLines.push(line);
+        }
+      }
+      wrap = {
+        limit: textLimit,
+        title,
+        sourceDetails: rawDetails,
+        titleLines: titleLines.length > 1 ? titleLines : null,
+        detailLines:
+          detailLines.length !== rawDetails.length ? detailLines : null,
+      };
+      entry._overlayWrap = wrap;
+    }
+    wrappedTitleLines = wrap.titleLines;
+    details = wrap.detailLines || rawDetails;
+  }
+  // Steady frames store nothing new: the painter reads these same fields, so
+  // a conditional store keeps repeat solves from churning the entry shape
+  // (the allocation probe would count that as steady-frame garbage).
+  if (entry._overlayTitleLines !== wrappedTitleLines)
+    entry._overlayTitleLines = wrappedTitleLines;
+  if (details !== rawDetails) {
+    if (entry._overlayDetailLines !== details)
+      entry._overlayDetailLines = details;
+  } else if (entry._overlayDetailLines !== null) {
+    entry._overlayDetailLines = null;
+  }
+
+  let titleWidth = 0;
+  if (wrappedTitleLines) {
+    for (let i = 0; i < wrappedTitleLines.length; i += 1) {
+      titleWidth = Math.max(
+        titleWidth,
+        measureWorldOverlayText(ctx, wrappedTitleLines[i], titleFont),
+      );
+    }
+  } else {
+    titleWidth = measureWorldOverlayText(
+      ctx,
+      String(entry?.title || ''),
+      titleFont,
+    );
+  }
+  if (variant === 'track' && rawDetails[0]) {
+    titleWidth = measureWorldOverlayText(
+      ctx,
+      trackDisplayText(entry),
+      WORLD_OVERLAY_STYLE.fontTrack,
+    );
+  }
+  let detailWidth = 0;
+  for (let i = 0; i < details.length; i++) {
+    detailWidth = Math.max(
+      detailWidth,
+      measureWorldOverlayText(ctx, details[i], useFont),
+    );
+  }
+
   if (variant === 'thumbnail') {
     out.padX = Math.max(0, Number(entry?.thumbnailPadX) || 0);
     out.padY = Math.max(0, Number(entry?.thumbnailPadTop) || 0);
@@ -394,7 +548,11 @@ export function measureOverlayEntry(ctx, entry, out = {}) {
     out.h = out.padY + out.thumbH + out.titleGap + out.titleH + out.padBottom;
   } else {
     out.w = Math.ceil(Math.max(titleWidth, detailWidth)) + out.padX * 2;
-    out.h = out.padY * 2 + out.titleH + details.length * out.lineH;
+    out.h =
+      out.padY * 2 +
+      out.titleH +
+      (wrappedTitleLines ? (wrappedTitleLines.length - 1) * out.lineH : 0) +
+      details.length * out.lineH;
   }
   out.w = Math.max(8, out.w);
   out.h = Math.max(8, out.h);
@@ -643,7 +801,18 @@ function drawCardChrome(
 }
 
 function drawCardText(ctx, entry, placement, selected = false, topOffset = 0) {
-  const details = Array.isArray(entry.details) ? entry.details : [];
+  // Wrapped fiche lines when the measurement capped the card to the viewport;
+  // the unwrapped native path stays unchanged for every other entry.
+  const details = Array.isArray(entry._overlayDetailLines)
+    ? entry._overlayDetailLines
+    : Array.isArray(entry.details)
+      ? entry.details
+      : [];
+  const titleLines = Array.isArray(entry._overlayTitleLines)
+    ? entry._overlayTitleLines
+    : null;
+  const titleText = titleLines ? null : String(entry.title || '');
+  const titleCount = titleLines ? titleLines.length : titleText ? 1 : 0;
   const x = placement.rect.x + (selected ? 12 : 9);
   let y = placement.rect.y + (selected ? 8 : 6) + topOffset;
   ctx.fillStyle = WORLD_OVERLAY_STYLE.title;
@@ -651,8 +820,11 @@ function drawCardText(ctx, entry, placement, selected = false, topOffset = 0) {
     ? WORLD_OVERLAY_STYLE.fontSelected
     : WORLD_OVERLAY_STYLE.fontTitle;
   ctx.textBaseline = 'top';
-  ctx.fillText(String(entry.title || ''), x, y);
-  y += selected ? 15 : 13;
+  for (let i = 0; i < titleCount; i++) {
+    if (i > 0) ctx.fillStyle = WORLD_OVERLAY_STYLE.detail;
+    ctx.fillText(titleLines ? titleLines[i] : titleText, x, y);
+    y += selected ? 15 : 13;
+  }
   ctx.fillStyle = WORLD_OVERLAY_STYLE.detail;
   ctx.font = WORLD_OVERLAY_STYLE.fontDetail;
   for (let i = 0; i < details.length; i++) {

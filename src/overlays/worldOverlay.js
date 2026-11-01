@@ -2005,7 +2005,23 @@ function snapshotAndProject(entry, source, viewProjection, keyhole) {
   )
     return null;
 
-  measureOverlayEntry(_ctx, entry, record.layout);
+  // Cap fiches to the live viewport: without it a long detail line sizes the
+  // card past the screen edge, where the placement clamp has no room left and
+  // the card overflows. Thumbnail/tactical/tracked cards own their metrics.
+  const wrapWidth =
+    entry.variant === 'thumbnail' ||
+    entry.variant === 'track' ||
+    entry.variant === 'tracked' ||
+    entry.cardStyle === 'tactical'
+      ? 0
+      : Math.max(
+          24,
+          Math.round(
+            (_canvasWidth - Math.max(8, Number(entry.viewportMargin) * 2 + 4)) /
+              (record.paintScale || 1),
+          ),
+        );
+  measureOverlayEntry(_ctx, entry, record.layout, wrapWidth);
   record.placementInput.anchorX = record.screen.x;
   record.placementInput.anchorY = record.screen.y;
   record.placementInput.width = record.layout.w * record.paintScale;

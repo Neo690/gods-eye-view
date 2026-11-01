@@ -626,3 +626,50 @@ test('the sky plate scale is a whisper, not a second plate', () => {
   );
   assert.ok(lightest * SKY_PLATE_SCALE < 0.12, 'the feathered plate must read as bare text');
 });
+
+test('a fiche measured against a viewport cap wraps instead of overflowing', () => {
+  // The overflow mechanism: placement only clamps a card that still fits the
+  // viewport, so a single long line sizing the card wider than the screen
+  // escapes the clamp and its right edge runs off-screen. The cap folds the
+  // text instead, so the card is never wider than its viewport allocation.
+  const ctx = mockContext();
+  const entry = {
+    variant: 'selected',
+    selected: true,
+    title: 'Orbit Communication Systems Product Site',
+    details: ['A long site detail line far past any sane phone viewport width'],
+  };
+  const layout = measureOverlayEntry(ctx, entry, {}, 128);
+  // Selected padX is 12, so the text cap is 128-24=104 and the card cannot
+  // exceed the width it was given.
+  assert.ok(layout.w <= 128, `wrapped width ${layout.w} must respect the cap`);
+  assert.ok(Array.isArray(entry._overlayTitleLines), 'the long title is folded');
+  assert.ok(Array.isArray(entry._overlayDetailLines), 'the long detail folds');
+
+  // Painting agrees with the measurement: every painted line fits its cap.
+  entry._overlayLayout = layout;
+  const placement = placementVariants({
+    anchorX: 300,
+    anchorY: 200,
+    width: layout.w,
+    height: layout.h,
+    viewportWidth: 320,
+    viewportHeight: 480,
+  })[0];
+  paintSelected(ctx, entry, placement, 1);
+  const painted = ctx.calls
+    .filter(([name]) => name === 'fillText')
+    .map(([, text]) => String(text));
+  assert.ok(painted.length >= 4, 'folded lines replace the two long lines');
+  for (const text of painted) {
+    assert.ok(
+      text.length <= 17,
+      `painted line "${text}" exceeds the text cap`,
+    );
+  }
+
+  // Without a cap the native unwrapped metrics stay untouched.
+  const bare = { ...entry, _overlayTitleLines: null, _overlayDetailLines: null };
+  const unwrapped = measureOverlayEntry(mockContext(), bare, {}, 0);
+  assert.ok(unwrapped.w > 128, 'the uncapped card still sizes to its longest line');
+});
