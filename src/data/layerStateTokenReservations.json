@@ -22,6 +22,7 @@
   ["military", "m"],
   ["military-awareness", "g"],
   ["military-installations", "i"],
+  ["netmon", "06"],
   ["orbit-changes", "01"],
   ["plate-reader", "04"],
   ["radiation", "5"],

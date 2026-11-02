@@ -40,7 +40,11 @@ export function cameraBounds(viewer) {
  * @param {string} config.attribution Shown in the row info; licences require it.
  * @param {{getSnapshot: Function}} config.source Browser-side source.
  * @param {{id:string,label:string}[]} config.sources Provider choices.
- * @param {string} config.colour Point colour (CSS).
+ * @param {string} config.colour Point colour (CSS), when all points match.
+ * @param {(point:object)=>string} [config.pointColour] Colour one point from
+ *   its own row; its input is kept in the drawn signature, so an updated
+ *   status re-renders instead of being skipped as a no-op draw.
+ * @param {{label:string,color:string}[]} [config.legend] Static row legend.
  * @param {number} [config.pixelSize]
  * @param {number} [config.refreshMs] Interval the data manager re-reads at.
  * @param {(context: {refresh: () => void}) => {chips?: Array<object>, detail?: string}}
@@ -55,6 +59,8 @@ export function createViewportPointsLayer({
   source,
   sources,
   colour,
+  pointColour,
+  legend,
   pixelSize = 7,
   refreshMs = 120000,
   requiresKeyId,
@@ -115,19 +121,26 @@ export function createViewportPointsLayer({
   }
 
   function render() {
-    // Only position and identity change what is drawn.
-    const signature = pointsSignature(_points);
+    // Only position, identity and (when a row decides its own colour) the
+    // coloured field change what is drawn.
+    const signature = pointsSignature(
+      _points,
+      pointColour ? (point) => pointColour(point) : null,
+    );
     if (signature === _signature) return;
     _signature = signature;
     _collection.removeAll();
-    const color = Cesium.Color.fromCssColorString(colour);
+    const baseColor = Cesium.Color.fromCssColorString(colour);
     for (const point of _points) {
+      const drawn = pointColour
+        ? Cesium.Color.fromCssColorString(pointColour(point) || colour)
+        : baseColor;
       _collection.add({
         id: `${id}:${point.id}`,
         position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat),
         pixelSize,
-        color,
-        outlineColor: color.withAlpha(0.25),
+        color: drawn,
+        outlineColor: drawn.withAlpha(0.25),
         outlineWidth: 2,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       });
@@ -331,7 +344,7 @@ export function createViewportPointsLayer({
           t(
             'Positions come from the provider, not from measurements taken here. Zoom in for a denser answer.',
           ),
-        legend: [],
+        legend: Array.isArray(legend) ? legend : [],
       };
     },
 

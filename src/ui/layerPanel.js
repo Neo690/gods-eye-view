@@ -74,6 +74,7 @@ const PANEL_GROUPS = [
       'local-dams',
       'cell-towers',
       'iot-sensors',
+      'netmon',
       'private-wifi',
     ],
   },

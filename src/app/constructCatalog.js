@@ -39,6 +39,7 @@ import { createApplicationFirePerimeters } from './layers/perimeters.js';
 import { createApplicationGnssIntegrity } from './layers/gnss.js';
 import { createApplicationCellTowers } from './layers/cellTowers.js';
 import { createApplicationIotSensors } from './layers/iotSensors.js';
+import { createApplicationNetmon } from './layers/netmon.js';
 import { createPrivateWifiLayer } from '../layers/privateWifi/index.js';
 import { createApplicationCables } from './layers/submarineCables.js';
 import { createApplicationStreetLevel } from './layers/streetLevel.js';
@@ -154,6 +155,7 @@ export function createApplicationCatalog({
         }),
         createApplicationCellTowers(),
         createApplicationIotSensors(),
+        createApplicationNetmon(),
         createPrivateWifiLayer(),
         createApplicationAlpr({ surface, source: sources.alpr }),
         createApplicationStreetLevel({

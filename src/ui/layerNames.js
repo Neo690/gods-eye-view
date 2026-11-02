@@ -54,6 +54,7 @@ export const LAYER_NAME_KEYS = Object.freeze({
   'alpr-cameras': msg('ALPR Cameras'),
   'cell-towers': msg('Radio Sites'),
   'iot-sensors': msg('Connected Objects'),
+  netmon: msg('Network Monitor'),
   'private-wifi': msg('Private Wi-Fi'),
 });
 

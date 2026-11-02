@@ -120,12 +120,19 @@ export function normalisePoints(rows, limit = MAX_POINTS) {
 /**
  * Identity of what is drawn. Rendering 800 points because one label changed is
  * the difference between a smooth camera and a stutter, so the signature holds
- * only what the primitives show.
+ * only what the primitives show. A layer that colours a marker from a row
+ * field adds that field too, or a changed colour would be skipped as a
+ * no-op draw.
+ *
+ * @param {Array<object>} points
+ * @param {(point:object)=>string|null} [statusOf] another drawn property
  */
-export function pointsSignature(points) {
+export function pointsSignature(points, statusOf) {
   return (Array.isArray(points) ? points : [])
-    .map(
-      (point) => `${point.id}:${point.lat.toFixed(4)}:${point.lon.toFixed(4)}`,
-    )
+    .map((point) => {
+      const base = `${point.id}:${point.lat.toFixed(4)}:${point.lon.toFixed(4)}`;
+      const extra = typeof statusOf === 'function' ? statusOf(point) : null;
+      return extra ? `${base}:${extra}` : base;
+    })
     .join('|');
 }

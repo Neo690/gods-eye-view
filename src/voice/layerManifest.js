@@ -454,6 +454,12 @@ const layers = [
     noQuery: 'sensor map; no countable analyst records',
   },
   {
+    id: 'netmon',
+    aliases: ['netmon', 'network monitor', 'node health', 'server health'],
+    context: false,
+    noQuery: 'node map; probe answers are presented in the layer panel',
+  },
+  {
     id: 'radiation',
     aliases: ['radiation', 'dose rate', 'radioactivity'],
     context: false,

@@ -41,7 +41,7 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // Railway stations and the Israeli transport sites extend it too, each with
     // the fields its card prints. The solar-storm layer adds one enum value,
     // and fishing effort another.
-    'cfe49c678592c44761ccb137123d234408e5f6941062be791b4c65b7699476a2',
+    '28106d691fcb56f860fff1e8d8e26b5b8525dba9a2ca29135bea707b6b0ba9fe',
   );
 });
 

@@ -39,6 +39,7 @@ import { spaceWeatherProxy } from './spaceWeather.js';
 import { cycloneProxy } from './cyclones.js';
 import { windProxy } from './wind.js';
 import { iotSensorsProxy } from './iotSensors.js';
+import { netMonProxy } from './netmon.js';
 import { cellTowersProxy } from './cellTowers.js';
 
 /**
@@ -65,6 +66,7 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     militaryInstallationsProxy(),
     cellTowersProxy(),
     iotSensorsProxy(),
+    netMonProxy(),
     regionalBriefProxy(),
     geocodeProxy(),
     weatherEffectsProxy(),

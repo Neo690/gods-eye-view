@@ -675,6 +675,7 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
     token: 'i',
     disposition: 'enabled-only',
   }),
+  Object.freeze({ id: 'netmon', token: '06', disposition: 'enabled-only' }),
   Object.freeze({
     id: 'orbit-changes',
     token: '01',
