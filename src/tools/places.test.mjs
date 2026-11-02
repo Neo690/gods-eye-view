@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test, after } from 'node:test';
 import { createGeocodePlaceService } from './places.js';
+
+/*
+ * The lookup tests below await answers that only ever arrive when an
+ * `AbortSignal.timeout` timer fires — and that timer is unref'd, so nothing it
+ * drives holds the event loop while a test is pending. In a single-file
+ * `node --test` run the loop then drains and node:test kills the still-pending
+ * test with "Promise resolution is still pending but the event loop has
+ * already resolved"; in a parallel multi-file run a sibling file's ref'd
+ * handles masked the same defect, which is what made the failures look
+ * schedule-dependent. One ref'd companion timer covers the whole file, and
+ * `after()` releases it on every exit path.
+ */
+const eventLoopKeeper = setTimeout(() => {}, 10 * 60_000);
+after(() => clearTimeout(eventLoopKeeper));
 
 const answer = {
   results: [
