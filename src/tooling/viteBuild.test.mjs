@@ -44,16 +44,49 @@ test('explicit build inputs preserve browser-only defines, plugin order and loop
   }
   assert.ok(!csp.includes("script-src 'self' 'unsafe-inline'"));
   assert.deepEqual(config.preview.headers, config.server.headers);
-  assert.deepEqual(config.define, {
-    'import.meta.env.GOOGLE_MAPS_API_KEY': '"browser-fixture"',
-    'import.meta.env.CESIUM_ION_TOKEN': '"ion-fixture"',
-    'import.meta.env.MAPILLARY_CLIENT_TOKEN': '""',
+  // The three browser tokens keep their exact fixture values; the two GEV
+  // build stamps are stamped by the config itself, so they are asserted by
+  // shape and progression below rather than pinned to fixed times.
+  assert.deepEqual(
+    Object.fromEntries(
+      Object.entries(config.define).filter(
+        ([key]) => !key.startsWith('import.meta.env.GEV_BUILD_'),
+      ),
+    ),
+    {
+      'import.meta.env.GOOGLE_MAPS_API_KEY': '"browser-fixture"',
+      'import.meta.env.CESIUM_ION_TOKEN': '"ion-fixture"',
+      'import.meta.env.MAPILLARY_CLIENT_TOKEN': '""',
+    },
+  );
+  // GEV_BUILD_TIME is the construction instant as a bare JSON string; the
+  // update check parses it back (updateChannel.js). A config built later
+  // carries a stamp that is not earlier, and a rebuild always moves it.
+  const stampedTime = JSON.parse(
+    config.define['import.meta.env.GEV_BUILD_TIME'],
+  );
+  assert.ok(
+    !Number.isNaN(Date.parse(stampedTime)),
+    `GEV_BUILD_TIME was not an ISO instant: ${config.define['import.meta.env.GEV_BUILD_TIME']}`,
+  );
+  const mapillaryConfig = createBrowserViteConfig({
+    mapillaryToken: 'MLY|1|abc',
   });
   assert.equal(
-    createBrowserViteConfig({ mapillaryToken: 'MLY|1|abc' }).define[
-      'import.meta.env.MAPILLARY_CLIENT_TOKEN'
-    ],
+    mapillaryConfig.define['import.meta.env.MAPILLARY_CLIENT_TOKEN'],
     '"MLY|1|abc"',
+  );
+  assert.ok(
+    JSON.parse(mapillaryConfig.define['import.meta.env.GEV_BUILD_TIME']) >=
+      stampedTime,
+  );
+  // GEV_BUILD_SHA is the 12-hex-char HEAD of the checkout (git is queried
+  // from the config's own directory) or, when git is unavailable, the
+  // GEV_BUILD_SHA environment fallback; an empty string is valid and sends
+  // the update check to the build time instead.
+  assert.match(
+    mapillaryConfig.define['import.meta.env.GEV_BUILD_SHA'],
+    /^"[0-9a-f]{0,12}"$/,
   );
   // A wildcard bind keeps the Host-header check; LAN names are explicit.
   for (const host of ['0.0.0.0', '::'])
