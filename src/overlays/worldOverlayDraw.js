@@ -494,12 +494,20 @@ export function measureOverlayEntry(ctx, entry, out = {}, maxWidth = 0) {
   // Steady frames store nothing new: the painter reads these same fields, so
   // a conditional store keeps repeat solves from churning the entry shape
   // (the allocation probe would count that as steady-frame garbage).
-  if (entry._overlayTitleLines !== wrappedTitleLines)
-    entry._overlayTitleLines = wrappedTitleLines;
-  if (details !== rawDetails) {
-    if (entry._overlayDetailLines !== details)
-      entry._overlayDetailLines = details;
-  } else if (entry._overlayDetailLines !== null) {
+  if (canWrap) {
+    if (entry._overlayTitleLines !== wrappedTitleLines)
+      entry._overlayTitleLines = wrappedTitleLines;
+    if (details !== rawDetails) {
+      if (entry._overlayDetailLines !== details)
+        entry._overlayDetailLines = details;
+    } else if (entry._overlayDetailLines !== null) {
+      entry._overlayDetailLines = null;
+    }
+  } else if (
+    entry._overlayTitleLines !== null ||
+    entry._overlayDetailLines !== null
+  ) {
+    entry._overlayTitleLines = null;
     entry._overlayDetailLines = null;
   }
 
@@ -577,8 +585,8 @@ function writePlacement(
   placement.rect.y = Math.round(y);
   placement.rect.w = w;
   placement.rect.h = h;
-  placement.centerX = placement.rect.x + w / 2;
-  placement.centerY = placement.rect.y + h / 2;
+  placement.centerX = Math.round(placement.rect.x + w / 2);
+  placement.centerY = Math.round(placement.rect.y + h / 2);
   placement.anchorX = anchorX;
   placement.anchorY = anchorY;
   // This value is computed once per entry below and copied into every pooled

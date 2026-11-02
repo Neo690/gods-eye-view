@@ -1891,23 +1891,25 @@ function snapshotAndProject(entry, source, viewProjection, keyhole) {
   if (!(clipW > 0)) return null;
   const invW = 1 / clipW;
   record.screen.x =
-    ((viewProjection.m0 * px +
+    (((viewProjection.m0 * px +
       viewProjection.m4 * py +
       viewProjection.m8 * pz +
       viewProjection.m12) *
       invW *
       0.5 +
       0.5) *
-    _canvasWidth;
+      _canvasWidth) |
+    0;
   record.screen.y =
-    (0.5 -
+    ((0.5 -
       (viewProjection.m1 * px +
         viewProjection.m5 * py +
         viewProjection.m9 * pz +
         viewProjection.m13) *
         invW *
         0.5) *
-    _canvasHeight;
+      _canvasHeight) |
+    0;
   if (
     entry.safeTopRatio > 0 &&
     !(entry.pinned && entry.pinnedBypassesSafeTop)
@@ -1948,7 +1950,7 @@ function snapshotAndProject(entry, source, viewProjection, keyhole) {
       : distanceFade(distance, record.distanceOptions);
   const cameraAltitude = _viewer.camera.positionCartographic?.height;
   record.paintScale = entry.distanceScale
-    ? distanceScale(distance, entry.distanceScale)
+    ? _localDistanceScale(distance, entry.distanceScale)
     : 1;
   // Keep the source-configurable piecewise curve local to the projection hot
   // path. Passing its five doubles through a non-inlined helper boxed them for
@@ -2024,8 +2026,10 @@ function snapshotAndProject(entry, source, viewProjection, keyhole) {
   measureOverlayEntry(_ctx, entry, record.layout, wrapWidth);
   record.placementInput.anchorX = record.screen.x;
   record.placementInput.anchorY = record.screen.y;
-  record.placementInput.width = record.layout.w * record.paintScale;
-  record.placementInput.height = record.layout.h * record.paintScale;
+  record.placementInput.width = Math.round(record.layout.w * record.paintScale);
+  record.placementInput.height = Math.round(
+    record.layout.h * record.paintScale,
+  );
   record.placementInput.viewportWidth = _canvasWidth;
   record.placementInput.viewportHeight = _canvasHeight;
   if (entry.anchorRadiusPx > 0) {
@@ -2870,4 +2874,22 @@ export function destroyWorldOverlay() {
     entriesBySource: {},
     paintedBySource: _paintedBySource,
   });
+}
+
+/**
+ * Local restatement of `distanceScale` for the projection hot path. Passing
+ * doubles through the non-inlined helper boundary boxes them for every moving
+ * candidate; keeping the four comparisons local yields Smi/double inline math.
+ * (Same precedent as the inlined altitudeScale curve above.)
+ */
+function _localDistanceScale(distanceM, curve) {
+  if (!curve) return 1;
+  const near = curve.near;
+  const far = curve.far;
+  const nearValue = curve.nearValue;
+  const farValue = curve.farValue;
+  if (distanceM <= near) return nearValue;
+  if (distanceM >= far) return farValue;
+  const progress = (distanceM - near) / (far - near);
+  return nearValue + (farValue - nearValue) * progress;
 }
