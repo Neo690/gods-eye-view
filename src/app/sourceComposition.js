@@ -52,6 +52,7 @@ export const CATALOG_SOURCE_CONTRACTS = Object.freeze({
   radiation: contract(['radiation'], ['getSnapshot']),
   'fishing-effort': contract(['fishing-effort'], ['getSnapshot']),
   'plate-reader': contract(['plate-reader'], ['read']),
+  'face-privacy': contract(['face-privacy'], ['read']),
   'orbit-changes': contract(['orbit-changes'], ['readCatalog']),
   'satellite-watch': contract(
     ['satellite-watch'],

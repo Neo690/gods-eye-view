@@ -15,6 +15,7 @@ import { geocodeProxy } from './regional/place.js';
 import { weatherEffectsProxy } from './regional/weather-effects.js';
 import { cctvProxy } from './cctv.js';
 import { alprProxy } from './alpr.js';
+import { faceProxy } from './face.js';
 import { defaultSourceRoot } from './common/source-root.js';
 import { radioBrowserProxy } from './radio.js';
 import { gbfsProxy } from './gbfs.js';
@@ -69,6 +70,9 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     weatherEffectsProxy(),
     cctv,
     alprProxy({ cctv, warm: true }),
+    // Same conversation with the same catalogue: the face route reads only
+    // cameras this server already serves, like the plate reader above it.
+    faceProxy({ cctv }),
     radioBrowserProxy(),
     gbfsProxy(),
     localReceiversProxy(),

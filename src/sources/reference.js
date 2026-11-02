@@ -9,6 +9,7 @@ import { createOrbitChangeSource } from '../layers/orbitChanges/source.js';
 import { createSatelliteWatchSource } from '../layers/satelliteWatch/sources.js';
 import { createFishingEffortSource } from '../layers/fishingEffort/sources.js';
 import { createPlateReaderSource } from '../layers/alprReader/sources.js';
+import { createFaceAnalysisSource } from '../layers/facePrivacy/sources.js';
 
 /** Construct the existing reference feeds independently of application setup. */
 export function createReferenceSources() {
@@ -24,5 +25,6 @@ export function createReferenceSources() {
     'satellite-watch': createSatelliteWatchSource(),
     'fishing-effort': createFishingEffortSource(),
     'plate-reader': createPlateReaderSource(),
+    'face-privacy': createFaceAnalysisSource(),
   };
 }

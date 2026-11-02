@@ -414,3 +414,39 @@ html:not([lang='en']) #cctv-camera-select {
     letter-spacing: 0.3px;
   }
 }
+
+/* ── Face blur over the frame ────────────────────
+   What the face detector saw, hidden where it saw it. The blur is the
+   detector's own boxes, scaled into the still the panel already shows, so an
+   audience sees the junction without seeing the people in it — no label is
+   drawn on a face, because a name is a claim this layer does not make.
+
+   Like the plate boxes: no clicks, no announcements; the row already says
+   how many faces were seen. The blur rides `backdrop-filter`, with the
+   feathered edge so the rectangle of the blur is not itself a silhouette,
+   and a dim fill for browsers without `backdrop-filter` support (the box
+   then reads as a covered pixel area rather than passing the face through). */
+.cctv-face-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.cctv-face-blur {
+  position: absolute;
+  border-radius: 12%;
+  backdrop-filter: blur(9px) saturate(1.1);
+  -webkit-backdrop-filter: blur(9px) saturate(1.1);
+  /* The soft edge is the disclosure itself: a hard box would say exactly
+     where the person is, which is the knowledge this layer exists to remove. */
+  box-shadow: 0 0 10px 6px rgba(9, 24, 34, 0);
+}
+
+/* Without backdrop-filter the blur is impossible, so the box falls back to a
+   heavy dim: the face is covered, not passed through untouched. */
+@supports not (backdrop-filter: blur(1px)) {
+  .cctv-face-blur {
+    background: rgba(9, 24, 34, 0.92);
+  }
+}
