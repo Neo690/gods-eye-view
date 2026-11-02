@@ -239,7 +239,12 @@ async function letterboxedTensor(sharp, decoded) {
   const resized = await sharp(decoded.data, {
     raw: { width: W, height: H, channels: 3 },
   })
-    .resize({ width: scaledWidth, height: scaledHeight, kernel: 'linear', fit: 'fill' })
+    .resize({
+      width: scaledWidth,
+      height: scaledHeight,
+      kernel: 'linear',
+      fit: 'fill',
+    })
     .raw()
     .toBuffer();
   const canvas = Buffer.alloc(size * size * 3, 0);
@@ -279,10 +284,7 @@ export async function detectFaces(image, options = {}) {
   const threshold = Number.isFinite(options.threshold)
     ? Math.max(options.threshold, FACE_MIN_SCORE)
     : FACE_MIN_SCORE;
-  const maxFaces = Math.max(
-    1,
-    Math.min(64, options.maxFaces || 24),
-  );
+  const maxFaces = Math.max(1, Math.min(64, options.maxFaces || 24));
 
   const { decoded, frame } = await decodeImage(image, sharp);
   const decodeMs = Date.now() - started;
@@ -339,8 +341,7 @@ async function alignedCrop(sharp, decoded, face, { size = 112 } = {}) {
   const { data: raw } = decoded;
   const srcWidth = decoded.info.width;
   const srcHeight = decoded.info.height;
-  const determinant =
-    transform.ax * transform.by - transform.ay * transform.bx;
+  const determinant = transform.ax * transform.by - transform.ay * transform.bx;
   const crop = Buffer.alloc(size * size * 3, 127);
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
@@ -389,12 +390,11 @@ export async function embedFace(image, face, options = {}) {
     tensor[2 * plane + i] = (crop[i * 3 + 2] - 127.5) / 127.5; // B
   }
   const output = await recognizer.run({
-    [recognizer.inputNames[0]]: new ort.Tensor('float32', tensor, [
-      1,
-      3,
-      112,
-      112,
-    ]),
+    [recognizer.inputNames[0]]: new ort.Tensor(
+      'float32',
+      tensor,
+      [1, 3, 112, 112],
+    ),
   });
   const embedding = output[recognizer.outputNames[0]]?.data;
   if (!embedding || embedding.length !== FACE_EMBEDDING_DIMENSIONS)

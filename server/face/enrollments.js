@@ -103,13 +103,25 @@ function validateNames({ label, cohort }) {
   const trimmedLabel = String(label ?? '').trim();
   const trimmedCohort = String(cohort ?? '').trim();
   if (!trimmedLabel)
-    return { error: 'label_required', message: 'An enrolled person needs a label' };
+    return {
+      error: 'label_required',
+      message: 'An enrolled person needs a label',
+    };
   if (trimmedLabel.length > LABEL_MAX_CHARS)
-    return { error: 'label_too_long', message: `Label exceeds ${LABEL_MAX_CHARS} characters` };
+    return {
+      error: 'label_too_long',
+      message: `Label exceeds ${LABEL_MAX_CHARS} characters`,
+    };
   if (!trimmedCohort)
-    return { error: 'cohort_required', message: 'An enrollment needs a cohort' };
+    return {
+      error: 'cohort_required',
+      message: 'An enrollment needs a cohort',
+    };
   if (trimmedCohort.length > COHORT_MAX_CHARS)
-    return { error: 'cohort_too_long', message: `Cohort exceeds ${COHORT_MAX_CHARS} characters` };
+    return {
+      error: 'cohort_too_long',
+      message: `Cohort exceeds ${COHORT_MAX_CHARS} characters`,
+    };
   return { label: trimmedLabel, cohort: trimmedCohort };
 }
 
@@ -124,10 +136,16 @@ export function validateEmbedding(embedding, expectedLength = 512) {
       message: `The embedding must have ${expectedLength} numbers`,
     };
   if (values.some((v) => typeof v !== 'number' || !isFinite(v)))
-    return { error: 'embedding_invalid', message: 'Embedding values must be finite' };
+    return {
+      error: 'embedding_invalid',
+      message: 'Embedding values must be finite',
+    };
   const norm = Math.sqrt(values.reduce((acc, v) => acc + v * v, 0));
   if (!(norm > 0))
-    return { error: 'embedding_invalid', message: 'The embedding must not be all zeros' };
+    return {
+      error: 'embedding_invalid',
+      message: 'The embedding must not be all zeros',
+    };
   return {
     embedding: values.map((v) => Number(v.toFixed(EMBEDDING_DECIMALS))),
     norm,

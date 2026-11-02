@@ -34,8 +34,7 @@ export const FACE_MODEL_SET_VERSION = 'v1';
 /** Detector input side, in pixels: a square letterbox, multiple of 32. */
 export const FACE_DETECTOR_SIZE = 640;
 
-const MIRROR =
-  'https://huggingface.co/immich-app/buffalo_s/resolve/main';
+const MIRROR = 'https://huggingface.co/immich-app/buffalo_s/resolve/main';
 
 /** Every file the engine loads, with the digest this repository accepts. */
 export const FACE_MODELS = Object.freeze({

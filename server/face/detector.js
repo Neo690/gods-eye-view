@@ -219,8 +219,7 @@ export function similarityTransform(src, dst) {
   dy /= n;
   const variance =
     src.reduce(
-      (acc, point) =>
-        acc + (point.x - mx) ** 2 + (point.y - my) ** 2,
+      (acc, point) => acc + (point.x - mx) ** 2 + (point.y - my) ** 2,
       0,
     ) / n;
   let covxx = 0;

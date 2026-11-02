@@ -248,7 +248,9 @@ export function createFaceLayer({
       else if (!cameraId) info = t('Select a CCTV camera first');
       else if (_error) info = t('Face analysis unavailable');
       else if (answer)
-        info = count ? tn(count, '{count} face visible', '{count} faces visible') : t('No face found');
+        info = count
+          ? tn(count, '{count} face visible', '{count} faces visible')
+          : t('No face found');
       else info = t('Nothing analysed yet');
       const cached = isCachedAnswer(answer) && t('Cached answer');
       return {

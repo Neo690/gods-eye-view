@@ -26,7 +26,8 @@
  * @module server/providers/face
  */
 import { createHash } from 'node:crypto';
-import { admitSameSiteKeyless } from './common/same-site.js';import {
+import { admitSameSiteKeyless } from './common/same-site.js';
+import {
   cosineSimilarity,
   detectFaces,
   embedFace,
@@ -175,7 +176,8 @@ export function faceProxy({
     for (const [key, val] of cache)
       if (!key || !val || ticker() - val.at > oneMoreMinute) cache.delete(key);
     for (const [key, val] of answers)
-      if (!key || !val || ticker() - val.at > readOnceEvery + 30_000) answers.delete(key);
+      if (!key || !val || ticker() - val.at > readOnceEvery + 30_000)
+        answers.delete(key);
   };
 
   const toFrameKey = (cameraId) => `${cameraId}`;
@@ -185,7 +187,11 @@ export function faceProxy({
     if (!cameraIdString || cameraIdString.length > FACE_CAMERA_ID_LIMIT)
       return errorResponse(400, 'no_camera', 'A camera id is required');
     if (!cctv)
-      return errorResponse(500, 'config', 'The face route has no cctv attached');
+      return errorResponse(
+        500,
+        'config',
+        'The face route has no cctv attached',
+      );
     const at = now();
     track();
     const cached = cache.get(toFrameKey(cameraIdString));
@@ -199,7 +205,10 @@ export function faceProxy({
     if (cached && at - cached.at < FACE_MIN_INTERVAL_MS)
       return {
         status: 429,
-        body: { error: 'too_soon', detail: 'The camera is being read again shortly' },
+        body: {
+          error: 'too_soon',
+          detail: 'The camera is being read again shortly',
+        },
       };
 
     let bytes = null;
@@ -249,7 +258,10 @@ export function faceProxy({
             y2: Math.round(box.y2),
           },
           landmarks: [
-            ...landmarks.map(({ x, y }) => ({ x: Math.round(x), y: Math.round(y) })),
+            ...landmarks.map(({ x, y }) => ({
+              x: Math.round(x),
+              y: Math.round(y),
+            })),
           ],
         })),
       };
@@ -273,7 +285,8 @@ export function faceProxy({
           }
           matches.push({
             ...face,
-            match: best && best.similarity >= FACE_MATCH_THRESHOLD ? best : null,
+            match:
+              best && best.similarity >= FACE_MATCH_THRESHOLD ? best : null,
             best: best
               ? { ...best, matched: best.similarity >= FACE_MATCH_THRESHOLD }
               : null,
@@ -296,11 +309,14 @@ export function faceProxy({
         return errorResponse(415, 'frame_too_small', error.message);
       if (
         error instanceof FaceUnavailable &&
-        ['models_missing', 'models_mismatch', 'runtime_missing'].includes(error.code)
+        ['models_missing', 'models_mismatch', 'runtime_missing'].includes(
+          error.code,
+        )
       ) {
-        const detail = error.code === 'runtime_missing'
-          ? 'Install onnxruntime-node and sharp to use the face module'
-          : `Run \`npm run face:models\` (see ${error.details?.directory})`;
+        const detail =
+          error.code === 'runtime_missing'
+            ? 'Install onnxruntime-node and sharp to use the face module'
+            : `Run \`npm run face:models\` (see ${error.details?.directory})`;
         return errorResponse(503, error.code, detail);
       }
       console.error('[face] analysis failed:', error?.message || error);
@@ -311,7 +327,11 @@ export function faceProxy({
   /** Handle the JSON endpoints the URL names. */
   const respond = async (req, res) => {
     const requestUrl = new URL(req.url, 'http://same-site');
-    if (admitted(req, res)) return { status: res.statusCode, body: { error: 'origin_denied', detail: '' } };
+    if (admitted(req, res))
+      return {
+        status: res.statusCode,
+        body: { error: 'origin_denied', detail: '' },
+      };
     if (requestUrl.pathname === '/api/face/enrollments') {
       if (req.method === 'GET') {
         const { enrollments } = await readEnrollments(enrollmentsFile());
@@ -338,7 +358,10 @@ export function faceProxy({
       !isEnroll
     )
       return null;
-    const payload = await readJsonBody(req, isEnroll ? FACE_ENROLL_BODY_LIMIT : FACE_BODY_LIMIT);
+    const payload = await readJsonBody(
+      req,
+      isEnroll ? FACE_ENROLL_BODY_LIMIT : FACE_BODY_LIMIT,
+    );
     if (isEnroll) {
       const image = parseDataUrl(payload?.image, FACE_ENROLL_BODY_LIMIT);
       const cohort = String(payload?.cohort ?? '').trim();
@@ -370,9 +393,15 @@ export function faceProxy({
       } catch (error) {
         if (
           error instanceof FaceUnavailable &&
-          ['models_missing', 'models_mismatch', 'runtime_missing'].includes(error.code)
+          ['models_missing', 'models_mismatch', 'runtime_missing'].includes(
+            error.code,
+          )
         )
-          return errorResponse(503, error.code, 'Run `npm run face:models` first');
+          return errorResponse(
+            503,
+            error.code,
+            'Run `npm run face:models` first',
+          );
         return errorResponse(500, 'face_failed', error?.message || error);
       }
     }
@@ -400,7 +429,12 @@ export function faceProxy({
           res.end(JSON.stringify(responded.body));
         } catch (error) {
           res.statusCode = 500;
-          res.end(JSON.stringify({ error: 'face_failed', detail: error?.message || String(error) }));
+          res.end(
+            JSON.stringify({
+              error: 'face_failed',
+              detail: error?.message || String(error),
+            }),
+          );
         }
       });
     },
