@@ -3696,6 +3696,7 @@ its criteria cannot be silently ignored.
 | GNSS Integrity 📡 (`gnss-integrity`) | adsb.lol point snapshot, low navigation accuracy binned per 0.5° cell (GEV NIC/NACp threshold + gpsjam.org formula and bands, keyless, ODbL) | `src/layers/gnss/` via `src/app/layers/gnss.js` | `/api/gnss-integrity` | camera-driven (600 ms debounce, minimum 2.5 s between reads) + 60s poll (server cache 60 s; 30 min rolling window) |
 | Fire Perimeters 🔥 | NIFC WFIGS current interagency perimeters (keyless, paged past the 2000-record cap); InciWeb catalog + incident page origin and update time checks for verified incident-page links | `src/layers/perimeters/` via `src/app/layers/perimeters.js` | `/api/fire-perimeters` + `/api/fire-perimeters/inciweb/*` | 5 min (server caches: catalog 1 h; publication 30 min) |
 | Radiation ☢ (`radiation`) | Ambient gamma dose rate: BfS ODL (Germany, hourly, keyless), Health Canada FPSN (keyless), plus Safecast, radmon.org and uRADMonitor volunteer Geiger counts converted to µSv/h and marked estimated — five networks in one aggregated snapshot, each row tagged with its network (uRADMonitor reads only the units of the account in `URADMONITOR_USER_ID`/`URADMONITOR_USER_HASH`, so it is skipped when those keys are unset) | `src/layers/radiation/` via `src/app/layers/radiation.js` | `/api/radiation` | 10 min (server cache 5 min; a failed network keeps serving its last snapshot for up to 1 h, flagged degraded) |
+| Network Monitor 📡 (`netmon`) | Operator-declared nodes in `GEV_NETMON_TARGETS` (`label\|host\|port\|lat\|lon`), probed by this app's own server with a plain, payload-free TCP connect — no third-party upstream; positions are declared, never resolved from host names | `src/layers/netmon/` via `src/app/layers/netmon.js` | `/api/netmon` | 60s poll (server probe deadline 5 s; server cache 30 s, one in-flight refresh) |
 
 A railway station card opens on click and names only what the map records —
 operator, network and platform count appear when present, absent instead of
@@ -3733,6 +3734,39 @@ by `scripts/qa-emergency-squawk.mjs`. Both accept `--timeout-ms` for slow boot.
 
 
 Fire Perimeters uses capped, timed server reads with stale-on-error caching and a per-client limit. Unchanged snapshots retain geometry; link checks cancel on disable or selection change, and the row legend shows reported containment.
+
+Network Monitor reports the health of the operator's own, authorized nodes
+(`src/layers/netmon/`). The server parses `GEV_NETMON_TARGETS` into targets
+(`label|host|port|lat|lon`, semicolon-separated) and probes each one with a
+single plain TCP connect — nothing beyond the handshake is sent, so the probe
+cannot do more than confirm that a port accepts a connection. The browser never
+touches a target and the endpoint shows it nothing to aim for: `GET /api/netmon`
+is a status report, carrying `no-store` and the probe method in its attribution.
+Positions are declared, never guessed from a host name. A target without a
+parseable lat/lon is still probed (its answer counts in the summary) but is not
+drawn, and the response names `totalTargets` and `placedTargets` so the gap
+between them says the next step. A malformed entry is skipped rather than taking
+the layer down, only the first 64 targets are accepted, and two entries for the
+same host and port collapse onto one marker keyed by the endpoint, so a target
+list stays stable as entries are added or removed.
+
+The probe cache answers for 30 s and refreshes with one round in flight at a
+time, so several browser polls never become several probe rounds per interval;
+the first caller of a cold cache waits for the answer and later polls are served
+instantly until the cache goes stale, when the read returns at once and a
+refresh runs in the background. A failed round keeps the last good answer (a
+map of node states must not go blank while its own network is down) and an
+answer older than 10 minutes is flagged `stale`. With nothing configured,
+`/api/netmon` answers `503 netmon_not_configured`, and the layer row explains
+the setting instead of showing guessed positions or empty rows; probe-round
+failures answer `502` with `Retry-After: 60`, and non-GET requests answer 405
+with `Allow: GET`. Each marker is coloured from its own probe round: green
+reachable, red unreachable (timed out or refused), grey unknown — and unknown
+is the fallback for a point whose row carries no status, so a parser change
+cannot quietly recolour the map.
+Neither colour says more than that. Probe only nodes you own or have explicit
+permission to monitor — using it otherwise is misuse, not a supported
+configuration. See [method and limits](../DATA_SOURCES.md#network-monitor-your-own-nodes-apinetmon).
 
 Street Level is a docked, collapsible right-rail panel (`#street-level-panel`,
 layer token `0`, option owner `street-level`, panel `ui` token `t`) that starts
