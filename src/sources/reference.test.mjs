@@ -24,7 +24,9 @@ test('reference factories retain compatibility without starting acquisition or s
     'satellite-watch',
     'fishing-effort',
     'plate-reader',
+    'face-privacy',
   ]);
+  assert.notEqual(first['face-privacy'], second['face-privacy']);
   assert.notEqual(first.earthquakes, second.earthquakes);
   assert.notEqual(first['air-quality'], second['air-quality']);
   assert.notEqual(first['fire-perimeters'], second['fire-perimeters']);

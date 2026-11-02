@@ -415,29 +415,31 @@ export function faceProxy({
   };
 
   /** The Vite plugin shape: one middleware, same as the plate reader's. */
+  const install = (server) => {
+    server.middlewares.use(async (req, res, next) => {
+      try {
+        const url = new URL(req.url ?? '/', 'http://same-site');
+        if (!url.pathname.startsWith('/api/face')) return next();
+        const responded = await respond(req, res);
+        if (!responded) return next();
+        res.statusCode = responded.status;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(responded.body));
+      } catch (error) {
+        res.statusCode = 500;
+        res.end(
+          JSON.stringify({
+            error: 'face_failed',
+            detail: error?.message || String(error),
+          }),
+        );
+      }
+    });
+  };
   return {
     name: 'face-proxy',
-    configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
-        try {
-          const url = new URL(req.url ?? '/', 'http://same-site');
-          if (!url.pathname.startsWith('/api/face')) return next();
-          const responded = await respond(req, res);
-          if (!responded) return next();
-          res.statusCode = responded.status;
-          res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify(responded.body));
-        } catch (error) {
-          res.statusCode = 500;
-          res.end(
-            JSON.stringify({
-              error: 'face_failed',
-              detail: error?.message || String(error),
-            }),
-          );
-        }
-      });
-    },
+    configureServer: install,
+    configurePreviewServer: install,
   };
 }
 
