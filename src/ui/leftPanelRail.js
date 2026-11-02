@@ -113,7 +113,14 @@ export function layoutLeftPanelRail({
   // Keep the accordion visually centered when the balanced corridor remains
   // useful. During live viewport-height changes, retain the aligned lane
   // instead of extending a tiny midpoint corridor through a lower obstacle.
-  const minimumLaneHeight = viewportHeight * 0.16;
+  // A corridor below this floor cannot present expanded panel content for
+  // reading: the list scrolls in a band of two cramped rows and the panel
+  // reads as crushed. Windows geometry is the case that first exposed it —
+  // the fixed-pixel HUD chrome (heading, status readouts, command dock)
+  // fills the vh-inset lane at 125-150% display scaling, where 16vh would
+  // leave ~98px against a panel that needs ~460px. Grow over the static
+  // top chrome instead, capped at a clear viewport margin.
+  const minimumLaneHeight = Math.max(viewportHeight * 0.16, 260);
   ({ safeTop, safeBottom } = resolvePanelStackCorridor({
     viewportHeight,
     safeTop,
@@ -205,9 +212,10 @@ export function layoutLeftPanelRail({
     tailLayoutBottom <= obstacleSafeBottom + tailTolerance;
   const shouldFocus = exceedsCenteredCorridor && !shouldTail;
   // Focus mode owns the lane, so let every expanded panel share the full
-  // obstacle-safe corridor. Tail/normal layouts keep the balanced
-  // viewport centering used for compact accordion stacks.
-  const layoutTop = shouldFocus
+  // obstacle-safe corridor. Tail/normal layouts keep the balanced viewport
+  // centering used for compact accordion stacks. In focus mode the lane may
+  // still end below the floor above; the growth below makes that usable.
+  let layoutTop = shouldFocus
     ? obstacleSafeTop
     : shouldTail
       ? tailLayoutTop
@@ -217,6 +225,14 @@ export function layoutLeftPanelRail({
     : shouldTail
       ? tailLayoutBottom
       : safeBottom;
+  // Honor the lane floor by growing upward over the static top chrome
+  // rather than clipping the focused panel into a sliver. The bottom stays
+  // put: the obstacles there (command dock, HUD readouts) are interactive.
+  const laneDeficit = minimumLaneHeight - (layoutBottom - layoutTop);
+  const layoutFloorTop = viewportHeight * 0.06;
+  if (laneDeficit > 0 && layoutTop > layoutFloorTop) {
+    layoutTop = Math.max(layoutFloorTop, layoutTop - laneDeficit);
+  }
   const topPct = (layoutTop / viewportHeight) * 100;
   const bottomPct = ((viewportHeight - layoutBottom) / viewportHeight) * 100;
   const topValue = `${topPct.toFixed(3)}vh`;

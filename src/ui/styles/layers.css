@@ -84,6 +84,15 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 4px;
+  /* Scrolling the list inside a blurred, transformed panel repaints the rows
+     into a texture the compositor already drew one frame earlier: on Windows
+     (the installed shell, both at 100% and 125% DPI) the rows render at the
+     previous scroll offset on top of the current one and the list reads as
+     crushed, doubled text while it moves. Paint containment plus a dedicated
+     scroll-position layer keep the rows on one texture that the compositor
+     shifts as a whole, so the text never repaints at a stale offset. */
+  contain: paint;
+  will-change: scroll-position;
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 212, 255, 0.5) rgba(255, 255, 255, 0.04);
   scrollbar-gutter: stable;

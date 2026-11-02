@@ -64,3 +64,7 @@ ios/GodsEyeView.xcodeproj/
 ios/build/
 ios/DerivedData/
 ios/*.ipa
+
+# Scratch workspaces and local runtime data.
+.tmp-*/
+.gev-data/
