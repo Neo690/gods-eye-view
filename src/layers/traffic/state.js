@@ -120,6 +120,16 @@ export function createState({ services }) {
   layerState._liveMode = false;
 
   /**
+   * True once an enable attempt was refused because no TomTom key is present
+   * (or the status probe itself failed): the keyless ambient simulation was
+   * removed by policy, so the layer stays completely OFF. Informational —
+   * controls/docs use it to reason about a sim path that can never fire.
+   * @type {boolean}
+   */
+
+  layerState._keylessRefused = false;
+
+  /**
    * Short user-facing reason live flow is currently unavailable, or null while
    * healthy. Only ever set in live mode: keyless simulation is a designed
    * fallback, not a fault, and must never read as an error.
@@ -161,9 +171,14 @@ export function createState({ services }) {
 
   layerState._closedRoads = 0;
 
-  /** @type {'sim'|'hide'} Live-mode treatment of roads without flow data. */
+  /** @type {'sim'|'hide'} Live-mode treatment of roads without flow data.
+   * 'hide' by policy (owner ruling 2026-11): without real TomTom flow a road
+   * must not appear — hardcoded ambient colors are no longer shown as a
+   * fill-in for uncovered roads. 'sim' remains available via setParams for
+   * A/B, but nothing ships with undeclared ambient dots.
+   */
 
-  layerState._uncoveredMode = 'sim';
+  layerState._uncoveredMode = 'hide';
 
   /**
    * Jam-viz prototype mode: 'density' = deep-jam density boost + platoon queues

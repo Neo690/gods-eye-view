@@ -103,9 +103,13 @@ test('dev and preview install the same bounded Gemini token endpoint', () => {
     geminiLiveProxy()[hook]({
       middlewares: { use: (...args) => installed.push(args) },
     });
-    assert.equal(installed.length, 1);
-    assert.equal(installed[0][0], '/api/gemini/token');
+    assert.equal(installed.length, 2);
+    assert.deepEqual(
+      installed.map(([route]) => route),
+      ['/api/gemini/token', '/api/gemini/agent-plan'],
+    );
     assert.equal(typeof installed[0][1], 'function');
+    assert.equal(typeof installed[1][1], 'function');
   }
 });
 
@@ -158,8 +162,8 @@ test('mounted token handler completes synchronous resolver failures without expo
         },
       }).configureServer({
         middlewares: {
-          use(_path, installed) {
-            handler = installed;
+          use(path, installed) {
+            if (path === '/api/gemini/token') handler = installed;
           },
         },
       });

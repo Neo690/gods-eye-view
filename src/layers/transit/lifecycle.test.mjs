@@ -3569,7 +3569,14 @@ test('actual Traffic, Bikeshare and Transit lifecycles retain sensitivity in eve
   const app = harness(t);
   const noop = () => {};
   const traffic = trafficLifecycle({
-    state: { _pointCollection: {}, _loadGeneration: 0 },
+    // Live-key gate (owner ruling 2026-11): enable() refuses without one —
+    // this order-sensitivity matrix only exercises camera claims, so seed a
+    // settled status probe with a key.
+    state: {
+      _pointCollection: {},
+      _loadGeneration: 0,
+      _liveMode: true,
+    },
     services: {
       render: { holdContinuousRender: noop, releaseContinuousRender: noop },
     },
@@ -3622,7 +3629,10 @@ test('actual Traffic, Bikeshare and Transit lifecycles retain sensitivity in eve
       for (const disable of orders) {
         const active = new Set();
         for (const id of enable) {
-          layers[id].enable(app.viewer);
+          // Traffic enable is async (it first settles the once-per-session
+          // TomTom status probe); await so the camera claim is in place
+          // before the assertions below observe sensitivity.
+          await layers[id].enable(app.viewer);
           active.add(id);
           assert.equal(app.viewer.camera.percentageChanged, 0.05);
           assert.deepEqual(

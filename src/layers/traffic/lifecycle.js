@@ -70,14 +70,41 @@ export function createLifecycle({
     },
 
     /**
-     * Enable the traffic layer. Shows the point collection, subscribes to the
-     * preRender animation loop and camera-change events, and kicks off an
-     * initial viewport check.
+     * Enable the traffic layer — live TomTom flow only. Shows the point
+     * collection, subscribes to the preRender animation loop and camera-change
+     * events, and kicks off an initial viewport check.
+     *
+     * Policy (owner ruling 2026-11): the built-in keyless ambient simulation is
+     * gone. The layer must show only real roads with real TomTom flow, so
+     * nothing renders until the once-per-session `/api/tomtom/status` probe
+     * settles. Without a key — or when the probe itself is unreachable, which
+     * would make "is what's on screen live?" a guess — the layer refuses to
+     * enable. Resolving `false` lets the data manager treat this as a rejected
+     * enable: the toggle stays honestly OFF, a failed-enable cleanup runs, and
+     * the layer never draws dots.
      *
      * @param {Cesium.Viewer} viewer - The Cesium viewer instance.
+     * @returns {Promise<boolean>} false when refused (no TomTom key / status
+     *   probe unreachable); true once enabled.
      */
-    enable(viewer) {
-      if (layerState._enabled) return;
+    async enable(viewer) {
+      if (layerState._enabled) return true;
+      // Without a live key there is nothing honest to show: refuse before
+      // subscribing to anything, so no hint of the layer ever lights up.
+      await parts.flow.ensureFlowStatus();
+      // A disabled-enable race may have settled while we awaited: never bring
+      // the layer back over a user cancel.
+      if (layerState._enabled) return true;
+      if (!layerState._liveMode) {
+        layerState._keylessRefused = true;
+        console.warn(
+          layerState._flowStatusUnavailable
+            ? '[Data:Traffic] Enable refused — TomTom status unreachable; simulation fallback removed by policy, layer stays OFF'
+            : '[Data:Traffic] Enable refused — no TomTom key; the layer runs live flow only, so it stays OFF',
+        );
+        return false;
+      }
+      layerState._keylessRefused = false;
       layerState._enabled = true;
       layerState._surfaceFrameRemover = observeTrafficSurface(viewer.scene);
       if (layerState._roadMode !== 'tomtom') source.prefetch?.();

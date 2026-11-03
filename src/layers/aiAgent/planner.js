@@ -2,16 +2,16 @@
 //
 // The avatar watches (watch.js) and shows (overlay.js); this module decides.
 // One cycle asks the operator-configured model — via the same-origin
-// `/api/openai/agent-plan` relay, which keeps the key server-side — for a plan
-// given the current World Packet plus recent events, then executes the plan's
-// actions through the SAME runner the voice tools use, so the agent can never
-// do anything the voice console could not: schema-checked actions, the same
-// caps, the same audit paths. A plan without a model (no key, relay down,
-// unparseable answer) degrades to watchdog-only mode: events still surface,
-// no actions run, no cost accrues.
+// `/api/gemini/agent-plan` relay, which keeps the registered Gemini key
+// server-side — for a plan given the current World Packet plus recent events,
+// then executes the plan's actions through the SAME runner the voice tools
+// use, so the agent can never do anything the voice console could not:
+// schema-checked actions, the same caps, the same audit paths. A plan without
+// a model (no key, relay down, unparseable answer) degrades to watchdog-only
+// mode: events still surface, no actions run, no cost accrues.
 import { getWorldPacket } from '../../agent/worldPacket.js';
 
-const PLAN_URL = '/api/openai/agent-plan';
+const PLAN_URL = '/api/gemini/agent-plan';
 
 /** Actions the agent may execute per cycle and per session. */
 export const MAX_ACTIONS_PER_PLAN = 3;

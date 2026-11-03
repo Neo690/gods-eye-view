@@ -115,11 +115,12 @@ test('traffic construction is inert and parameters belong to each layer', async 
   const services = { credits: {}, render: {} };
   const a = createTrafficLayer({ services, source });
   const b = createTrafficLayer({ services, source });
-  a.setParams({ densityScale: 2, speedScale: 3, uncoveredRoads: 'hide' });
+  a.setParams({ densityScale: 2, speedScale: 3, uncoveredRoads: 'sim' });
   assert.equal(a.getParams().densityScale, 2);
   assert.equal(b.getParams().densityScale, 1);
   assert.equal(b.getParams().speedScale, 1);
-  assert.equal(b.getParams().uncoveredRoads, 'sim');
+  // Default 'hide': without real TomTom flow a road must not appear.
+  assert.equal(b.getParams().uncoveredRoads, 'hide');
 });
 
 test('road tile replies respect cancellation even when the tile source ignores it', async () => {
@@ -420,6 +421,9 @@ async function matchingContext(fetchFlowForBounds) {
     _liveMode: true,
     _enabled: true,
     _flowStatusPromise: Promise.resolve(),
+    // Fixture opt-in to the legacy ambient fill: these tests count unmatched
+    // (sim) dots, while the shipped default now hides uncovered roads.
+    _uncoveredMode: 'sim',
   });
   const source = {
     fetchFlowForBounds,

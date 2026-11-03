@@ -17,6 +17,22 @@ import { msg } from '../../i18n/index.js';
 
 export function createFlow({ state: layerState, services, parts, source }) {
   const { registerDynamicCredit, TOMTOM_CREDIT } = services.credits;
+  // Registration is decoration, never a live/no-live decision input: a fixture
+  // (or a host) without the credit service must not flip the status probe's
+  // answer through the shared catch below.
+  const registerTomTomCredit =
+    typeof registerDynamicCredit === 'function'
+      ? () => {
+          try {
+            registerDynamicCredit(layerState._viewer, TOMTOM_CREDIT);
+          } catch (e) {
+            console.warn(
+              '[Data:Traffic] TomTom credit registration failed (ignored):',
+              e?.message || e,
+            );
+          }
+        }
+      : () => {};
   const { fetchFlowForBounds } = source;
 
   // ─── Live Flow (TomTom) ────────────────────────────────────
@@ -52,7 +68,9 @@ export function createFlow({ state: layerState, services, parts, source }) {
    * Check `/api/tomtom/status` once per session and cache the result.
    * Live mode iff the server holds a TomTom key; the TomTom attribution credit
    * registers the first time live mode activates. Keyless or unreachable →
-   * simulation mode, exactly today's behavior.
+   * NOT live: with no key (or no way to ask whether there is one) the layer
+   * has no honest flow data to show — enable() refuses rather than run the
+   * removed keyless simulation.
    *
    * @returns {Promise<void>} Resolves when `_liveMode` is settled.
    */
@@ -72,23 +90,25 @@ export function createFlow({ state: layerState, services, parts, source }) {
           layerState._flowStatusKnown = true;
           if (layerState._liveMode) {
             console.log('[Data:Traffic] TomTom key present — live flow mode');
-            registerDynamicCredit(layerState._viewer, TOMTOM_CREDIT);
+            registerTomTomCredit();
           }
         })
         .catch((e) => {
           if (e?.name === 'AbortError') throw e;
           if (layerState._flowStatusSignal === signal)
             layerState._flowStatusSignal = null;
-          // Simulating because we could not ask, which is NOT the same as
-          // "server says no key" — getStats() distinguishes the two.
+          // Not live because we could not ask, which is NOT the same as
+          // "server says no key" — getStats() distinguishes the two. Either
+          // way the layer cannot honestly run: enable() refuses and the
+          // simulation fallback stays out (removed by policy).
           layerState._liveMode = false;
           layerState._flowStatusUnavailable = true;
           layerState._flowStatusKnown = true;
           console.warn(
-            '[Data:Traffic] TomTom status unreachable — simulated traffic:',
+            '[Data:Traffic] TomTom status unreachable — layer refuses to enable (no simulation fallback):',
             e?.message || e,
           );
-        });
+        });;
     }
     return layerState._flowStatusPromise;
   }

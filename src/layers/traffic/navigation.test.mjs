@@ -11,7 +11,9 @@ function deferred() {
   return { promise, resolve };
 }
 
-function setup(t, requestRoads, getStatus = async () => ({ hasKey: false })) {
+// Default to a registered key: the keyless simulation is gone, so tests that
+// exercise enabled behavior must act as the live TomTom path.
+function setup(t, requestRoads, getStatus = async () => ({ hasKey: true })) {
   t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
   const camera = {
     positionCartographic: Cesium.Cartographic.fromDegrees(
@@ -63,6 +65,10 @@ function setup(t, requestRoads, getStatus = async () => ({ hasKey: false })) {
     },
   });
   layer.init(viewer);
+  // These suites drive the dot engine against roads that carry no TomTom
+  // flow at all; the shipped default now hides uncovered roads entirely
+  // (policy 2026-11), so fixtures opt back into the legacy ambient fill.
+  layer.setParams({ uncoveredRoads: 'sim' });
   t.after(() => layer.destroy(viewer));
   const move = (lon, lat, height = 3200) => {
     camera.positionCartographic = Cesium.Cartographic.fromDegrees(
@@ -75,7 +81,11 @@ function setup(t, requestRoads, getStatus = async () => ({ hasKey: false })) {
   };
   const tick = async (ms) => {
     t.mock.timers.tick(ms);
-    for (let i = 0; i < 30; i++) await Promise.resolve();
+    // The enable pre-check plus the live-flow chain add microtask hops over
+    // the old keyless path: give the queue turns to settle before asserts.
+    for (let i = 0; i < 300; i++) await Promise.resolve();
+    for (let i = 0; i < 10; i++) await new Promise((resolve) => setImmediate(resolve));
+    for (let i = 0; i < 100; i++) await Promise.resolve();
   };
   return { layer, viewer, move, tick };
 }
@@ -104,7 +114,7 @@ test('traffic recovers a failed destination request after another city has loade
       throw new Error('temporary Overpass outage');
     return roads(bounds);
   });
-  layer.enable(viewer);
+  await layer.enable(viewer);
   await tick(400);
   await tick(2000);
   assert.ok(layer.getStats().count > 0);
@@ -128,7 +138,7 @@ test('a superseded road response cannot release the current request controller',
     pending.push({ ...result, bounds, signal });
     return result.promise;
   });
-  layer.enable(viewer);
+  await layer.enable(viewer);
   await tick(400);
   move(-0.1276, 51.5072);
   await tick(400);
@@ -155,7 +165,7 @@ test('leaving traffic altitude cancels queued and in-flight work', async (t) => 
     pending.push({ ...result, bounds, signal });
     return result.promise;
   });
-  layer.enable(viewer);
+  await layer.enable(viewer);
   move(-40, 40, 1000000);
   await tick(400);
   assert.equal(
@@ -180,7 +190,7 @@ test('arrival below the camera change threshold loads the final city and unsubsc
     seen.push(bounds);
     return roads(bounds);
   });
-  layer.enable(viewer);
+  await layer.enable(viewer);
   await tick(400);
   viewer.camera.positionCartographic = Cesium.Cartographic.fromDegrees(
     -0.1276,
@@ -201,7 +211,7 @@ test('parked failures back off and disabling cancels the scheduled retry', async
     calls++;
     throw new Error('temporary Overpass outage');
   });
-  layer.enable(viewer);
+  await layer.enable(viewer);
   await tick(400);
   assert.equal(calls, 1);
   assert.equal(layer.getStats().loading, false);
@@ -229,7 +239,7 @@ test('not-configured roads stop both parked retries and the enable-time kick', a
       json: async () => ({ code: 'OVERPASS_NOT_CONFIGURED', retryable: false }),
     };
   });
-  h.layer.enable(h.viewer);
+  await h.layer.enable(h.viewer);
   await h.tick(400);
   await h.tick(60_000);
   assert.equal(requests, 1);
@@ -240,7 +250,7 @@ test('not-configured roads stop both parked retries and the enable-time kick', a
 test('a declined road request reaches the row as the reason, not as a shrug', async (t) => {
   let status = 406;
   const { layer, viewer, tick } = setup(t, async () => ({ ok: false, status }));
-  layer.enable(viewer);
+  await layer.enable(viewer);
   await tick(400);
   assert.equal(
     layer.getStats().error,
@@ -260,12 +270,12 @@ test('an unclassified road failure keeps the general line', async (t) => {
   const { layer, viewer, tick } = setup(t, async () => {
     throw new Error('socket hang up');
   });
-  layer.enable(viewer);
+  await layer.enable(viewer);
   await tick(400);
   assert.equal(layer.getStats().error, 'OpenFreeMap tiles unavailable');
 });
 
-test('a stalled TomTom status never blocks road acquisition or first simulated dots', async (t) => {
+test('an enable that never learns whether a TomTom key exists is refused, roads stay silent', async (t) => {
   let calls = 0;
   const { layer, viewer, tick } = setup(
     t,
@@ -275,13 +285,16 @@ test('a stalled TomTom status never blocks road acquisition or first simulated d
     },
     () => new Promise(() => {}),
   );
-  // The source contract is exercised independently of status by the production
-  // load path; the real source status cancellation case is in source.test.
-  layer.enable(viewer);
+  // Policy (owner ruling 2026-11): without a settled status the layer cannot
+  // know it has live flow, so it refuses to enable instead of simulating.
+  // The dangling enable never settles (the probe promise never resolves) —
+  // that is exactly the point: nothing loads, no dot appears, the toggle
+  // stays OFF until the manager's cancel path runs.
+  layer.enable(viewer); // never settles — the dangling refuse
   await tick(400);
   await tick(2000);
-  assert.ok(calls > 0);
-  assert.ok(layer.getStats().count > 0);
+  assert.equal(calls, 0, 'nothing may load for a refused enable');
+  assert.equal(layer.getStats().count, 0, 'no dots ever appear');
 });
 
 test('explicit enable starts roads without the camera debounce', async (t) => {
@@ -290,7 +303,7 @@ test('explicit enable starts roads without the camera debounce', async (t) => {
     calls++;
     return roads(box);
   });
-  layer.enable(viewer);
+  await layer.enable(viewer);
   await tick(0);
   assert.ok(calls > 0, 'the first load starts before 320 ms');
 });
@@ -301,7 +314,7 @@ test('moveEnd starts the destination request without another gesture debounce', 
     calls++;
     return roads(bounds);
   });
-  layer.enable(viewer);
+  await layer.enable(viewer);
   await tick(400);
   const before = calls;
   move(-0.1276, 51.5072);
@@ -319,8 +332,8 @@ test('traffic surface observers belong to enable and leave no listener after dis
   viewer.scene.postRender = new Cesium.Event();
   assert.equal(viewer.scene.postRender.numberOfListeners, 0);
   for (let i = 0; i < 3; i++) {
-    layer.enable(viewer);
-    layer.enable(viewer);
+    await layer.enable(viewer);
+    await layer.enable(viewer);
     assert.equal(viewer.scene.postRender.numberOfListeners, 1);
     viewer.scene.postRender.raiseEvent();
     await tick(1);
@@ -333,7 +346,7 @@ test('traffic surface observers belong to enable and leave no listener after dis
       'late work cannot resubscribe',
     );
   }
-  layer.enable(viewer);
+  await layer.enable(viewer);
   assert.equal(viewer.scene.postRender.numberOfListeners, 1);
   layer.destroy(viewer);
   assert.equal(viewer.scene.postRender.numberOfListeners, 0);
@@ -346,13 +359,13 @@ test('coverage changes at the same center reload and disabling invalidates cover
     calls.push(bounds);
     return roads(bounds);
   });
-  layer.enable(viewer);
+  await layer.enable(viewer);
   await tick(1000);
   await tick(2000);
   assert.ok(layer.getStats().count > 0);
   const before = calls.length;
   layer.disable(viewer);
-  layer.enable(viewer);
+  await layer.enable(viewer);
   await tick(1000);
   await tick(2000);
   assert.ok(layer.getStats().count > 0, 'enable must repaint the same view');
@@ -382,7 +395,7 @@ test('a settled footprint loads new tiles even when the camera centre stays put'
       ellipsoid,
       result,
     );
-  layer.enable(viewer);
+  await layer.enable(viewer);
   await tick(400);
   assert.equal(seen.length, 1);
   const firstKey = seen[0].coverage.key;
@@ -414,7 +427,7 @@ test('partial coverage retries while coarse roads render, then stops after three
     const data = await response.json();
     return { ok: true, json: async () => ({ ...data, partial: true }) };
   });
-  layer.enable(viewer);
+  await layer.enable(viewer);
   await tick(400);
   await tick(0);
   assert.ok(layer.getStats().count > 0);

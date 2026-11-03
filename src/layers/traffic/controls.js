@@ -128,10 +128,11 @@ export function createControls({ state: layerState, services, parts, source }) {
           'Density',
         );
       // Live-mode treatment of roads TomTom has no flow data for:
-      // 'sim' (default) keeps them as today's white ambient dots — colored =
-      // real data, white = simulation; 'hide' spawns nothing on them (strict
-      // data-integrity view). Owner-explorable; re-render applies on the next
-      // camera-driven load.
+      // 'hide' (default — owner ruling 2026-11) spawns nothing on them: a road
+      // without real TomTom flow must not appear, hardcoded ambient colors
+      // are gone. 'sim' keeps the old white ambient fill for owner A/B (setParams
+      // only); colored = real data, white = simulation. Re-render applies on the
+      // next camera-driven load.
       if (params.uncoveredRoads === 'sim' || params.uncoveredRoads === 'hide') {
         layerState._uncoveredMode = params.uncoveredRoads;
       }

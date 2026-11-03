@@ -2,6 +2,11 @@ import { realtimeInstructions } from '../openai/instructions.js';
 import { GEV_REALTIME_TOOLS } from '../openai/tools.js';
 
 export const GEMINI_LIVE_MODEL_DEFAULT = 'gemini-3.8-live';
+
+/** Sentinel agent planner (Sentinel pivoted to Gemini instead of OpenAI): a
+ * cheap flash model suffices — the plan is a small JSON envelope over an
+ * already-compressed World Packet, never prose. */
+export const GEMINI_AGENT_PLAN_MODEL_DEFAULT = 'gemini-2.5-flash';
 export const GEMINI_TOKEN_ENDPOINT =
   'https://generativelanguage.googleapis.com/v1beta/auth_tokens';
 export const GEMINI_LIVE_WEBSOCKET_URL =

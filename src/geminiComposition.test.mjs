@@ -49,14 +49,16 @@ for (const hook of ['configureServer', 'configurePreviewServer']) {
       },
     }).find((entry) => entry.name === 'gemini-live-proxy');
     let handler;
+    const routes = [];
     plugin[hook]({
       middlewares: {
         use(route, value) {
-          assert.equal(route, '/api/gemini/token');
-          handler = value;
+          routes.push(route);
+          if (route === '/api/gemini/token') handler = value;
         },
       },
     });
+    assert.deepEqual(routes, ['/api/gemini/token', '/api/gemini/agent-plan']);
     const req = new PassThrough();
     req.method = 'POST';
     req.headers = {

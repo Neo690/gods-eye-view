@@ -28,6 +28,10 @@ function setup(t) {
   const state = createState({ services: {} });
   state._enabled = true;
   state._liveMode = true;
+  // Live-mode fixtures here build roads without flow data on purpose; the
+  // shipped default now hides uncovered roads entirely (policy 2026-11), so
+  // these suites opt back into the legacy ambient fill to test dot engines.
+  state._uncoveredMode = 'sim';
   state._pointCollection = new C.PointPrimitiveCollection();
   state._viewer = { scene: {} };
   const parts = {

@@ -180,7 +180,7 @@ test('traffic timing pairs real ordering to the scheduling change and guards re-
       status: 200,
       headers: { get: () => null },
       json: async () => (String(url).includes('/api/tomtom/status')
-        ? { hasKey: false }
+        ? { hasKey: true } // the timing trace only mounts on the live path
         : { elements: [] }),
     });
     globalThis.setTimeout = (callback, delay) => {
@@ -237,7 +237,7 @@ test('traffic timing pairs real ordering to the scheduling change and guards re-
       start: 'traffic:stale:mark',
       end: 'traffic:stale:mark',
     });
-    trafficLayer.enable(viewer);
+    await trafficLayer.enable(viewer);
     assert.equal(traffic.getTrafficTimingDiagnostics().marksInstalled, 1);
     assert.equal(moveEnd.listenerCount(), 2, 'one timing listener plus the production arrival check');
     assert.equal(performance.getEntriesByName('traffic:stale:mark').length, 0);
