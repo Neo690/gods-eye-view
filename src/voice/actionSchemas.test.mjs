@@ -47,8 +47,9 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // name for the localized roadmap layers (disasters, EMSC, Sentinel,
     // space weather, fishing effort) so the Realtime model can route speech
     // in those languages to the right layer id; the prompt budget follows
-    // with headroom.
-    '150cd3e441c9ecc6bbc5c31728349e6654a7add1a9a044c5d60808004b634c82',
+    // with headroom. Russian, zh-CN and Arabic spoken names now lead the
+    // hint for the same layers the same way.
+    '4b1bce6173d313b3b18a1e65509db72f394cebd03548d834e6df870106b7166b',
   );
 });
 

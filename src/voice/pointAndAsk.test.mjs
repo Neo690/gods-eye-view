@@ -348,15 +348,17 @@ test('deixis prompt lint: one short rule, and every sentinel it names exists in 
   // policy once (WHERE precedence, AREAS routing, AFTER TOOLS speech) brought
   // it to 51,646. The network-monitoring layer grew it to 52,027, and the
   // localized fr/ES alias hint (one French and one Spanish spoken name per
-  // localized layer) brought it to 52,514. The ceiling follows with headroom;
-  // a new tool or rule has to fit under it.
+  // localized layer) brought it to 52,514. The Russian, zh-CN and Arabic
+  // leading names per localized layer brought it to 52,642. The ceiling
+  // follows with headroom; a new tool or rule has to fit under it.
   const size = instructions.length + JSON.stringify(GEV_REALTIME_TOOLS).length;
   assert.ok(size <= 53000, `prompt size ${size}`);
 });
 
-
 test('after-tool speech allows returned items to answer requested lists and rankings', () => {
-  const rule = realtimeInstructions().split('\n').find(line => line.startsWith('AFTER TOOLS:'));
+  const rule = realtimeInstructions()
+    .split('\n')
+    .find((line) => line.startsWith('AFTER TOOLS:'));
   assert.match(rule, /requested analyst list or ranking/);
   assert.match(rule, /returned items.*returned values/);
   assert.match(rule, /keep their order/);
