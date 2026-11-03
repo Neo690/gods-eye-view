@@ -12,11 +12,7 @@
 // The layer owns no map primitives: the avatar is DOM (see overlay.js), so
 // disabling the layer removes the agent with no Cesium cleanup.
 import { msg } from '../../i18n/index.js';
-import {
-  watchLayers,
-  worstSeverity,
-  readStrongRecord,
-} from './watch.js';
+import { watchLayers, worstSeverity, readStrongRecord } from './watch.js';
 import { createAvatarOverlay } from './overlay.js';
 import { requestAgentPlan, MAX_ACTIONS_PER_SESSION } from './planner.js';
 
@@ -30,7 +26,6 @@ const PLAN_INTERVAL_MS = 5 * 60 * 1000;
 const FIRST_PLAN_DELAY_MS = 45 * 1000;
 /** Events older than this stop motivating a plan. */
 const EVENT_MEMORY_MS = 10 * 60 * 1000;
-
 
 /**
  * Wire the Sentinel engine to what the application owns. The action runner
@@ -65,10 +60,7 @@ export function createAiAgentLayer({
 
   function forgetOldEvents() {
     const now = nowSource();
-    while (
-      recentEvents.length &&
-      now - recentEvents[0].at > EVENT_MEMORY_MS
-    ) {
+    while (recentEvents.length && now - recentEvents[0].at > EVENT_MEMORY_MS) {
       recentEvents.shift();
     }
   }
@@ -78,7 +70,7 @@ export function createAiAgentLayer({
       return severityNow();
     const rows = manager.getAll();
     const { events, previous } = watchLayers(rows, watchState, {
-      now: nowSource(),
+      now: nowSource,
       readRecords: readStrongRecord,
     });
     watchState.previous = previous;
@@ -88,9 +80,12 @@ export function createAiAgentLayer({
     }
     while (recentEvents.length > 30) recentEvents.shift();
     forgetOldEvents();
-    const fresh = recentEvents.filter((event) => nowSource() - event.at < 60_000);
+    const fresh = recentEvents.filter(
+      (event) => nowSource() - event.at < 60_000,
+    );
     const freshSeverity = worstSeverity(fresh);
-    if (freshSeverity !== 'info') planAt = Math.min(planAt, nowSource() + 15_000);
+    if (freshSeverity !== 'info')
+      planAt = Math.min(planAt, nowSource() + 15_000);
     lastSeen = nowSource();
     return freshSeverity;
   }
