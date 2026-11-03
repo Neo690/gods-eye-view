@@ -9,7 +9,7 @@ import {
   watchLayers,
   worstSeverity,
 } from './watch.js';
-import { MAX_ACTIONS_PER_PLAN, safePlanActions } from './planner.js';
+import { MAX_ACTIONS_PER_PLAN, requestAgentPlan, safePlanActions } from './planner.js';
 import { createAiAgentLayer } from './index.js';
 
 // ---------------------------------------------------------------------------
@@ -745,6 +745,66 @@ test('safePlanActions never explodes on garbage plans', () => {
   assert.deepEqual(safePlanActions('not an array'), []);
   assert.deepEqual(safePlanActions([]), []);
   assert.deepEqual(safePlanActions([{}, 3]), []);
+});
+
+test('requestAgentPlan degrades to watchdog-only on every relay failure', async () => {
+  // The planner rides the same-origin Gemini relay; no OpenAI fallback. The
+  // World Packet builder needs a real camera position; nothing beyond that.
+  const owners = {
+    viewer: { camera: { positionWC: { x: 0, y: 0, z: 6371000 } } },
+    dataManager: { getAll: () => [] },
+    styleManager: {},
+  };
+  const context = { events: [], actCount: 0 };
+  // The stub plays the RELAY, not the upstream model: requestAgentPlan
+  // consumes the relay's {plan} envelope (the candidates parsing lives
+  // behind /api/gemini/agent-plan, covered in its own suite).
+
+  // Keyless relay: the bounded 503 not-configured contract — no plan, no
+  // actions, no retry. (The browser never holds the key either way.)
+  const seen = [];
+  const keyless = await requestAgentPlan(owners, context, {
+    fetchImpl: async (url, options) => {
+      seen.push({ url, options });
+      return Response.json(
+        { plan: null, error: 'not-configured' },
+        { status: 503 },
+      );
+    },
+  });
+  assert.equal(keyless, null);
+  assert.deepEqual(
+    seen.map(({ url, options }) => [url, options.method, options.headers['Content-Type']]),
+    [['/api/gemini/agent-plan', 'POST', 'application/json']],
+    'the planner posts to the same-origin Gemini relay, never OpenAI or a cross-origin endpoint',
+  );
+
+  // Relay unreachable (dev server down) is the same local degradation.
+  assert.equal(
+    await requestAgentPlan(owners, context, {
+      fetchImpl: async () => {
+        throw Error('relay unreachable');
+      },
+    }),
+    null,
+  );
+
+  // A relay 200 whose model answer never shaped into a plan degrades the
+  // same way instead of throwing into the layer's planning loop.
+  assert.equal(
+    await requestAgentPlan(owners, context, {
+      fetchImpl: async () => Response.json({ plan: null }),
+    }),
+    null,
+  );
+
+  // A real plan survives the same call so the degradation stays precise:
+  // only the failures above are watchdog-only, not every answer.
+  const planned = await requestAgentPlan(owners, context, {
+    fetchImpl: async () =>
+      Response.json({ plan: { speech: 'Watching.', actions: [] } }),
+  });
+  assert.deepEqual(planned, { speech: 'Watching.', actions: [] });
 });
 
 // ---------------------------------------------------------------------------
