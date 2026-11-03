@@ -171,6 +171,53 @@ const layers = [
     },
   },
   {
+    id: 'emsc-seismic',
+    aliases: ['emsc', 'emsc quakes', 'european earthquakes'],
+    context: false,
+    query: {
+      fields: {
+        magnitude: ['n'],
+        depthKm: ['n', 'km'],
+        place: ['t'],
+        timeMs: ['ms'],
+      },
+      timeField: 'timeMs',
+      window: 'last 24 h',
+    },
+  },
+  {
+    id: 'global-disasters',
+    aliases: [
+      'global disasters',
+      'disasters',
+      'gdacs',
+      'floods',
+      'droughts',
+      'cyclones gdacs',
+      'effis fires',
+      'ems activations',
+    ],
+    context: true,
+    query: {
+      fields: {
+        name: ['t'],
+        category: ['t'],
+        alertLevel: ['t'],
+        severity: ['n'],
+        areaHa: ['n', 'ha'],
+        timeMs: ['ms'],
+      },
+      timeField: 'timeMs',
+      window: 'last 14 d and active',
+    },
+  },
+  {
+    id: 'ai-agent',
+    aliases: ['sentinel', 'ai agent', 'watch agent'],
+    context: false,
+    noQuery: 'watch agent; its own events, not countable records',
+  },
+  {
     id: 'local-firms',
     aliases: ['fires', 'wildfires', 'active fires', 'firms'],
     context: true,

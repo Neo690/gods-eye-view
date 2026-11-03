@@ -999,11 +999,13 @@ test('the voice TOOL SCHEMA matches the pinned contract — the mission mapping 
   // own enum value, which is the one change a new layer is allowed to make;
   // fishing effort adds another, and the ADS-B Exchange row extends the
   // provider list the settings tool describes. The operator-node monitor
-  // extends the manifest with its own aliases and noQuery hint.
-  assert.equal(block.length, 31707, 'serialized tool schema length drifted');
+  // extends the manifest with its own aliases and noQuery hint. The EMSC
+  // seismic network extends the manifest with its own aliases and field
+  // hints.
+  assert.equal(block.length, 31813, 'serialized tool schema length drifted');
   assert.equal(
     crypto.createHash('sha256').update(block).digest('hex'),
-    '1a6c086872382582889b6303b3ea7a5f0ecb25102f356b1d05e8afbe15570b10',
+    '67ecd69c05a40e4eb0c74629e1476aa1b70fa1f4f3da8cfa9440587ff952b6ea',
     'the first-run missions must ride EXISTING tools: no schema edit, no cache bust',
   );
   const instructions = fs.readFileSync(

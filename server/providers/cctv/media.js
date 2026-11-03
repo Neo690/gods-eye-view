@@ -14,6 +14,7 @@ import {
   TALLINN_IMAGE_ORIGIN,
   TARKTEE_IMAGE_ORIGIN,
   TFL_IMAGE_ORIGIN,
+  TRAFFICWATCHNI_REFERER,
   WARENDORF_IMAGE_ORIGINS,
   WSDOT_IMAGE_ORIGIN,
 } from './constants.js';
@@ -603,6 +604,30 @@ const CCTV_IMAGE_USER_AGENT_BY_HOST = Object.freeze({
 });
 
 /**
+ * Image hosts that require a same/referer origin on every frame request, keyed
+ * by exact hostname. cctv.trafficwatchni.com answers 403 without Referer
+ * (verified 2026-11-03); the header it expects is the public list page origin.
+ * Only the relay fetches upstream frames, so this never leaks to a browser.
+ */
+const CCTV_IMAGE_REFERER_BY_HOST = Object.freeze({
+  [new URL(TRAFFICWATCHNI_IMAGE_ORIGIN).hostname]: TRAFFICWATCHNI_REFERER,
+});
+
+/**
+ * Referer for one upstream frame request (empty when the host wants none).
+ *
+ * @param {string} url
+ * @returns {string}
+ */
+export function cctvUpstreamReferer(url) {
+  try {
+    return CCTV_IMAGE_REFERER_BY_HOST[new URL(url).hostname] || '';
+  } catch {
+    return '';
+  }
+}
+
+/**
  * User-Agent for one upstream frame request.
  *
  * @param {string} url
@@ -652,7 +677,10 @@ export async function fetchCctvImageFromUpstream(
     const upstream = await fetchWithinHost(
       url,
       {
-        headers: { 'User-Agent': cctvUpstreamUserAgent(url) },
+        headers: {
+          'User-Agent': cctvUpstreamUserAgent(url),
+          ...(cctvUpstreamReferer(url) ? { Referer: cctvUpstreamReferer(url) } : {}),
+        },
         signal: controller.signal,
       },
       fetchImpl,

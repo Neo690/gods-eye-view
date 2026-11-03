@@ -20,6 +20,7 @@ import { defaultSourceRoot } from './common/source-root.js';
 import { radioBrowserProxy } from './radio.js';
 import { gbfsProxy } from './gbfs.js';
 import { localReceiversProxy } from './local-receivers.js';
+import { aiscastProxy } from './vessels/aiscast.js';
 import { transitProxy } from './transit.js';
 import { railwayBoardProxy } from './rail.js';
 import { upstreamRelayProxy } from './upstream.js';
@@ -41,6 +42,7 @@ import { windProxy } from './wind.js';
 import { iotSensorsProxy } from './iotSensors.js';
 import { netMonProxy } from './netmon.js';
 import { cellTowersProxy } from './cellTowers.js';
+import { copernicusEmsProxy } from './copernicusEms.js';
 
 /**
  * Construct the local provider plugins in their established order.
@@ -67,6 +69,9 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     cellTowersProxy(),
     iotSensorsProxy(),
     netMonProxy(),
+    // Copernicus EMS sends no CORS headers; this route fronts the first
+    // activations page for the disasters layer.
+    copernicusEmsProxy(),
     regionalBriefProxy(),
     geocodeProxy(),
     weatherEffectsProxy(),
@@ -78,6 +83,10 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     radioBrowserProxy(),
     gbfsProxy(),
     localReceiversProxy(),
+    // The operator's own aiscast feed is an extra source on top of the
+    // resident ais-live feeder; it must be mounted first so landing exactly
+    // on the aiscast path wins the `/api/vessels` prefix below.
+    aiscastProxy(),
     transitProxy(),
     railwayBoardProxy(),
     // The standalone shell reads feeds through this relay; the server-side

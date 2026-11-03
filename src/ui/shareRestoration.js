@@ -78,6 +78,7 @@ export class ShareRestoration {
     this._initialShareState = null;
     this._initialShareNavigationGeneration = null;
     this._initialShareRestoreTimeout = null;
+    this._initialShareWatchdogTimeout = null;
     this._layerStateCoordinator = null;
     this._layerStateRestorePromise = null;
   }
@@ -145,6 +146,26 @@ export class ShareRestoration {
           }
         })();
       }, 1500);
+      // A hidden tab or a throttled embed can freeze the delayed camera
+      // flight, leaving its promise forever pending. If that stall ever
+      // outlives the full settle chain (grace + flight + tracking), the
+      // layer-state URL hold would also freeze forever and every later
+      // user-origin toggle would be dropped from the URL and storage.
+      // Release the hold so at least post-boot camera state persists.
+      this._initialShareWatchdogTimeout = setTimeout(() => {
+        this._initialShareWatchdogTimeout = null;
+        if (this._disposed || !this._resolveInitialShareRestore) return;
+        if (this._initialShareRestoreTimeout) {
+          clearTimeout(this._initialShareRestoreTimeout);
+          this._initialShareRestoreTimeout = null;
+        }
+        this.shareLinkManager.completeInitialRestore();
+        this._settleInitialShareRestore({
+          status: 'stalled',
+          share: null,
+          layers: [],
+        });
+      }, 12000);
     } else {
       this.syncShareState();
     }
@@ -207,6 +228,12 @@ export class ShareRestoration {
       }
       void this._layerStateRestorePromise.then(() => {
         this.syncModels3d(this._layerStateCoordinator?.getDurableState());
+        // Passive boot restoration can settle AFTER the panel's first render,
+        // and a visibility settle only schedules a scene render, so rows have
+        // stayed on their stale pre-restore labels (observed on netmon:
+        // engine-side enabled, row still the OFF default). Repaint now that
+        // every settled layer has its final visibility.
+        this._dataManager?.refreshLayerStats?.();
       });
     }
   }
@@ -333,6 +360,8 @@ export class ShareRestoration {
     this._layerStateRestorePromise = null;
     clearTimeout(this._initialShareRestoreTimeout);
     this._initialShareRestoreTimeout = null;
+    clearTimeout(this._initialShareWatchdogTimeout);
+    this._initialShareWatchdogTimeout = null;
     this._settleInitialShareRestore({
       status: 'destroyed',
       share: null,

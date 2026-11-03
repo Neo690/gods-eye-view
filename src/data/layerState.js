@@ -585,6 +585,7 @@ export const LAYER_STATE_TOKEN_RESERVATIONS =
  * owns stable URL ordering.
  */
 export const LAYER_STATE_REGISTRY = Object.freeze([
+  Object.freeze({ id: 'ai-agent', token: '08', disposition: 'enabled-only' }),
   Object.freeze({
     id: 'air-quality',
     token: '4',
@@ -621,6 +622,11 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
   Object.freeze({ id: 'directions', token: 'n', disposition: 'enabled-only' }),
   Object.freeze({ id: 'earthquakes', token: 'e', disposition: 'enabled-only' }),
   Object.freeze({
+    id: 'emsc-seismic',
+    token: '07',
+    disposition: 'enabled-only',
+  }),
+  Object.freeze({
     id: 'face-privacy',
     token: '05',
     disposition: 'enabled-only',
@@ -640,6 +646,11 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
     token: 'f',
     disposition: 'enabled+options',
     optionOwner: 'flights',
+  }),
+  Object.freeze({
+    id: 'global-disasters',
+    token: '09',
+    disposition: 'enabled-only',
   }),
   Object.freeze({
     id: 'gnss-integrity',

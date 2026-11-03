@@ -83,6 +83,7 @@ const PANEL_GROUPS = [
     ids: [
       'rocket-launches',
       'earthquakes',
+      'emsc-seismic',
       'orbit-changes',
       'satellite-watch',
       'radiation',

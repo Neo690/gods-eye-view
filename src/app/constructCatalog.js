@@ -30,6 +30,9 @@ import { createApplicationAwareness } from './layers/militaryAwareness.js';
 import { createApplicationFirms } from './layers/firms.js';
 import { createApplicationFishingEffort } from './layers/fishingEffort.js';
 import { createApplicationEarthquakes } from './layers/earthquakes.js';
+import { createApplicationEmscSeismic } from './layers/emscSeismic.js';
+import { createApplicationGlobalDisasters } from './layers/disasters.js';
+import { createAiAgentLayer } from '../layers/aiAgent/index.js';
 import { createApplicationRadiation } from './layers/radiation.js';
 import { createApplicationSpaceWeather } from './layers/spaceWeather.js';
 import { createApplicationOrbitChanges } from './layers/orbitChanges.js';
@@ -140,6 +143,9 @@ export function createApplicationCatalog({
           ...(resolveAsset ? { resolveAsset } : {}),
         }),
         createApplicationEarthquakes({ source: sources.earthquakes }),
+        createApplicationEmscSeismic({ source: sources.emsc }),
+        createApplicationGlobalDisasters(),
+        createAiAgentLayer(),
         createApplicationRadiation({ source: sources.radiation }),
         createApplicationSpaceWeather({ source: sources['space-weather'] }),
         createApplicationOrbitChanges({ source: sources['orbit-changes'] }),

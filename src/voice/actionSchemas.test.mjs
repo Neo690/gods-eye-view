@@ -40,8 +40,9 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // Air quality (ECCC AQHI) extends the manifest.
     // Railway stations and the Israeli transport sites extend it too, each with
     // the fields its card prints. The solar-storm layer adds one enum value,
-    // and fishing effort another.
-    '28106d691fcb56f860fff1e8d8e26b5b8525dba9a2ca29135bea707b6b0ba9fe',
+    // and fishing effort another. The EMSC seismic network extends the
+    // manifest with its own aliases and field hints.
+    '886fee917a691f21c2e23078b9f017aa2216b49942bba101f007d09110b85048',
   );
 });
 

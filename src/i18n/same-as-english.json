@@ -1,5 +1,6 @@
 {
   "es": [
+    "{title} · {when}",
     "{radius} km",
     "{rate} msg/s",
     "{speed} kn",
@@ -131,6 +132,7 @@
     "ΔN"
   ],
   "ru": [
+    "{title} · {when}",
     "AIS: --",
     "AIS: {name}",
     "Android",
@@ -155,6 +157,7 @@
   ],
   "zh-CN": [
     "{city} CCTV",
+    "{title} · {when}",
     "{rate} msg/s",
     "{source} HTTP {status}",
     "{speed} kn",
@@ -217,6 +220,7 @@
   ],
   "fr": [
     "{acres} ac",
+    "{title} · {when}",
     "{city} CCTV",
     "{count} messages",
     "{count} MSGS",
@@ -420,6 +424,7 @@
   "ar": [
     "{city} CCTV",
     "{heading}DEG",
+    "{title} · {when}",
     "{rate} msg/s",
     "{source} HTTP {status}",
     "{speed}KT",

@@ -1,5 +1,6 @@
 import { defaultSourceRoot } from './common/source-root.js';
 import { handleHudSummary } from './openai/hud-summary.js';
+import { handleAgentPlan } from './openai/agent-plan.js';
 import { createDebugLogHandler } from './openai/debug-log.js';
 import {
   createRealtimeOAuthLoginHandler,
@@ -25,6 +26,10 @@ function openAiRealtimeProxy({
     // Cost-bearing and log endpoints refuse cross-site browser requests
     // (see server/providers/common/same-site.js and SECURITY.md).
     middlewares.use('/api/openai/hud-summary', sameSiteGated(handleHudSummary));
+
+    // Sentinel planning relay: keeps the OpenAI credential server-side, same
+    // per-IP budget as the HUD summary, same keyless 503 degradation.
+    middlewares.use('/api/openai/agent-plan', sameSiteGated(handleAgentPlan));
 
     middlewares.use(
       '/api/realtime/debug-log',

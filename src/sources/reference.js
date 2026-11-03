@@ -1,4 +1,5 @@
 import { createUsgsEarthquakeSource } from '../layers/earthquakes/source.js';
+import { createEmscEarthquakeSource } from '../layers/emscSeismic/source.js';
 import { createEcccAirQualitySource } from '../layers/airQuality/source.js';
 import { createWfigsPerimeterSource } from '../layers/perimeters/source.js';
 import { createBundledCableSource } from '../layers/submarineCables/bundledSource.js';
@@ -15,6 +16,7 @@ import { createFaceAnalysisSource } from '../layers/facePrivacy/sources.js';
 export function createReferenceSources() {
   return {
     earthquakes: createUsgsEarthquakeSource(),
+    emsc: createEmscEarthquakeSource(),
     'air-quality': createEcccAirQualitySource(),
     'fire-perimeters': createWfigsPerimeterSource(),
     cables: createBundledCableSource(),

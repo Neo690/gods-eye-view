@@ -71,12 +71,22 @@ export function railFixture(onWrite = () => {}) {
           }
         },
         querySelector(selector) {
+          // `_refreshTogglePanel` addresses rows by data attribute, so support
+          // the generic `[data-name="value"]` form as well as classes; without
+          // it the refresh silently finds no row and a settled repaint
+          // no-ops in a way the real DOM never would.
+          const attribute = /^\[data-([a-z-]+)="([^"]*)"\]$/.exec(selector);
           return find(
             this,
-            (child) =>
-              selector.startsWith('.')
-                ? child.className?.split(' ').includes(selector.slice(1))
-                : false,
+            (child) => {
+              if (selector.startsWith('.'))
+                return child.className?.split(' ').includes(selector.slice(1));
+              if (!attribute) return false;
+              const camel = attribute[1].replace(/-([a-z])/g, (_, letter) =>
+                letter.toUpperCase(),
+              );
+              return String(child.dataset?.[camel] ?? '') === attribute[2];
+            },
             false,
           );
         },

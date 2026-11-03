@@ -16,10 +16,15 @@ const OPENAI_REALTIME_CONTEXT_RETENTION_DEFAULT = 0.5;
 
 const OPENAI_HUD_SUMMARY_MODEL_DEFAULT = 'gpt-5-nano';
 
+/** Sentinel agent planner: the cheap model suffices — the plan is a small
+ * JSON envelope over an already-compressed World Packet, not prose. */
+const OPENAI_AGENT_PLAN_MODEL_DEFAULT = 'gpt-5-nano';
+
 /** Input transcription for voice captions; OPENAI_REALTIME_TRANSCRIBE_MODEL=off disables it. */
 const OPENAI_REALTIME_TRANSCRIBE_MODEL_DEFAULT = 'gpt-4o-mini-transcribe';
 
 export {
+  OPENAI_AGENT_PLAN_MODEL_DEFAULT,
   OPENAI_HUD_SUMMARY_MODEL_DEFAULT,
   OPENAI_REALTIME_MODEL_MINI_DEFAULT,
   OPENAI_REALTIME_MODEL_DEFAULT,

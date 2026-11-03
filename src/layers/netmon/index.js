@@ -1,4 +1,4 @@
-import { msg } from '../../i18n/index.js';
+import { formatNumber, msg, t } from '../../i18n/index.js';
 import { createViewportPointsLayer } from '../viewportPoints/engine.js';
 import { createNetmonSource } from './source.js';
 
@@ -24,6 +24,34 @@ export function netmonPointColour(point) {
 }
 
 /**
+ * Hover text for one operator node: the row answers for itself and carries
+ * its own probe answer, so the tip reads the row — never the layer. Lines:
+ * the probed endpoint, the connect answer in milliseconds, and the clock
+ * time that probe ran. A node that has not been probed says so rather than
+ * showing a fake latency or a fake clock.
+ *
+ * @param {object} point one normalized row (id, lat, lon, label, meta)
+ * @returns {string} the multi-line hover text
+ */
+export function netmonHoverTip(point) {
+  if (!point) return '';
+  const meta = point.meta && typeof point.meta === 'object' ? point.meta : {};
+  const latency = Number(meta.latencyMs);
+  const probedAt = new Date(Number(meta.checkedAt));
+  return [
+    meta.host || point.label || point.id,
+    Number.isFinite(latency)
+      ? t('Latency: {ms} ms', { ms: formatNumber(latency) })
+      : t('Latency: unknown'),
+    Number.isFinite(probedAt.getTime())
+      ? t('Last probe: {time} UTC', {
+          time: probedAt.toISOString().slice(11, 19),
+        })
+      : t('Not probed yet'),
+  ].join('\n');
+}
+
+/**
  * Own one display of the operator's own, authorized network nodes: targets
  * declared in this server's `GEV_NETMON_TARGETS`, probed by that server with
  * a plain TCP connect and drawn at the positions the operator declared.
@@ -35,8 +63,15 @@ export function netmonPointColour(point) {
  *
  * @param {object} [options]
  * @param {{getSnapshot: Function}} [options.source]
+ * @param {object} [options.tipView] Test seam: where the hover tip is drawn.
+ * @param {Function} [options.pointerHandlerFactory] Test seam: how the Cesium
+ *   pointer handler is built for hover tips.
  */
-export function createNetmonLayer({ source = createNetmonSource() } = {}) {
+export function createNetmonLayer({
+  source = createNetmonSource(),
+  tipView = null,
+  pointerHandlerFactory = undefined,
+} = {}) {
   return createViewportPointsLayer({
     id: 'netmon',
     name: 'Network Monitor',
@@ -48,7 +83,10 @@ export function createNetmonLayer({ source = createNetmonSource() } = {}) {
     // Status is per point, not per feed: the engine draws each marker in the
     // colour its own probe round answered.
     pointColour: netmonPointColour,
+    hoverTip: netmonHoverTip,
     legend: NETMON_LEGEND,
+    ...(tipView ? { tipView } : {}),
+    ...(pointerHandlerFactory ? { pointerHandlerFactory } : {}),
     // Probes are cheap but a node list is state, not a stream: the engine's
     // own pacing already re-reads on camera moves, this only bounds idle polls.
     refreshMs: 60000,

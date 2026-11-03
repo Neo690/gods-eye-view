@@ -39,6 +39,7 @@ const LAYER_NOUNS = Object.freeze({
   satellites: 'satellites',
   'rocket-launches': 'launches',
   earthquakes: 'earthquakes',
+  'emsc-seismic': 'earthquakes',
   'local-firms': 'fires',
 });
 

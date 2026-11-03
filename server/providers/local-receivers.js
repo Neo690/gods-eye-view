@@ -274,7 +274,35 @@ function fetchLocalReceiverFeed(url, options) {
  * @param {object} options
  * @returns {Promise<object>} Parsed JSON document.
  */
-export async function fetchLocalReceiverDocument(
+export async function fetchLocalReceiverDocument(url, options = {}) {
+  const text = await fetchFeedDocumentText(url, options);
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new FeedError('BAD_JSON');
+  }
+  if (!json || typeof json !== 'object' || !Array.isArray(json.aircraft))
+    throw new FeedError('BAD_DOCUMENT');
+  return json;
+}
+
+/**
+ * Fetch one keyless document behind the shared local-feed rules: the host
+ * must resolve only to addresses that pass the receiver-tap rule, the socket
+ * is pinned there, redirects are refused and the body is capped while it
+ * streams. Returns the raw text; each caller validates its own document
+ * schema. Shared by the local receiver decoder feeds and the operator's own
+ * aiscast feed (`server/providers/vessels/aiscast.js`).
+ * @param {string} url Validated feed URL.
+ * @param {object} [options]
+ * @param {typeof fetch} [options.fetchImpl]
+ * @param {Function} [options.lookupImpl] `dns.promises.lookup`-compatible.
+ * @param {number} [options.timeoutMs]
+ * @param {number} [options.maxBytes]
+ * @returns {Promise<string>} Parsed JSON document.
+ */
+export async function fetchFeedDocumentText(
   url,
   {
     fetchImpl = fetchLocalReceiverFeed,
@@ -318,15 +346,7 @@ export async function fetchLocalReceiverDocument(
       maxBytes,
       controller.signal,
     );
-    let json;
-    try {
-      json = JSON.parse(text);
-    } catch {
-      throw new FeedError('BAD_JSON');
-    }
-    if (!json || typeof json !== 'object' || !Array.isArray(json.aircraft))
-      throw new FeedError('BAD_DOCUMENT');
-    return json;
+    return text;
   } catch (error) {
     controller.abort();
     if (upstream?.body && !upstream.body.locked)

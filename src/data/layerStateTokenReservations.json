@@ -1,4 +1,5 @@
 [
+  ["ai-agent", "08"],
   ["air-quality", "4"],
   ["ais-live-vessels", "a"],
   ["alpr-cameras", "p"],
@@ -9,10 +10,12 @@
   ["cell-towers", "6"],
   ["directions", "n"],
   ["earthquakes", "e"],
+  ["emsc-seismic", "07"],
   ["face-privacy", "05"],
   ["fire-perimeters", "2"],
   ["fishing-effort", "03"],
   ["flights", "f"],
+  ["global-disasters", "09"],
   ["gnss-integrity", "3"],
   ["iot-sensors", "7"],
   ["israeli-transport", "9"],

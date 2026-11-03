@@ -144,6 +144,13 @@ export const DATA_CREDITS = [
       '<a href="https://aisstream.io" target="_blank" rel="noopener">AISStream.io</a>',
   },
   {
+    key: 'aiscast',
+    html:
+      'Vessels (second feed, merged by MMSI, only when you configure it): ' +
+      'your own <a href="https://github.com/openwatersio/aiscast" target="_blank" rel="noopener">aiscast</a> ' +
+      '(Open Waters AIS) ingester — data terms follow the upstream sources you feed it.',
+  },
+  {
     key: 'celestrak',
     html:
       'Satellites (TLEs): CelesTrak ' +
@@ -186,6 +193,25 @@ export const DATA_CREDITS = [
   {
     key: 'usgs',
     html: 'Earthquakes: Data courtesy of the U.S. Geological Survey',
+  },
+  {
+    key: 'emsc',
+    html:
+      'European/Mediterranean earthquakes: ' +
+      '<a href="https://www.seismicportal.eu" target="_blank" rel="noopener">EMSC SeismicPortal</a> ' +
+      '(FDSN event service) — data licensed under ' +
+      '<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>',
+  },
+  {
+    key: 'gdacs-ems-effis',
+    html:
+      'Global disasters: ' +
+      '<a href="https://www.gdacs.org" target="_blank" rel="noopener">GDACS</a> multi-hazard alerts (public domain, ' +
+      'GDACS/EC-JRC) · ' +
+      '<a href="https://mapping.emergency.copernicus.eu/" target="_blank" rel="noopener">Copernicus EMS</a> ' +
+      'Rapid Mapping activations · ' +
+      '<a href="https://portal.effis.emergency.copernicus.eu/" target="_blank" rel="noopener">EFFIS</a> ' +
+      'burnt-area perimeters (Copernicus/EU public data)',
   },
   {
     key: 'nasa-gibs',

@@ -13,9 +13,11 @@ import { msg, t, translateKnown } from '../i18n/index.js';
 
 /** English module names (`layer.name`) by layer id. */
 export const LAYER_NAME_KEYS = Object.freeze({
+  'ai-agent': msg('AI Agent'),
   flights: msg('Live Flights'),
   military: msg('Military Flights'),
   earthquakes: msg('Earthquakes (24h)'),
+  'emsc-seismic': msg('Earthquakes (EMSC)'),
   radiation: msg('Radiation'),
   'space-weather': msg('Solar Storms'),
   'fishing-effort': msg('Fishing Effort'),
@@ -43,6 +45,7 @@ export const LAYER_NAME_KEYS = Object.freeze({
   'recent-imagery': msg('Recent Imagery'),
   'fire-perimeters': msg('Fire Perimeters'),
   'gnss-integrity': msg('GNSS Integrity'),
+  'global-disasters': msg('Global disasters'),
   wind: msg('Wind'),
   'weather-radar': msg('Rain radar'),
   'weather-satellite': msg('Satellite clouds'),

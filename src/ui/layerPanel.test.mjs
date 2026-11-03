@@ -439,3 +439,92 @@ test('a row can carry a switch list for its networks beside its own list', async
     globalThis.document = previousDocument;
   }
 });
+
+test('a passive boot restore repaints the settled toggle row (netmon scenario)', async () => {
+  // Passive boot restoration settles a layer's visibility AFTER the panel's
+  // first render: the coordinator replays persisted state through the manager
+  // once registrations are sealed, so a row may already be stale the moment it
+  // is written. Observed live: netmon stayed on its OFF default row while the
+  // engine already had it enabled, because nothing revisited the row.
+  //
+  // The release valve is LayerPresentation's `visibility-settled` activity,
+  // which refreshes the panel the moment the manager publishes the settle. This
+  // pin drives the REAL chain — restored state → manager settle → panel repaint
+  // — rather than calling refresh by hand, which is exactly how the defect
+  // survived review: any test that poked the panel directly never saw the
+  // wiring between the restore and the row.
+  const { LayerLifecycle } = await import('../data/lifecycle.js');
+  const { LayerPresentation } = await import('../app/layerPresentation.js');
+  const { railFixture } = await import('./railTestFixture.mjs');
+
+  const f = railFixture();
+  const previousDocument = globalThis.document;
+  globalThis.document = f.document;
+  const manager = new LayerLifecycle({});
+  // Shape mirrors the layer the boot coordinator replays: its enabled state
+  // comes from the restore alone, so the FIRST render still shows the OFF
+  // default while the engine has not yet settled.
+  manager.register({
+    id: 'netmon',
+    name: 'Network Monitor',
+    icon: '*',
+    source: 'Source',
+    updateInterval: 0,
+    init() {},
+    enable() {},
+    disable() {},
+    destroy() {},
+    async update() {
+      return true;
+    },
+    getStats() {
+      return { count: 3, lastUpdate: Date.now() };
+    },
+  });
+  manager.finalizeRegistrations([
+    { id: 'netmon', disposition: 'enabled-only' },
+  ]);
+
+  const presentation = new LayerPresentation(manager, {
+    requestRender() {},
+    invalidateDetection() {},
+  });
+  try {
+    presentation.mount(f.container);
+
+    // First render: the row is written before the restore settles anything.
+    const rowBefore = f.find((node) => node.dataset?.layerId === 'netmon');
+    const buttonBefore = rowBefore.querySelector('.data-toggle-btn');
+    assert.equal(
+      buttonBefore.textContent,
+      'OFF',
+      'the row boots on the OFF default while the restore has not run',
+    );
+    assert.equal(buttonBefore.classList.contains('active'), false);
+
+    // The passive boot restore replays persisted state without user input; the
+    // manager settles the visibility and publishes — the row must repaint by
+    // itself, from that publish alone.
+    const result = await manager.restoreLayerState('netmon', { enabled: true });
+    assert.equal(result.succeeded, true, `restore settled: ${result.error}`);
+
+    const rowAfter = f.find((node) => node.dataset?.layerId === 'netmon');
+    assert.ok(rowAfter, 'the repainted panel keeps the netmon row');
+    const buttonAfter = rowAfter.querySelector('.data-toggle-btn');
+    assert.equal(
+      buttonAfter.textContent,
+      'ON',
+      'a settled restore repaints the toggle row with the live state',
+    );
+    assert.equal(buttonAfter.classList.contains('active'), true);
+    assert.equal(
+      buttonAfter.getAttribute('aria-label'),
+      'Network Monitor: ON',
+      'the accessible name carries the settled state too',
+    );
+  } finally {
+    presentation.destroy();
+    await manager.destroyAll();
+    globalThis.document = previousDocument;
+  }
+});

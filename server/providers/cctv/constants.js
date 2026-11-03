@@ -527,6 +527,23 @@ export const WSDOT_ANCHORS = [
   { lat: 47.6062, lon: -122.3321 }, // Seattle
   { lat: 47.6588, lon: -117.426 }, // Spokane
 ];
+/** TrafficWatchNI (Northern Ireland DfI) cameras: a curated catalog generated
+ * once by scripts/build-trafficwatchni-catalog.mjs + public stills on
+ * cctv.trafficwatchni.com. The image host answers only Referer'd requests
+ * (403 otherwise, verified 2026-11-03) — see media.js. */
+export const DEFAULT_TRAFFICWATCHNI_SOURCE_FILE =
+  'config/cctv_sources.trafficwatchni.json';
+export const DEFAULT_TRAFFICWATCHNI_MAX_SOURCES = 130;
+export const TRAFFICWATCHNI_IMAGE_ORIGIN = 'https://cctv.trafficwatchni.com/';
+/** Referer the image host demands; the catalog list page's own origin. */
+export const TRAFFICWATCHNI_REFERER = 'https://www.trafficwatchni.com/';
+/** Operator review file side product of the catalog builder (not shipped). */
+export const TRAFFICWATCHNI_CENTER = { lat: 54.597, lon: -5.93 }; // Belfast center
+/** Prioritization anchors: Belfast and Derry. */
+export const TRAFFICWATCHNI_ANCHORS = [
+  TRAFFICWATCHNI_CENTER,
+  { lat: 54.9966, lon: -7.3086 }, // Derry
+];
 
 /** Camera CATALOGS change rarely; 15 min keeps multi-megabyte upstream list refetches (Austin rows.json + 4 Caltrans districts + TfL + Ontario 511) infrequent. Frames are fetched per-request and are unaffected. */
 export const CCTV_SOURCE_CACHE_MS = 15 * 60 * 1000;

@@ -96,6 +96,10 @@ import {
   DEFAULT_WSDOT_MAX_SOURCES,
   WSDOT_ANCHORS,
   WSDOT_MAX_CATALOG_BYTES,
+  DEFAULT_TRAFFICWATCHNI_SOURCE_FILE,
+  DEFAULT_TRAFFICWATCHNI_MAX_SOURCES,
+  TRAFFICWATCHNI_IMAGE_ORIGIN,
+  TRAFFICWATCHNI_ANCHORS,
   DEFAULT_VEGVESEN_CCTV_URL,
   VEGVESEN_IMAGE_ORIGIN,
   VEGVESEN_VIDEO_URL,
@@ -1187,6 +1191,110 @@ export function loadTallinnSourcesFromCatalog({
   const prioritized = prioritizeSources(unique, maxCount, [TALLINN_CENTER]);
   console.log(
     `[CCTV] Loaded Tallinn camera sources: ${unique.length} (using nearest ${prioritized.length})`,
+  );
+  return prioritized;
+}
+
+/**
+ * Load TrafficWatchNI cameras from the curated catalog file.
+ *
+ * The catalog (config/cctv_sources.trafficwatchni.json, generated once by
+ * scripts/build-trafficwatchni-catalog.mjs: the public list page's own
+ * addToPreview(...) handler reveals one stable https://cctv.trafficwatchni.com
+ * filename per camera, and Nominatim/OSM supplies a placement prior) carries
+ * coordinates; only official trafficwatchni.com frame URLs are kept (the proxy
+ * fetches registered URLs only, with the referer the image host demands).
+ *
+ * @returns {Array<object>} Normalized camera source objects.
+ */
+export function loadTrafficWatchNiSourcesFromCatalog({
+  sourceRoot = process.cwd(),
+} = {}) {
+  const sourceFile =
+    process.env.CCTV_TRAFFICWATCHNI_SOURCES_FILE ||
+    DEFAULT_TRAFFICWATCHNI_SOURCE_FILE;
+  const resolved = path.isAbsolute(sourceFile)
+    ? sourceFile
+    : path.resolve(sourceRoot, sourceFile);
+  let rows = [];
+  try {
+    if (!fs.existsSync(resolved)) {
+      console.warn('[CCTV] TrafficWatchNI source file missing:', resolved);
+      return [];
+    }
+    const parsed = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+    rows = Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn(
+      '[CCTV] TrafficWatchNI source file read error:',
+      error?.message || error,
+    );
+    return [];
+  }
+
+  const cameras = [];
+  for (const item of rows) {
+    if (!item || typeof item !== 'object') continue;
+    const cameraId =
+      typeof item.id === 'string' || typeof item.id === 'number'
+        ? String(item.id).trim()
+        : '';
+    if (!cameraId) continue;
+    const lat = typeof item.lat === 'number' ? item.lat : NaN;
+    const lon = typeof item.lon === 'number' ? item.lon : NaN;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    // Rough Northern Ireland sanity for a mis-geocoded row.
+    if (lat < 53.9 || lat > 55.75 || lon < -8.4 || lon > -5.0) continue;
+
+    const imageUrl = pinnedCameraUrl(
+      typeof item.url === 'string' ? item.url : '',
+      TRAFFICWATCHNI_IMAGE_ORIGIN,
+    );
+    if (!imageUrl) continue;
+
+    const extractedHeading = toFiniteNumber(item.headingDeg, NaN);
+    const hasHeading = Number.isFinite(extractedHeading);
+    const headingDeg = hasHeading
+      ? ((extractedHeading % 360) + 360) % 360
+      : fallbackHeadingFromId(cameraId);
+    cameras.push({
+      id: cameraId,
+      name: String(item.name || cameraId).trim(),
+      city: 'Northern Ireland',
+      cityId: 'trafficwatchni',
+      provider: 'TrafficWatchNI',
+      lat,
+      lon,
+      headingDeg,
+      headingConfidence: 'low',
+      pitchDeg: -18,
+      fovDeg: 44,
+      rangeM: 145,
+      mountHeightM: 8,
+      groundElevationM: toFiniteNumber(item.groundElevationM, 30),
+      feedType: 'image',
+      url: imageUrl,
+      snapshotUrl: imageUrl,
+      sourceKind: 'trafficwatchni',
+      license:
+        'TrafficWatchNI (DfI NI) camera frame — reuse terms unverified, operator opt-in',
+      poseSource: hasHeading ? 'curated' : undefined,
+    });
+  }
+
+  const unique = Array.from(
+    new Map(cameras.map((camera) => [camera.id, camera])).values(),
+  );
+  const maxRaw = Number(
+    process.env.CCTV_TRAFFICWATCHNI_MAX_SOURCES ||
+      DEFAULT_TRAFFICWATCHNI_MAX_SOURCES,
+  );
+  const maxCount = Number.isFinite(maxRaw)
+    ? Math.max(8, Math.min(300, Math.floor(maxRaw)))
+    : DEFAULT_TRAFFICWATCHNI_MAX_SOURCES;
+  const prioritized = prioritizeSources(unique, maxCount, TRAFFICWATCHNI_ANCHORS);
+  console.log(
+    `[CCTV] Loaded TrafficWatchNI camera sources: ${unique.length} (using nearest ${prioritized.length})`,
   );
   return prioritized;
 }

@@ -15,7 +15,7 @@ export {
  * @returns {Promise<{tooLarge: boolean, text: string}>}
  */
 export async function readCappedResponseText(upstream, maxBytes) {
-  const declared = Number(upstream.headers.get('content-length'));
+  const declared = Number(upstream.headers?.get('content-length'));
   if (Number.isFinite(declared) && declared > maxBytes) {
     try {
       await upstream.body?.cancel();

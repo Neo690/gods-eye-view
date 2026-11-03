@@ -1,13 +1,23 @@
 import { createApplicationVessels } from '../app/layers/aisLiveVessels.js';
 
 import { createVesselSource } from '../sources/live/standalone.js';
+import {
+  composeVesselSources,
+  createAiscastVesselSource,
+} from '../sources/live/composeVessels.js';
 
 const aisLiveVesselsLayer = createApplicationVessels({
-  source: createVesselSource({
-    apiUrl: import.meta.env?.VITE_AIS_LIVE_API_URL || '/api/vessels',
-    // Resolved against the document's address, which a panel host may serve
-    // from its own scheme.
-    origin: () => globalThis.document?.baseURI ?? 'http://localhost',
+  source: composeVesselSources({
+    primary: createVesselSource({
+      apiUrl: import.meta.env?.VITE_AIS_LIVE_API_URL || '/api/vessels',
+      // Resolved against the document's address, which a panel host may serve
+      // from its own scheme.
+      origin: () => globalThis.document?.baseURI ?? 'http://localhost',
+    }),
+    // Opt-in extra: the operator's own keyless aiscast feed, when the
+    // server has it configured. Everything flows through the primary path
+    // exactly as before when it is not.
+    extra: createAiscastVesselSource(),
   }),
   options: {
     maxRows: import.meta.env?.VITE_AIS_LIVE_MAX_ROWS,

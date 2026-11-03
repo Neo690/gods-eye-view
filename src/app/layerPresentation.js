@@ -18,7 +18,18 @@ export class LayerPresentation {
     this.pendingVisible = false;
     this._unsubscribe = manager.subscribeActivity((change) => {
       if (change.type === 'status') this.refresh();
-      else if (change.type === 'destroy-all') this.destroy();
+      else if (change.type === 'visibility-settled') {
+        // A settled visibility is authoritative row state: passive boot
+        // restoration settles rows after their first render, so the toggle
+        // button must revisit it (observed: netmon stayed on its OFF default
+        // while the engine already had it enabled). Explicit user toggles are
+        // idempotent here — the click already repainted its own row.
+        this.refresh();
+        // The settle is still a publishable scene change with the same 'layer-visibility'
+        // contract (requested frame + detection invalidation) as a plain toggle.
+        requestRender('layer-visibility');
+        invalidateDetection('layer-visibility');
+      } else if (change.type === 'destroy-all') this.destroy();
       else {
         const reason =
           change.type === 'data-updated'

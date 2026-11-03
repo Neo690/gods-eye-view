@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { isPointerFree } from '../../data/inputOwnership.js';
 import { formatNumber, msg, t, translateKnown } from '../../i18n/index.js';
 import { translateFeedError } from '../../ui/statusText.js';
 import {
@@ -9,6 +10,43 @@ import {
 } from './records.js';
 
 const RAD_TO_DEG = 180 / Math.PI;
+
+/** How often a hovered marker is re-picked while the pointer sweeps over it. */
+const HOVER_PICK_THROTTLE_MS = 50;
+
+/**
+ * The hover-tip element the point layers that opt in share. Created lazily on
+ * the first hover and removed on destroy, so a layer never owns a DOM node
+ * it does not show.
+ */
+function defaultPointTipView({ doc = globalThis.document } = {}) {
+  if (!doc) return null;
+  let element = null;
+  return {
+    get visible() {
+      return Boolean(element && !element.hidden);
+    },
+    show(text, pageX, pageY) {
+      if (!element) {
+        element = doc.createElement('div');
+        element.className = 'gev-point-hover-tip';
+        element.setAttribute('role', 'tooltip');
+        doc.body.appendChild(element);
+      }
+      element.textContent = text;
+      element.style.left = `${pageX}px`;
+      element.style.top = `${pageY}px`;
+      element.hidden = false;
+    },
+    hide() {
+      if (element) element.hidden = true;
+    },
+    destroy() {
+      element?.remove();
+      element = null;
+    },
+  };
+}
 
 /**
  * Read the current view as degrees. Returns null while the camera is still
@@ -50,6 +88,11 @@ export function cameraBounds(viewer) {
  * @param {(context: {refresh: () => void}) => {chips?: Array<object>, detail?: string}}
  *   [config.extras] Row controls a local-data layer owns itself (importing a
  *   file, clearing it). Called on every panel refresh, so it must only read.
+ * @param {{show:(text:string,x:number,y:number)=>void,hide:()=>void,
+ *   destroy:()=>void}|null} [config.tipView] Test seam: the hover-tip view.
+ *   Built lazily from the DOM when unset.
+ * @param {Function} [config.pointerHandlerFactory] Test seam: how the Cesium
+ *   pointer handler is built for hover tips.
  */
 export function createViewportPointsLayer({
   id,
@@ -66,6 +109,9 @@ export function createViewportPointsLayer({
   requiresKeyId,
   emptyHint,
   extras,
+  hoverTip = null,
+  tipView = null,
+  pointerHandlerFactory = undefined,
 }) {
   if (typeof source?.getSnapshot !== 'function')
     throw new TypeError(`${name} layer requires a snapshot source`);
@@ -88,6 +134,13 @@ export function createViewportPointsLayer({
   let _truncated = false;
   let _activeSource = choices[0]?.id ?? null;
   let _manager = null;
+
+  // Hover-tip state. Bound only when the layer supplies hoverTip; dormant
+  // layers (cellTowers, iotSensors, privateWifi) never allocate it.
+  let _tipView = tipView ?? (hoverTip ? tipView : undefined);
+  let _tipHandler = null;
+  let _tipCameraOff = null;
+  let _hoverLastPickAt = 0;
 
   const bounds = () => clampViewport(cameraBounds(_viewer));
 
@@ -148,6 +201,87 @@ export function createViewportPointsLayer({
     _viewer?.scene?.requestRender?.();
   }
 
+  function hidePointerTip() {
+    const canvas = _viewer?.scene?.canvas;
+    if (canvas) canvas.style.cursor = '';
+    _tipView?.hide();
+  }
+
+  /**
+   * One throttled MOUSE_MOVE pick: the marker under the pointer shows its own
+   * tip (the layer's hoverTip builds the text); anything else casts nothing.
+   * A tool that claimed the pointer (inputOwnership) gets no hover at all.
+   */
+  function handleHoverMove(movement) {
+    const position = movement?.endPosition;
+    if (!_enabled || !position) return hidePointerTip();
+    if (!isPointerFree()) return hidePointerTip();
+    const canvas = _viewer?.scene?.canvas;
+    const rect = canvas?.getBoundingClientRect?.();
+    const pageX = (rect?.left ?? 0) + Number(position.x) || 0;
+    const pageY = (rect?.top ?? 0) + Number(position.y) || 0;
+    const now = Date.now();
+    if (_tipView?.visible && now - _hoverLastPickAt < HOVER_PICK_THROTTLE_MS)
+      return;
+    _hoverLastPickAt = now;
+    let picked = null;
+    try {
+      picked = _viewer.scene.pick(
+        new Cesium.Cartesian2(position.x, position.y),
+      );
+    } catch {
+      picked = null;
+    }
+    const point =
+      _points.find((candidate) => `${id}:${candidate.id}` === picked?.id) ||
+      null;
+    if (!point || !hoverTip) {
+      hidePointerTip();
+      return;
+    }
+    const text = hoverTip(point);
+    if (!text) return hidePointerTip();
+    if (!_tipView && typeof document !== 'undefined')
+      _tipView = defaultPointTipView();
+    _tipView?.show(text, pageX, pageY);
+    if (canvas) canvas.style.cursor = 'pointer';
+  }
+
+  /**
+   * A camera drag sweeps the pointer over markers that mean nothing while it
+   * moves: hide the tip at moveStart instead of flashing rows under a drag.
+   */
+  function bindHoverTip() {
+    if (!hoverTip) return;
+    const canvas = _viewer?.scene?.canvas;
+    if (!canvas) return;
+    const factory =
+      pointerHandlerFactory ??
+      ((target) => new Cesium.ScreenSpaceEventHandler(target));
+    _tipHandler = factory(canvas);
+    _tipHandler.setInputAction(
+      handleHoverMove,
+      Cesium.ScreenSpaceEventType.MOUSE_MOVE,
+    );
+    _tipCameraOff = _viewer.camera?.moveStart?.addEventListener(hidePointerTip);
+  }
+
+  function unbindHoverTip() {
+    hidePointerTip();
+    if (_tipCameraOff) {
+      try {
+        _tipCameraOff();
+      } catch {
+        // The camera can already be gone during teardown.
+      }
+      _tipCameraOff = null;
+    }
+    if (_tipHandler) {
+      _tipHandler.destroy?.();
+      _tipHandler = null;
+    }
+  }
+
   const layer = {
     id,
     name,
@@ -169,6 +303,7 @@ export function createViewportPointsLayer({
       viewer.scene.primitives.add(_collection);
       viewer.camera?.moveEnd?.addEventListener(scheduleRefresh);
       viewer.camera?.changed?.addEventListener(scheduleRefresh);
+      bindHoverTip();
     },
 
     enable() {
@@ -184,6 +319,7 @@ export function createViewportPointsLayer({
       _request?.abort();
       _request = null;
       _enabled = false;
+      hidePointerTip();
       if (_collection) _collection.show = false;
     },
 
@@ -249,12 +385,15 @@ export function createViewportPointsLayer({
 
     destroy(viewer = _viewer) {
       layer.disable();
+      unbindHoverTip();
       clearTimeout(_cameraTimer);
       clearTimeout(_retryTimer);
       _cameraTimer = null;
       _retryTimer = null;
       _points = [];
       _signature = null;
+      _tipView?.destroy?.();
+      _tipView = null;
       if (_collection) {
         viewer?.scene?.primitives?.remove(_collection);
         _collection = null;
