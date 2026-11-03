@@ -172,7 +172,17 @@ const layers = [
   },
   {
     id: 'emsc-seismic',
-    aliases: ['emsc', 'emsc quakes', 'european earthquakes'],
+    aliases: [
+      'emsc',
+      'emsc quakes',
+      'european earthquakes',
+      // French spoken aliases (the runner lower-cases them).
+      'séismes emsc',
+      'séismes européens',
+      // Spanish spoken aliases.
+      'sismos emsc',
+      'terremotos europeos',
+    ],
     context: false,
     query: {
       fields: {
@@ -227,7 +237,17 @@ const layers = [
   },
   {
     id: 'ai-agent',
-    aliases: ['sentinel', 'ai agent', 'watch agent'],
+    aliases: [
+      'sentinel',
+      'ai agent',
+      'watch agent',
+      // French spoken aliases (the runner lower-cases them).
+      'sentinelle',
+      'agent ia',
+      // Spanish spoken aliases.
+      'centinela',
+      'agente ia',
+    ],
     context: false,
     noQuery: 'watch agent; its own events, not countable records',
   },
@@ -546,13 +566,38 @@ const layers = [
   },
   {
     id: 'space-weather',
-    aliases: ['solar storms', 'space weather', 'aurora', 'kp index'],
+    aliases: [
+      'solar storms',
+      'space weather',
+      'aurora',
+      'kp index',
+      // French spoken aliases (the runner lower-cases them).
+      'tempêtes solaires',
+      'météo spatiale',
+      'aurores',
+      'indice kp',
+      // Spanish spoken aliases.
+      'tormentas solares',
+      'clima espacial',
+      'auroras',
+      'índice kp',
+    ],
     context: false,
     noQuery: 'conditions and flare markers; the fiche carries the readings',
   },
   {
     id: 'fishing-effort',
-    aliases: ['fishing effort', 'fishing activity', 'global fishing watch'],
+    aliases: [
+      'fishing effort',
+      'fishing activity',
+      'global fishing watch',
+      // French spoken aliases (the runner lower-cases them).
+      'effort de pêche',
+      'activité de pêche',
+      // Spanish spoken aliases.
+      'esfuerzo pesquero',
+      'actividad pesquera',
+    ],
     context: false,
     noQuery: 'heat cells from AIS effort; the layer panel carries the totals',
   },
