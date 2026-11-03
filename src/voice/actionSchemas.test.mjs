@@ -43,7 +43,12 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // and fishing effort another. The EMSC seismic network extends the
     // manifest with its own aliases and field hints. The global disasters
     // layer adds French and Spanish spoken aliases for the same feeds.
-    '0ad2651e66503e6a99745c2bd661a70f2e7bbd1997d285f3905bd6dfc0c92fa3',
+    // The alias hint now also shows the leading French and Spanish spoken
+    // name for the localized roadmap layers (disasters, EMSC, Sentinel,
+    // space weather, fishing effort) so the Realtime model can route speech
+    // in those languages to the right layer id; the prompt budget follows
+    // with headroom.
+    '150cd3e441c9ecc6bbc5c31728349e6654a7add1a9a044c5d60808004b634c82',
   );
 });
 

@@ -172,17 +172,9 @@ const layers = [
   },
   {
     id: 'emsc-seismic',
-    aliases: [
-      'emsc',
-      'emsc quakes',
-      'european earthquakes',
-      // French spoken aliases (the runner lower-cases them).
-      'séismes emsc',
-      'séismes européens',
-      // Spanish spoken aliases.
-      'sismos emsc',
-      'terremotos europeos',
-    ],
+    aliases: ['emsc', 'emsc quakes', 'european earthquakes'],
+    fr: ['séismes emsc', 'séismes européens'],
+    es: ['sismos emsc', 'terremotos europeos'],
     context: false,
     query: {
       fields: {
@@ -206,16 +198,18 @@ const layers = [
       'cyclones gdacs',
       'effis fires',
       'ems activations',
-      // French spoken aliases (the runner lower-cases them).
-      'catastrophes mondiales',
+    ],
+    fr: [
       'catastrophes',
+      'catastrophes mondiales',
       'inondations',
       'sécheresses',
       'feux effis',
       'activations ems',
-      // Spanish spoken aliases.
-      'desastres globales',
+    ],
+    es: [
       'desastres',
+      'desastres globales',
       'inundaciones',
       'sequías',
       'incendios effis',
@@ -237,17 +231,10 @@ const layers = [
   },
   {
     id: 'ai-agent',
-    aliases: [
-      'sentinel',
-      'ai agent',
-      'watch agent',
-      // French spoken aliases (the runner lower-cases them).
-      'sentinelle',
-      'agent ia',
-      // Spanish spoken aliases.
-      'centinela',
-      'agente ia',
-    ],
+    aliases: ['sentinel', 'ai agent', 'watch agent'],
+    // fr and es lead with the canonical summon word; the hint's first pick.
+    fr: ['sentinelle', 'agent ia'],
+    es: ['centinela', 'agente ia'],
     context: false,
     noQuery: 'watch agent; its own events, not countable records',
   },
@@ -566,38 +553,17 @@ const layers = [
   },
   {
     id: 'space-weather',
-    aliases: [
-      'solar storms',
-      'space weather',
-      'aurora',
-      'kp index',
-      // French spoken aliases (the runner lower-cases them).
-      'tempêtes solaires',
-      'météo spatiale',
-      'aurores',
-      'indice kp',
-      // Spanish spoken aliases.
-      'tormentas solares',
-      'clima espacial',
-      'auroras',
-      'índice kp',
-    ],
+    aliases: ['solar storms', 'space weather', 'aurora', 'kp index'],
+    fr: ['tempêtes solaires', 'météo spatiale', 'aurores', 'indice kp'],
+    es: ['tormentas solares', 'clima espacial', 'auroras', 'índice kp'],
     context: false,
     noQuery: 'conditions and flare markers; the fiche carries the readings',
   },
   {
     id: 'fishing-effort',
-    aliases: [
-      'fishing effort',
-      'fishing activity',
-      'global fishing watch',
-      // French spoken aliases (the runner lower-cases them).
-      'effort de pêche',
-      'activité de pêche',
-      // Spanish spoken aliases.
-      'esfuerzo pesquero',
-      'actividad pesquera',
-    ],
+    aliases: ['fishing effort', 'fishing activity', 'global fishing watch'],
+    fr: ['effort de pêche', 'activité de pêche'],
+    es: ['esfuerzo pesquero', 'actividad pesquera'],
     context: false,
     noQuery: 'heat cells from AIS effort; the layer panel carries the totals',
   },
@@ -628,6 +594,13 @@ export const VOICE_OFF_LAYERS = Object.freeze({
     'one on-demand blur of the selected camera; nothing to toggle or query',
 });
 
+/**
+ * Normalize a manifest entry. `fr` and `es` carry the layer's French and
+ * Spanish spoken aliases; they merge into `aliases` (the flat list the alias
+ * map and the runner consume, English first) and stay exposed per-locale for
+ * the model-facing hint.
+ */
+
 const TYPE_NAMES = Object.freeze({
   n: 'number',
   t: 'text',
@@ -649,7 +622,13 @@ function normalizeEntry(entry) {
     : null;
   return Object.freeze({
     id: entry.id,
-    aliases: Object.freeze([...entry.aliases]),
+    aliases: Object.freeze([
+      ...entry.aliases,
+      ...(entry.fr || []),
+      ...(entry.es || []),
+    ]),
+    fr: Object.freeze([...(entry.fr || [])]),
+    es: Object.freeze([...(entry.es || [])]),
     toggle: entry.toggle !== false,
     context: entry.context === true,
     track: entry.track === true,
@@ -730,9 +709,12 @@ const SELF_EVIDENT_IDS = new Set([
 ]);
 
 /**
- * Compact model-facing alias hint: "alias/alias→id; …" for toggleable layers
- * whose id is not already the spoken word. At most two aliases per layer keep
- * the tool JSON small; the runner accepts the full alias list.
+ * Compact model-facing alias hint: "alias/alias/fr/es→id; …" for toggleable
+ * layers whose id is not already the spoken word. The first two English
+ * aliases plus the leading French and Spanish spoken name keep the tool JSON
+ * small while the model can still map the user's language to a layer; the
+ * runner accepts the full alias list. fr/es blocks lead with the canonical
+ * summon word.
  * @returns {string} One line for the layerId description.
  */
 export function voiceLayerAliasHint() {
@@ -740,7 +722,14 @@ export function voiceLayerAliasHint() {
     (entry) =>
       entry.toggle && entry.aliases.length && !SELF_EVIDENT_IDS.has(entry.id),
   )
-    .map((entry) => `${entry.aliases.slice(0, 2).join('/')}→${entry.id}`)
+    .map((entry) => {
+      const names = [
+        ...entry.aliases.slice(0, 2),
+        (entry.fr || [])[0],
+        (entry.es || [])[0],
+      ].filter(Boolean);
+      return `${names.join('/')}→${entry.id}`;
+    })
     .join('; ');
 }
 
