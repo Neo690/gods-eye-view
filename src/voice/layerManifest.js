@@ -196,6 +196,20 @@ const layers = [
       'cyclones gdacs',
       'effis fires',
       'ems activations',
+      // French spoken aliases (the runner lower-cases them).
+      'catastrophes mondiales',
+      'catastrophes',
+      'inondations',
+      'sécheresses',
+      'feux effis',
+      'activations ems',
+      // Spanish spoken aliases.
+      'desastres globales',
+      'desastres',
+      'inundaciones',
+      'sequías',
+      'incendios effis',
+      'activaciones ems',
     ],
     context: true,
     query: {

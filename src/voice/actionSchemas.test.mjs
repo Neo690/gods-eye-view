@@ -41,8 +41,9 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // Railway stations and the Israeli transport sites extend it too, each with
     // the fields its card prints. The solar-storm layer adds one enum value,
     // and fishing effort another. The EMSC seismic network extends the
-    // manifest with its own aliases and field hints.
-    '886fee917a691f21c2e23078b9f017aa2216b49942bba101f007d09110b85048',
+    // manifest with its own aliases and field hints. The global disasters
+    // layer adds French and Spanish spoken aliases for the same feeds.
+    '0ad2651e66503e6a99745c2bd661a70f2e7bbd1997d285f3905bd6dfc0c92fa3',
   );
 });
 
