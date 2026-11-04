@@ -69,6 +69,7 @@ ios/build/
 ios/DerivedData/
 ios/*.ipa
 
-# Scratch workspaces and local runtime data.
-.tmp-*/
+# Scratch workspaces and local runtime data: dot-prefixed until done, so the
+# test-runner roots and format scope never see them either way.
+.tmp-*
 .gev-data/
