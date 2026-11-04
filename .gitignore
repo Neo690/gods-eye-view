@@ -48,9 +48,13 @@ android/*.apk
 .signing/
 
 # Desktop shell build output: the staged payload copied into the installer, and
-# electron-builder's release directory.
+# electron-builder's release directory. Versioned release trees
+# (desktop/release-1.0.32/, unzipped artifacts of a past shell) stay out of the
+# source tree too: the test runner would otherwise discover their packaged
+# copies of the tests and double-count the suite.
 desktop/.payload/
 desktop/release/
+desktop/release-*/
 desktop/node_modules/
 
 # iOS shell: the bundle `npm run ios:payload` stages, Xcode's output, and the
