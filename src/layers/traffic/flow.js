@@ -108,7 +108,7 @@ export function createFlow({ state: layerState, services, parts, source }) {
             '[Data:Traffic] TomTom status unreachable — layer refuses to enable (no simulation fallback):',
             e?.message || e,
           );
-        });;
+        });
     }
     return layerState._flowStatusPromise;
   }

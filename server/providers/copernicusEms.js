@@ -25,7 +25,10 @@ export const COPERNICUS_EMS_TIMEOUT_MS = 15_000;
 export const COPERNICUS_EMS_MAX_BYTES = 4 * 1024 * 1024;
 export const COPERNICUS_EMS_CACHE_MS = 10 * 60 * 1000;
 
-export function copernicusEmsFailure(errorCode, { generatedAt = Date.now() } = {}) {
+export function copernicusEmsFailure(
+  errorCode,
+  { generatedAt = Date.now() } = {},
+) {
   return {
     ok: false,
     error: errorCode, // 'upstream' | 'body-too-large' | 'unparseable'
@@ -134,16 +137,22 @@ export function copernicusEmsProxy({ logger = console } = {}) {
   return {
     name: 'copernicus-ems-proxy',
     configureServer(server) {
-      server.middlewares.use(COPERNICUS_EMS_ROUTE, (request, response, next) => {
-        if (request.url !== '/' && request.url !== '') return next();
-        void handle(request, response);
-      });
+      server.middlewares.use(
+        COPERNICUS_EMS_ROUTE,
+        (request, response, next) => {
+          if (request.url !== '/' && request.url !== '') return next();
+          void handle(request, response);
+        },
+      );
     },
     configurePreviewServer(server) {
-      server.middlewares.use(COPERNICUS_EMS_ROUTE, (request, response, next) => {
-        if (request.url !== '/' && request.url !== '') return next();
-        void handle(request, response);
-      });
+      server.middlewares.use(
+        COPERNICUS_EMS_ROUTE,
+        (request, response, next) => {
+          if (request.url !== '/' && request.url !== '') return next();
+          void handle(request, response);
+        },
+      );
     },
   };
 }

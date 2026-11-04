@@ -131,7 +131,10 @@ export function createGlobalDisastersSource({
           { signal },
         ),
         readComplement(
-          buildEffisWfsUrl({ typeName: effisTypeName, count: effisMaxFeatures }),
+          buildEffisWfsUrl({
+            typeName: effisTypeName,
+            count: effisMaxFeatures,
+          }),
           normalizeEffisCollection,
           { signal },
         ),

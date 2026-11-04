@@ -84,7 +84,8 @@ function setup(t, requestRoads, getStatus = async () => ({ hasKey: true })) {
     // The enable pre-check plus the live-flow chain add microtask hops over
     // the old keyless path: give the queue turns to settle before asserts.
     for (let i = 0; i < 300; i++) await Promise.resolve();
-    for (let i = 0; i < 10; i++) await new Promise((resolve) => setImmediate(resolve));
+    for (let i = 0; i < 10; i++)
+      await new Promise((resolve) => setImmediate(resolve));
     for (let i = 0; i < 100; i++) await Promise.resolve();
   };
   return { layer, viewer, move, tick };

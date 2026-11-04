@@ -680,7 +680,9 @@ export async function fetchCctvImageFromUpstream(
       {
         headers: {
           'User-Agent': cctvUpstreamUserAgent(url),
-          ...(cctvUpstreamReferer(url) ? { Referer: cctvUpstreamReferer(url) } : {}),
+          ...(cctvUpstreamReferer(url)
+            ? { Referer: cctvUpstreamReferer(url) }
+            : {}),
         },
         signal: controller.signal,
       },

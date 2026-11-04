@@ -12,7 +12,10 @@ function geminiLiveProxy({ annotationGuidance, realtime = {} } = {}) {
     // Sentinel planning relay on Gemini (operator pivoted off the OpenAI
     // relay): same keyless-503 degradation, same-origin gated like every
     // cost-bearing proxy.
-    middlewares.use('/api/gemini/agent-plan', sameSiteGated(handleGeminiAgentPlan));
+    middlewares.use(
+      '/api/gemini/agent-plan',
+      sameSiteGated(handleGeminiAgentPlan),
+    );
   }
   return {
     name: 'gemini-live-proxy',

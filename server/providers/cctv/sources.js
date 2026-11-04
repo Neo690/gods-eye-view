@@ -1292,7 +1292,11 @@ export function loadTrafficWatchNiSourcesFromCatalog({
   const maxCount = Number.isFinite(maxRaw)
     ? Math.max(8, Math.min(300, Math.floor(maxRaw)))
     : DEFAULT_TRAFFICWATCHNI_MAX_SOURCES;
-  const prioritized = prioritizeSources(unique, maxCount, TRAFFICWATCHNI_ANCHORS);
+  const prioritized = prioritizeSources(
+    unique,
+    maxCount,
+    TRAFFICWATCHNI_ANCHORS,
+  );
   console.log(
     `[CCTV] Loaded TrafficWatchNI camera sources: ${unique.length} (using nearest ${prioritized.length})`,
   );

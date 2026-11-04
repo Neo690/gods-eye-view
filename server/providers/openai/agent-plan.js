@@ -60,8 +60,7 @@ function shapePlan(plan) {
     )
     .map((action) => ({
       action: action.action.trim(),
-      args:
-        action.args && typeof action.args === 'object' ? action.args : {},
+      args: action.args && typeof action.args === 'object' ? action.args : {},
     }));
   if (!speech && normalized.length === 0) return null;
   return { speech, actions: normalized };
@@ -106,7 +105,9 @@ async function handleAgentPlan(req, res) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_AGENT_PLAN_MODEL || OPENAI_AGENT_PLAN_MODEL_DEFAULT,
+        model:
+          process.env.OPENAI_AGENT_PLAN_MODEL ||
+          OPENAI_AGENT_PLAN_MODEL_DEFAULT,
         instructions,
         input: JSON.stringify(input ?? {}),
         reasoning: { effort: 'low' },
@@ -114,9 +115,7 @@ async function handleAgentPlan(req, res) {
       }),
     });
     const data = await response.json().catch(() => ({}));
-    const plan = response.ok
-      ? parseAgentPlan(extractResponseText(data))
-      : null;
+    const plan = response.ok ? parseAgentPlan(extractResponseText(data)) : null;
     res.statusCode = plan ? 200 : response.ok ? 502 : response.status || 502;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');

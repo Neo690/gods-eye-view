@@ -21,8 +21,9 @@
 /** Parse "YYYY-MM-DDTHH:mm:ss" (or .mmm) UTF into epoch ms; null otherwise. */
 export function parseIsoUtcLike(value) {
   if (typeof value !== 'string') return null;
-  const match =
-    /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?$/.exec(value.trim());
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?$/.exec(
+    value.trim(),
+  );
   if (!match) return null;
   const [, seconds, fraction = '0'] = match;
   const ms =
@@ -43,9 +44,10 @@ export function parseEffisTimestamp(value) {
 /** Parse a WKT "POINT (lon lat)" centroid into {lat, lon}; null otherwise. */
 export function parseWktPoint(value) {
   if (typeof value !== 'string') return null;
-  const match = /^POINT\s*\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\)$/i.exec(
-    value.trim(),
-  );
+  const match =
+    /^POINT\s*\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\)$/i.exec(
+      value.trim(),
+    );
   if (!match) return null;
   const lon = Number(match[1]);
   const lat = Number(match[2]);
@@ -66,9 +68,7 @@ function cleanText(value) {
 /** "RED"/"red" -> "Red"; null for anything else. */
 function capitalizeWord(value) {
   const text = cleanText(value);
-  return text
-    ? text[0].toUpperCase() + text.slice(1).toLowerCase()
-    : null;
+  return text ? text[0].toUpperCase() + text.slice(1).toLowerCase() : null;
 }
 
 /** GDACS publishes numeric ids (`eventid: 1001346`, `episodeid: 10`). */
@@ -85,7 +85,11 @@ function idText(value) {
  */
 function gdacsPosition(feature) {
   const geometry = feature?.geometry;
-  if (!geometry || typeof geometry !== 'object' || !Array.isArray(geometry.coordinates))
+  if (
+    !geometry ||
+    typeof geometry !== 'object' ||
+    !Array.isArray(geometry.coordinates)
+  )
     return null;
   if (geometry.type === 'Point') {
     const [lon, lat] = geometry.coordinates;
@@ -288,10 +292,10 @@ export function normalizeEmsActivationList(
     const slug = cleanText(
       typeof category === 'string' ? category : category?.slug,
     )?.toLowerCase();
-    const hazard = slug !== null ? (EMS_HAZARD_BY_SLUG.get(slug) ?? 'other') : 'other';
+    const hazard =
+      slug !== null ? (EMS_HAZARD_BY_SLUG.get(slug) ?? 'other') : 'other';
     const timeMs =
-      parseIsoUtcLike(item?.activationTime) ??
-      parseIsoUtcLike(item?.eventTime);
+      parseIsoUtcLike(item?.activationTime) ?? parseIsoUtcLike(item?.eventTime);
     if (timeMs === null) {
       dropped++;
       continue;
@@ -300,7 +304,11 @@ export function normalizeEmsActivationList(
     const countries = Array.isArray(item?.countries)
       ? item.countries
           .map((entry) =>
-            cleanText(typeof entry === 'string' ? entry : entry?.name ?? entry?.short_name),
+            cleanText(
+              typeof entry === 'string'
+                ? entry
+                : (entry?.name ?? entry?.short_name),
+            ),
           )
           .filter((name) => name !== null)
       : [];
@@ -464,7 +472,8 @@ export function normalizeEffisCollection(
     });
   }
   rows.sort(
-    (left, right) => (right.timeMs ?? 0) - (left.timeMs ?? 0) ||
+    (left, right) =>
+      (right.timeMs ?? 0) - (left.timeMs ?? 0) ||
       (right.areaHa ?? 0) - (left.areaHa ?? 0),
   );
   return {

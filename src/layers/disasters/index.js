@@ -133,9 +133,7 @@ export function createGlobalDisastersLayer({ source } = {}) {
                 const positions = ringPositions(ring);
                 nextEntities.push(
                   new Cesium.Entity({
-                    id: `disaster:${row.stableId}:fire:${
-                      nextEntities.length
-                    }`,
+                    id: `disaster:${row.stableId}:fire:${nextEntities.length}`,
                     polygon: {
                       hierarchy: new Cesium.PolygonHierarchy(positions),
                       material: new Cesium.ColorMaterialProperty(

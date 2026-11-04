@@ -54,7 +54,9 @@ export const ACTIVATION_RADIUS_M = 30_000;
 
 /** Analyst query projection for the voice result display and HUD cards. */
 export function mapAnalystRecords(rows, { maxCount = 2000 } = {}) {
-  const limit = Number.isFinite(maxCount) ? Math.max(0, Math.floor(maxCount)) : 2000;
+  const limit = Number.isFinite(maxCount)
+    ? Math.max(0, Math.floor(maxCount))
+    : 2000;
   return rows.slice(0, limit).map((row, index) => ({
     id: row.stableId,
     hazard: row.hazard,
