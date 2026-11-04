@@ -139,6 +139,21 @@ The Network Monitor layer reports the health of **your own, authorized nodes**, 
 
 Candidate sources that are evaluated but not yet integrated are ranked and described in [docs/SOURCE-ROADMAP.md](docs/SOURCE-ROADMAP.md).
 
+- **Valyu OSINT search (`/api/valyu/events`, optional, BYOK).** A credit-metered
+  news-search relay on [Valyu](https://docs.valyu.ai) the operator may enable by
+  setting `VALYU_API_KEY`; it answers bounded news/web lookups (`search_type:
+  news`, at most 10 results) that the primary keyless feeds cannot
+  resolve, never replacing them. The permanent key stays server-side, the route
+  is cross-site gated like every cost-bearing relay, and it shares the per-IP
+  throttle family (`GEV_RATELIMIT_VALYU_PER_MIN`, default 10/min, `0` opt-out).
+  Every query spends operator credits, so the app reads it only when explicitly
+  asked. Unset, the route answers a clean `503 {ok:false, error:
+  'not-configured'}` and the caller degrades to the keyless sources. Returned
+  rows carry title, URL, source and date; results shown in-app stay governed by
+  the copyright of their publishers — it is point-at-work search, not a feed to
+  mirror. The upstream license terms are the Valyu API terms of service; no
+  bundled data results from it.
+
 - **Air quality (ECCC AQHI).** Keyless. Read from the MSC GeoMet OGC API (`api.weather.gc.ca`): the `aqhi-stations` catalog plus `aqhi-observations-realtime`. **Coverage is Canada only** — ECCC is the single registered provider, and the layer row and readout card both say so. Roughly 134 stations across ECCC's five administrative zones (Atlantic, Quebec, Ontario, Prairies & North, Pacific & Yukon). AQHI publishes hourly, so readings poll every 20 minutes and the station catalog, which changes a few times a year, is refetched only every 12 hours. Observations are requested with `latest=true`; without it the collection returns the full history, roughly 2,000 rows nationally. Readings older than six hours are dropped rather than displayed as current.
 
   Readings are stored as `{ provider, scale, value, band }` rather than a bare number, because air-quality indices are not interchangeable: AQHI runs 1-10+ on health risk, the US AQI runs 0-500 on concentration breakpoints, and Europe's EAQI is a five-step category. Naming the index a value belongs to is what lets another network be added later without inventing a shared numeric meaning that does not exist.

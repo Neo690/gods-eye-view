@@ -43,6 +43,7 @@ import { iotSensorsProxy } from './iotSensors.js';
 import { netMonProxy } from './netmon.js';
 import { cellTowersProxy } from './cellTowers.js';
 import { copernicusEmsProxy } from './copernicusEms.js';
+import { valyuEventsProxy } from './valyu.js';
 
 /**
  * Construct the local provider plugins in their established order.
@@ -72,6 +73,9 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     // Copernicus EMS sends no CORS headers; this route fronts the first
     // activations page for the disasters layer.
     copernicusEmsProxy(),
+    // Optional keymetered OSINT search relay (Valyu). Keyless installs get a
+    // clean 503 from the route itself; it costs nothing to mount.
+    valyuEventsProxy(),
     regionalBriefProxy(),
     geocodeProxy(),
     weatherEffectsProxy(),
