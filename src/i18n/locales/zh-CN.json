@@ -1,5 +1,7 @@
 {
-  "AI Agent": "AI 代理",
+  "{count} records": {
+    "other": "{count} 条记录"
+  },
   "Global disasters": "全球灾难",
   "calm": "平静",
   "attention": "注意",
@@ -2789,6 +2791,7 @@
   "Gemini voice could not connect. Try again.": "Gemini 语音无法连接。请重试。",
   "Gemini voice requires a same-origin app request": "Gemini 语音需要与本应用同源的请求",
   "Add a Gemini API key in Provider Settings": "请在服务商设置中添加 Gemini API 密钥",
+  "The Gemini API key was refused. Check it in Provider Settings.": "Gemini API 密钥被拒绝。请在服务商设置中检查该密钥。",
   "The Gemini Live model configuration is invalid": "Gemini Live 模型配置无效",
   "Gemini voice is starting too often. Try again shortly.": "Gemini 语音启动过于频繁。请稍后重试。",
   "Gemini quota is unavailable. Try again later.": "Gemini 配额不可用。请稍后重试。",
@@ -2840,7 +2843,7 @@
   "Unclassified storm": "未分类风暴",
   "Winds {wind} kt · pressure {pressure} hPa": "风速 {wind} 节 · 气压 {pressure} 百帕",
   "Military air activity — {count} aircraft": "军事空中活动 — {count} 架飞机",
-  "GNSS integrity degraded — {count} cells": "GNSS 完好性下降 — {count} 个网格",
+  "Low GNSS integrity cluster — {count} cells": "GNSS 低完好性聚集 — {count} 个网格",
   "Navigation-integrity anomalies, not proof of jamming": "导航完好性异常，并非干扰的证据",
   "Alerts: {count}": "警报：{count}",
   "Alerts": "警报",

@@ -3,7 +3,11 @@
 import puppeteer from 'puppeteer';
 const browser = await puppeteer.launch({
   headless: true,
+  // The suite asserts English-rendered output ("1.3K"): pin the browser to
+  // English instead of inheriting the host's locale, which would format the
+  // same count as "1,3K" and fail the assertion for the wrong reason.
   args: [
+    '--lang=en-US',
     '--no-sandbox',
     ...(process.platform === 'darwin'
       ? ['--use-angle=metal', '--enable-gpu']
@@ -11,6 +15,7 @@ const browser = await puppeteer.launch({
   ],
 });
 const page = await browser.newPage();
+await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US' });
 let failures = 0;
 const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));

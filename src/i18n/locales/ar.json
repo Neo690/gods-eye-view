@@ -1,5 +1,12 @@
 {
-  "AI Agent": "وكيل الذكاء الاصطناعي",
+  "{count} records": {
+    "zero": "{count} سجل",
+    "one": "{count} سجل",
+    "two": "{count} سجلين",
+    "few": "{count} سجلات",
+    "many": "{count} سجلاً",
+    "other": "{count} سجل"
+  },
   "Global disasters": "الكوارث العالمية",
   "calm": "هادئ",
   "attention": "تنبيه",
@@ -2452,6 +2459,7 @@
   "Gemini voice could not connect. Try again.": "تعذّر اتصال صوت Gemini. أعد المحاولة.",
   "Gemini voice requires a same-origin app request": "يتطلب صوت Gemini طلباً من التطبيق بنفس المصدر",
   "Add a Gemini API key in Provider Settings": "أضف مفتاح API لـ Gemini في Provider Settings",
+  "The Gemini API key was refused. Check it in Provider Settings.": "رُفض مفتاح API لـ Gemini. تحقق منه في Provider Settings.",
   "The Gemini Live model configuration is invalid": "تهيئة نموذج Gemini Live غير صالحة",
   "Gemini voice is starting too often. Try again shortly.": "صوت Gemini يبدأ كثيراً. أعد المحاولة بعد قليل.",
   "Gemini quota is unavailable. Try again later.": "حصة Gemini غير متاحة. أعد المحاولة لاحقاً.",
@@ -3175,7 +3183,7 @@
   "Unclassified storm": "عاصفة غير مصنفة",
   "Winds {wind} kt · pressure {pressure} hPa": "رياح {wind} عقدة · ضغط {pressure} هكتوباسكال",
   "Military air activity — {count} aircraft": "نشاط جوي عسكري — {count} طائرات",
-  "GNSS integrity degraded — {count} cells": "تدهور سلامة GNSS — {count} خلايا",
+  "Low GNSS integrity cluster — {count} cells": "تكتّل سلامة GNSS منخفضة — {count} خلايا",
   "Navigation-integrity anomalies, not proof of jamming": "شذوذات في سلامة الملاحة، وليست دليلًا على التشويش",
   "Alerts: {count}": "التنبيهات: {count}",
   "Alerts": "التنبيهات",

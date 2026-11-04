@@ -189,16 +189,6 @@ export function createApplicationTools({
     if (window.__gevVoiceCommands === voiceCommands)
       delete window.__gevVoiceCommands;
   });
-  // The Sentinel (AI Agent) plans through the SAME action runner the voice
-  // console uses, so the agent's capability is exactly the operator's tool
-  // set: schema-checked actions, the same caps, the same audit paths.
-  // Without this attachment the layer degrades to its watchdog-only mode,
-  // which is exactly the intended fallback (see layers/aiAgent/index.js).
-  dataManager.layers.get('ai-agent')?.module?.attachActionControl?.({
-    actionRunner: (name, args, options) =>
-      voiceCommands.runner(name, args, options),
-    styleManager,
-  });
   debug.voiceCommands = voiceCommands;
   defer(
     installViews({

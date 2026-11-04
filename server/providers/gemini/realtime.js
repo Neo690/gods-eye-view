@@ -16,6 +16,29 @@ import {
 const UPSTREAM_RESPONSE_BYTES = 32 * 1024;
 const MINT_FAILURE = 'Gemini voice could not connect. Try again.';
 
+/**
+ * Does this upstream refusal name an invalid API key? Google answers a bad
+ * credential with 400 `API_KEY_INVALID` / "API key not valid" while other
+ * 400s (a model the account cannot use, for example) carry different text.
+ * The body is read capped and inspected for the sentinel ONLY — nothing from
+ * it is ever forwarded or logged — so a mismatched catch keeps the generic
+ * model-unavailable answer. An abort during the read rethrows so the caller's
+ * own abort handling still decides the outcome.
+ */
+async function upstreamRefusedApiKey(response, signal) {
+  try {
+    const data = await readResponseJsonCapped(
+      response,
+      UPSTREAM_RESPONSE_BYTES,
+      signal,
+    );
+    return /API_KEY_INVALID|API key not valid/i.test(JSON.stringify(data));
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return false;
+  }
+}
+
 export function createGeminiTokenHandler({
   annotationGuidance,
   tools,
@@ -146,22 +169,45 @@ export function createGeminiTokenHandler({
         throw new Error('Unexpected token response destination');
       }
       if (!response.ok) {
-        // Never forward upstream bodies, headers or exception messages.
-        void response.body?.cancel().catch(() => {});
         if (response.status === 429) {
+          // Never forward upstream bodies, headers or exception messages.
+          void response.body?.cancel().catch(() => {});
           res.setHeader('Retry-After', '60');
           return reply(429, 'Gemini quota is unavailable. Try again later.');
         }
-        if (response.status === 401 || response.status === 403)
+        if (response.status === 401 || response.status === 403) {
+          void response.body?.cancel().catch(() => {});
           return reply(
             503,
             'Gemini access was refused. Check the API key and model access.',
           );
-        if (response.status === 400 || response.status === 404)
+        }
+        if (response.status === 400) {
+          // The mint setup is entirely server-owned, so a 400 is not a client
+          // error: Google refuses an INVALID key with 400 API_KEY_INVALID.
+          // Classify from the capped upstream body BEFORE cancelling it and
+          // answer a hard key refusal as the Provider-Settings fix it is,
+          // never as a dead model.
+          if (await upstreamRefusedApiKey(response, lifetime.signal)) {
+            return reply(
+              503,
+              'The Gemini API key was refused. Check it in Provider Settings.',
+            );
+          }
+          void response.body?.cancel().catch(() => {});
           return reply(
             502,
             'Gemini Live is unavailable for the configured model.',
           );
+        }
+        if (response.status === 404) {
+          void response.body?.cancel().catch(() => {});
+          return reply(
+            502,
+            'Gemini Live is unavailable for the configured model.',
+          );
+        }
+        void response.body?.cancel().catch(() => {});
         return reply(502, MINT_FAILURE);
       }
       const data = await readResponseJsonCapped(

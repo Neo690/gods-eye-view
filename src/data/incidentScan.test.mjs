@@ -255,20 +255,20 @@ test('military contacts must concentrate before they are reported', () => {
   );
 });
 
-test('degraded GNSS integrity is one incident, and a single cell is not', () => {
+test('a real low-cell cluster is one incident, an almost-cluster is not', () => {
   assert.deepEqual(
     scanIncidents(
-      { gnss: { levels: { low: 1, medium: 3, high: 5 } } },
+      { gnss: { levels: { low: INCIDENT_LIMITS.gnssMinLowCells - 1, medium: 3, high: 5 } } },
       { now: NOW },
     ),
     [],
   );
   const [incident] = scanIncidents(
-    { gnss: { levels: { low: 4, medium: 3, high: 5 } } },
+    { gnss: { levels: { low: INCIDENT_LIMITS.gnssMinLowCells, medium: 3, high: 5 } } },
     { now: NOW },
   );
   assert.equal(incident.id, 'gnss:degraded');
-  assert.equal(incident.title.params.count, 4);
+  assert.equal(incident.title.params.count, INCIDENT_LIMITS.gnssMinLowCells);
   assert.equal(incident.lat, null);
 });
 

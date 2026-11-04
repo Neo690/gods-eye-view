@@ -75,8 +75,13 @@ export const INCIDENT_LIMITS = Object.freeze({
   militaryMaxCells: 2,
   /** Hurricane/typhoon force; below it a storm is a warning. */
   cycloneCriticalWindKt: 64,
-  /** "Low" GNSS cells one view needs before it is reported. */
-  gnssMinLowCells: 2,
+  /**
+   * "Low" GNSS cells the sampled view must hold before it is reported.
+   * Cells are 0.5° squares (layers/gnss GNSS_CELL_DEG), so this block needs
+   * about a degree across — a real cluster — rather than two joint cells of
+   * one bad acquisition that fire on a large view.
+   */
+  gnssMinLowCells: 5,
   /** Upper bound on the list, highest severity first. */
   maxIncidents: 40,
 });
@@ -371,7 +376,7 @@ function scanMilitary(rows = [], { limits }) {
     });
 }
 
-/** Degraded GNSS integrity around the sampled view (cells, not positions). */
+/** A real cluster of low GNSS integrity cells in the sampled view (not positions). */
 function scanGnss(levels, { limits }) {
   const low = numeric(levels?.low) ?? 0;
   if (low < limits.gnssMinLowCells) return [];
@@ -385,7 +390,7 @@ function scanGnss(levels, { limits }) {
       lon: null,
       atMs: numeric(levels?.lastUpdate),
       title: {
-        key: msg('GNSS integrity degraded — {count} cells'),
+        key: msg('Low GNSS integrity cluster — {count} cells'),
         params: { count: low },
       },
       detail: {

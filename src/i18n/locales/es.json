@@ -1,5 +1,9 @@
 {
-  "AI Agent": "Agente de IA",
+  "{count} records": {
+    "one": "{count} registro",
+    "many": "{count} registros",
+    "other": "{count} registros"
+  },
   "Global disasters": "Desastres mundiales",
   "calm": "tranquilo",
   "attention": "atención",
@@ -2948,6 +2952,7 @@
   "Gemini voice could not connect. Try again.": "No se pudo conectar la voz de Gemini. Inténtalo de nuevo.",
   "Gemini voice requires a same-origin app request": "La voz de Gemini requiere una solicitud del mismo origen que la aplicación",
   "Add a Gemini API key in Provider Settings": "Añade una clave de API de Gemini en los ajustes de proveedores",
+  "The Gemini API key was refused. Check it in Provider Settings.": "Se rechazó la clave de API de Gemini. Compruébala en los ajustes de proveedores.",
   "The Gemini Live model configuration is invalid": "La configuración del modelo de Gemini Live no es válida",
   "Gemini voice is starting too often. Try again shortly.": "La voz de Gemini se está iniciando con demasiada frecuencia. Vuelve a intentarlo en breve.",
   "Gemini quota is unavailable. Try again later.": "La cuota de Gemini no está disponible. Inténtalo más tarde.",
@@ -2974,7 +2979,7 @@
   "Unclassified storm": "Tormenta sin clasificar",
   "Winds {wind} kt · pressure {pressure} hPa": "Vientos {wind} kt · presión {pressure} hPa",
   "Military air activity — {count} aircraft": "Actividad aérea militar — {count} aeronaves",
-  "GNSS integrity degraded — {count} cells": "Integridad GNSS degradada — {count} celdas",
+  "Low GNSS integrity cluster — {count} cells": "Agrupación de baja integridad GNSS — {count} celdas",
   "Navigation-integrity anomalies, not proof of jamming": "Anomalías de integridad de navegación, no prueba de interferencia",
   "Alerts: {count}": "Alertas: {count}",
   "Alerts": "Alertas",

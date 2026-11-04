@@ -1,930 +1,841 @@
-import test from 'node:test';
+// The Sentinel spider: patrol geometry, the watch pass, the robot body, the
+// report card and the layer's lifecycle — walked end to end, with the clock,
+// the document and the relay all replaced by seams.
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import * as Cesium from 'cesium';
+import { AI_AGENT_LAYER_ID, createAiAgentLayer } from './index.js';
 import {
-  SENTINEL_WINDOWS,
-  createSentinelWatch,
-  eventSeverity,
-  readStrongRecord,
-  resolveSeverity,
-  watchLayers,
-  worstSeverity,
-} from './watch.js';
-import { MAX_ACTIONS_PER_PLAN, requestAgentPlan, safePlanActions } from './planner.js';
-import { createAiAgentLayer } from './index.js';
+  angularDistance,
+  destinationPoint,
+  rankInspectionTargets,
+  stepPatrol,
+  wrapLongitude,
+  ARRIVE_RAD,
+  SCAN_MS,
+} from './patrol.js';
+import { eventSeverity, watchLayers, worstSeverity } from './watch.js';
+import { createAvatarOverlay } from './overlay.js';
+import {
+  createSpiderBody,
+  destroySpiderNoteOverlay,
+  spiderLegPose,
+  spiderSpriteFrames,
+  SPIDER_NOTE_ID,
+  SPIDER_NOTE_SOURCE,
+  SPIDER_SPRITE_FRAMES,
+  syncSpiderNoteOverlay,
+} from './spider.js';
+import { getWorldOverlayDiagnostics } from '../../overlays/worldOverlay.js';
+
+const DEG = Math.PI / 180;
 
 // ---------------------------------------------------------------------------
-// Fakes
+// A very small DOM: enough for the report card (create, append, prepend,
+// remove, class, attribute, hidden, click), and nothing else.
 // ---------------------------------------------------------------------------
 
-/** Minimal DOM facade covering exactly the surface overlay.js touches. */
 class FakeElement {
   constructor(tagName) {
-    this.tagName = String(tagName).toUpperCase();
-    this.className = '';
-    this.dataset = { state: '' };
+    this.tagName = tagName;
+    this.children = [];
+    this.attributes = {};
+    this.listeners = {};
     this.hidden = false;
     this.textContent = '';
-    this.title = '';
-    this.children = [];
-    this.parent = null;
-    this._html = '';
-    this._listeners = new Map();
-    this._classes = new Set();
-    this._standins = new Map();
-    this._attrs = {};
+    this.parentNode = null;
+    this.classList = {
+      toggle: (name, force) => {
+        const on = force === undefined ? !this.hasClass(name) : Boolean(force);
+        this.className = on
+          ? [...new Set([...this.classNames(), name])].join(' ')
+          : this.classNames()
+              .filter((value) => value !== name)
+              .join(' ');
+        return on;
+      },
+      contains: (name) => this.hasClass(name),
+    };
+  }
+
+  // Read-only in a browser: `element.dataset = {}` throws a TypeError there,
+  // and a double that accepted it once hid exactly that bug.
+  get dataset() {
+    return (this._dataset ??= {});
+  }
+
+  // One class store behind both spellings, as in the DOM: `className` for
+  // HTML and the `class` attribute a translated markup pass also writes.
+  get className() {
+    return this.attributes.class ?? '';
+  }
+
+  set className(value) {
+    this.attributes.class = String(value);
+  }
+
+  classNames() {
+    return this.className.split(/\s+/).filter(Boolean);
+  }
+
+  hasClass(name) {
+    return this.classNames().includes(name);
+  }
+
+  setAttribute(name, value) {
+    this.attributes[name] = String(value);
+  }
+
+  getAttribute(name) {
+    return this.attributes[name] ?? null;
+  }
+
+  appendChild(child) {
+    child.parentNode = this;
+    this.children.push(child);
+    return child;
+  }
+
+  prepend(child) {
+    child.parentNode = this;
+    this.children.unshift(child);
+    return child;
+  }
+
+  remove() {
+    const parent = this.parentNode;
+    if (!parent) return;
+    parent.children = parent.children.filter((child) => child !== this);
+    this.parentNode = null;
+  }
+
+  addEventListener(type, handler) {
+    (this.listeners[type] ||= []).push(handler);
+  }
+
+  click() {
+    for (const handler of this.listeners.click ?? []) handler({});
   }
 
   get childElementCount() {
     return this.children.length;
   }
+
   get lastElementChild() {
     return this.children[this.children.length - 1] ?? null;
   }
-  get innerHTML() {
-    return this._html;
-  }
-  set innerHTML(value) {
-    this._html = value;
-  }
 
-  get classList() {
-    const classes = this._classes;
-    return {
-      toggle(value, on = !classes.has(value)) {
-        if (on) classes.add(value);
-        else classes.delete(value);
-      },
-      add(value) {
-        classes.add(value);
-      },
-      contains(value) {
-        return classes.has(value);
-      },
-    };
-  }
-
-  appendChild(child) {
-    child.parent = this;
-    this.children.push(child);
-    return child;
-  }
-  prepend(child) {
-    child.parent = this;
-    this.children.unshift(child);
-    return child;
-  }
-  remove() {
-    if (this.parent) {
-      const at = this.parent.children.indexOf(this);
-      if (at >= 0) this.parent.children.splice(at, 1);
-      this.parent = null;
-    }
-  }
-  addEventListener(type, handler) {
-    this._listeners.set(type, handler);
-  }
-  click() {
-    this._listeners.get('click')?.();
-  }
-  setAttribute(key, value) {
-    this._attrs[key] = value;
-  }
-  getAttribute(key) {
-    return this._attrs[key] ?? null;
-  }
   querySelector(selector) {
-    // overlay.js reads its own children by class; stand-ins are memoized per
-    // selector so repeated reads surface the same node.
-    let node = this._standins.get(selector);
-    if (!node) {
-      node = new FakeElement('div');
-      this._standins.set(selector, node);
-    }
-    return node;
-  }
-}
-
-class FakeDocument {
-  constructor() {
-    this.body = new FakeElement('body');
-  }
-  createElement(tagName) {
-    return new FakeElement(tagName);
-  }
-}
-
-/** A lifecycle row in the manager's shape, with only the fields that matter. */
-function row(id, { name = id, count = 0, loading = false, error = null } = {}) {
-  return {
-    id,
-    name,
-    enabled: true,
-    stats: {
-      count,
-      loading,
-      ...(error
-        ? { sourceUnavailable: false, managerRefreshError: error }
-        : {}),
-    },
-  };
-}
-
-/** Manager fake carrying the three channels createSentinelWatch binds. */
-function fakeDataManager() {
-  const channels = {
-    onSnapshotUpdate: [],
-    onLayerState: [],
-    onLayerError: [],
-  };
-  const subscribe = (channel) => (listener) => {
-    channels[channel].push(listener);
-    return () => {
-      const at = channels[channel].indexOf(listener);
-      if (at >= 0) channels[channel].splice(at, 1);
+    const wanted = selector.startsWith('.') ? selector.slice(1) : null;
+    if (!wanted) return null;
+    const walk = (node) => {
+      for (const child of node.children) {
+        if (child.hasClass(wanted)) return child;
+        const found = walk(child);
+        if (found) return found;
+      }
+      return null;
     };
+    return walk(this);
+  }
+
+  querySelectorAll(selector) {
+    const wanted = selector.startsWith('.') ? selector.slice(1) : null;
+    const out = [];
+    const walk = (node) => {
+      for (const child of node.children) {
+        if (wanted && child.hasClass(wanted)) out.push(child);
+        walk(child);
+      }
+    };
+    walk(this);
+    return out;
+  }
+}
+
+// An SVG node: `className` is a read-only SVGAnimatedString there, so the
+// double refuses the assignment a real browser throws on.
+class FakeSvgElement extends FakeElement {
+  get className() {
+    return this.attributes.class ?? '';
+  }
+
+  set className(_value) {
+    throw new TypeError(
+      'Cannot set property className of #<SVGElement> which has only a getter',
+    );
+  }
+}
+
+function fakeCanvas() {
+  const context = {
+    clearRect() {},
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    arc() {},
+    ellipse() {},
+    stroke() {},
+    fill() {},
+    lineCap: 'round',
+    lineJoin: 'round',
+    lineWidth: 1,
+    strokeStyle: '',
+    fillStyle: '',
   };
+  const canvas = new FakeElement('canvas');
+  canvas.getContext = () => context;
+  canvas.toDataURL = () => 'data:image/png;base64,AA==';
+  canvas.width = 0;
+  canvas.height = 0;
+  return canvas;
+}
+
+function fakeDocument() {
+  const body = new FakeElement('body');
   return {
-    channels,
-    onSnapshotUpdate: subscribe('onSnapshotUpdate'),
-    onLayerState: subscribe('onLayerState'),
-    onLayerError: subscribe('onLayerError'),
-  };
-}
-
-const REAL_NOW = Date.now;
-/** Install a controllable clock for the dedup-window tests. */
-function withFakeClock() {
-  let clock = REAL_NOW();
-  Date.now = () => clock;
-  return {
-    tick(ms) {
-      clock += ms;
-    },
-    restore() {
-      Date.now = REAL_NOW;
-    },
+    body,
+    createElement: (tag) =>
+      tag === 'canvas' ? fakeCanvas() : new FakeElement(tag),
+    createElementNS: (_ns, tag) => new FakeSvgElement(tag),
   };
 }
 
 // ---------------------------------------------------------------------------
-// readStrongRecord + watchLayers: diffs, first-sight arming, loading grace
+// Patrol geometry
 // ---------------------------------------------------------------------------
 
-test('readStrongRecord surfaces the error the manager owns', () => {
-  assert.deepEqual(
-    readStrongRecord({
-      id: 'a',
-      name: 'A',
-      enabled: true,
-      stats: { count: 3 },
-    }),
-    {
-      id: 'a',
-      label: 'A',
-      enabled: true,
-      loading: false,
-      count: 3,
-      error: null,
-    },
+test('angularDistance reads a quarter turn and folds the dateline', () => {
+  const quarter = angularDistance(
+    { latDeg: 0, lonDeg: 0 },
+    { latDeg: 0, lonDeg: 90 },
   );
+  assert.ok(Math.abs(quarter - Math.PI / 2) < 1e-9);
+  const across = angularDistance(
+    { latDeg: 0, lonDeg: 179 },
+    { latDeg: 0, lonDeg: -179 },
+  );
+  assert.ok(Math.abs(across - 2 * DEG) < 1e-9);
   assert.equal(
-    readStrongRecord({ id: 'a', stats: { managerRefreshError: '500' } }).error,
-    '500',
+    destinationPoint({ latDeg: 0, lonDeg: 179 }, 90 * DEG, 2 * DEG).lonDeg,
+    -179,
   );
-  assert.equal(
-    readStrongRecord({
-      id: 'a',
-      stats: { sourceUnavailable: true, error: 'no source' },
-    }).error,
-    'no source',
-  );
-  assert.equal(
-    readStrongRecord({
-      id: 'a',
-      stats: { sourceUnavailable: false, error: 'ignored' },
-    }).error,
-    null,
-    'a source error while the source reports available is not surfaced',
-  );
-  assert.equal(readStrongRecord(undefined).id, '');
+  assert.equal(wrapLongitude(190), -170);
 });
 
-// The seen set is the caller's: watchLayers never (re)creates it in state, so
-// a fresh Set per pass would re-arm every cycle. The layer owns
-// { previous, seen } exactly once and hands it back in.
-const watchdogState = () => ({ previous: null, seen: new Set() });
+test('stepPatrol walks an arc, turns toward the target and lands exactly', () => {
+  const here = { latDeg: 0, lonDeg: 0, headingRad: 0 };
+  const target = { latDeg: 0, lonDeg: 10 };
+  const first = stepPatrol(here, target, 0.1);
+  assert.equal(first.arrived, false);
+  assert.ok(first.travelledRad > 0);
+  // Facing north while the target is east: the turn is bounded, not instant,
+  // so one short step swings the body only part of the way round.
+  assert.ok(first.headingRad > 0);
+  assert.ok(first.headingRad < 20 * DEG);
 
-/** One full pass: watch, then hand the fresh previous map back to state —
- * exactly what index.js does between its cycles. */
-function passRows(state, opts, rows) {
-  const result = watchLayers(rows, state, opts);
-  state.previous = result.previous;
-  return result;
-}
-
-test('watchLayers stays silent on first sight, then diffs count changes', () => {
-  const state = watchdogState();
-  const at = () => 1000;
-  const opts = { now: at };
-
-  // First pass only arms the baseline: startup noise never floods the feed.
-  let pass = passRows(state, opts, [row('flights', { count: 5 })]);
-  assert.deepEqual(pass.events, []);
-
-  // No change: no event either.
-  pass = passRows(state, opts, [row('flights', { count: 5 })]);
-  assert.deepEqual(pass.events, []);
-
-  // Count rising: one event-update with the signed delta in the detail.
-  pass = passRows(state, opts, [row('flights', { count: 9 })]);
-  assert.equal(pass.events.length, 1);
-  assert.equal(pass.events[0].kind, 'event-update');
-  assert.equal(pass.events[0].layerId, 'flights');
-  assert.equal(pass.events[0].detail, '+4');
-  assert.equal(pass.events[0].severity, 'info');
-  assert.equal(pass.events[0].at, 1000);
-  assert.ok(Object.isFrozen(pass.events[0]));
-
-  // Falling count: unicode minus, never the ascii hyphen.
-  pass = passRows(state, opts, [row('flights', { count: 8 })]);
-  assert.equal(pass.events[0].detail, '−1');
-
-  // The layer owns one state object: previous is replaced, seen is kept.
-  assert.ok(pass.previous instanceof Map);
-  assert.equal(pass.previous.get('flights').count, 8);
-  assert.ok(state.seen instanceof Set);
-});
-
-test('watchLayers skips loading ticks in both directions', () => {
-  const state = watchdogState();
-  const at = () => 2000;
-  const opts = { now: at };
-
-  passRows(state, opts, [row('flights', { count: 3 })]); // baseline arms silently
-
-  // A loading tick with a changed count is not news.
-  let pass = passRows(state, opts, [
-    row('flights', { count: 9, loading: true }),
-  ]);
-  assert.deepEqual(pass.events, []);
-
-  // Nor the tick that merely clears it.
-  pass = passRows(state, opts, [row('flights', { count: 9, loading: false })]);
-  assert.deepEqual(pass.events, []);
-
-  // The next settled tick carries the diff the loading window skipped.
-  pass = passRows(state, opts, [row('flights', { count: 12 })]);
-  assert.deepEqual(
-    pass.events.map((event) => event.detail),
-    ['+3'],
-  );
-});
-
-test('watchLayers escalates a NEW feed error to warn before counting anything else', () => {
-  const state = watchdogState();
-  const at = () => 3000;
-  const opts = { now: at };
-
-  passRows(state, opts, [row('flights', { count: 5 })]); // baseline
-  const pass = passRows(state, opts, [
-    row('flights', { count: 7, error: 'upstream 503' }),
-  ]);
-  assert.equal(pass.events.length, 1);
-  assert.equal(pass.events[0].kind, 'layer-error');
-  assert.equal(pass.events[0].severity, 'warn');
-  assert.equal(pass.events[0].detail, 'upstream 503');
-
-  // The same error repeated is not news again.
-  const again = passRows(state, opts, [
-    row('flights', { count: 7, error: 'upstream 503' }),
-  ]);
-  assert.deepEqual(again.events, []);
-});
-
-test('watchLayers ignores rows without an id under a custom reader', () => {
-  const state = watchdogState();
-  const opts = {
-    now: () => 4,
-    readRecords: (raw) => ({ id: String(raw.id ?? ''), label: raw.id }),
-  };
-  const pass = watchLayers([{ id: '' }, { id: 'ok' }], state, opts);
-  assert.deepEqual(pass.events, []);
-  assert.equal(pass.previous.size, 1);
-});
-
-test('watchLayers tolerates a null roster, but always needs the seen set', () => {
-  assert.deepEqual(
-    watchLayers(null, watchdogState(), { now: () => 5 }).events,
-    [],
-  );
-  // Without a seen set the engine cannot remember its first sight and re-arms
-  // every pass: a miswired caller yields silence, not a flood.
-  const stateless = {};
-  for (let pass = 0; pass < 3; pass++) {
-    const result = watchLayers([row('flights', { count: pass })], stateless, {
-      now: () => 6,
-    });
-    assert.deepEqual(result.events, []);
+  let state = first;
+  let steps = 0;
+  while (!state.arrived && steps < 400) {
+    state = stepPatrol(state, target, 0.25);
+    steps += 1;
   }
-});
+  assert.equal(state.arrived, true);
+  assert.equal(state.latDeg, target.latDeg);
+  assert.equal(state.lonDeg, target.lonDeg);
+  assert.ok(steps < 400);
 
-// ---------------------------------------------------------------------------
-// Severity helpers (the renderer consumes these verbatim)
-// ---------------------------------------------------------------------------
-
-test('worstSeverity and resolveSeverity follow the documented ladder', () => {
-  assert.equal(worstSeverity([]), 'info');
-  assert.equal(
-    worstSeverity([{ severity: 'info' }, { severity: 'emergency' }]),
-    'emergency',
+  // Already there: one step reports arrival without moving.
+  const atTarget = stepPatrol(
+    { latDeg: 0, lonDeg: 0, headingRad: 0 },
+    { latDeg: 0, lonDeg: ARRIVE_RAD / DEG / 2 },
+    1,
   );
-  assert.equal(
-    worstSeverity([{ severity: 'warn' }, { severity: 'emergency' }]),
-    'emergency',
-  );
-  assert.equal(worstSeverity([{}]), 'info', 'unmapped severity reads calm');
-
-  assert.equal(eventSeverity(null), 'info');
-  assert.equal(eventSeverity({ severity: 'nope' }), 'info');
-
-  assert.equal(resolveSeverity('lost'), 'warn');
-  assert.equal(resolveSeverity('error'), 'warn');
-  assert.equal(resolveSeverity('state'), 'info');
-  assert.equal(resolveSeverity('new', { magnitude: 4.2 }), 'warn');
-  assert.equal(resolveSeverity('new', { magnitude: 5.0 }), 'emergency');
-  assert.equal(resolveSeverity('new', { magnitude: 'n/a' }), 'warn');
+  assert.equal(atTarget.arrived, true);
 });
 
-test('SENTINEL_WINDOWS exports the engine timings verbatim', () => {
-  assert.deepEqual(SENTINEL_WINDOWS, { grace: 12000, dedup: 120000 });
-});
-
-// ---------------------------------------------------------------------------
-// createSentinelWatch: arming, burst caps, dedup window, bind/destroy contract
-// ---------------------------------------------------------------------------
-
-// The 12s grace sweep (the 20k-id book pruning) is a memory-hygiene detail
-// with no observable surface: LOST detection diffs against lastReadIds, not
-// the book. It is pinned through SENTINEL_WINDOWS above.
-
-test('sentinel watch: first read arms, second read emits capped NEW with magnitude', () => {
-  const clock = withFakeClock();
-  try {
-    const manager = fakeDataManager();
-    const watch = createSentinelWatch({ dataManager: manager });
-    const seen = [];
-    const off = watch.addListener((event) => seen.push(event));
-
-    // bind() returns the undo on the FIRST call; re-binding is a no-op.
-    const undo = watch.bind();
-    assert.equal(typeof undo, 'function');
-    assert.equal(watch.bind(), null);
-
-    const rowsFor = (n) =>
-      Array.from({ length: n }, (_, i) => ({ id: `ev-${i}`, magnitude: 3.1 }));
-    manager.channels.onSnapshotUpdate.forEach((listener) =>
-      listener({ layerId: 'emsc-seismic', rows: rowsFor(20) }),
-    );
-    assert.deepEqual(seen, [], 'first read arms silently');
-
-    clock.tick(1000);
-    manager.channels.onSnapshotUpdate.forEach((listener) =>
-      listener({ layerId: 'emsc-seismic', rows: rowsFor(25) }),
-    );
-    assert.equal(seen.length, 1);
-    assert.equal(seen[0].kind, 'new');
-    assert.equal(seen[0].count, 5);
-    assert.deepEqual(seen[0].subjects, [
-      'ev-20',
-      'ev-21',
-      'ev-22',
-      'ev-23',
-      'ev-24',
-    ]);
-    assert.equal(seen[0].magnitude, 3.1, 'the strongest read row is claimed');
-    assert.equal(seen[0].severity, 'warn', 'below magnitude 5 stays a warning');
-    assert.ok(seen[0].id.startsWith('ev_'));
-    assert.ok(Object.isFrozen(seen[0]));
-
-    off();
-  } finally {
-    clock.restore();
-  }
-});
-
-const BURST_ROW_COUNT = 22;
-
-test('sentinel watch: burst caps subjects at 20 and escalates magnitude ≥ 5', () => {
-  const clock = withFakeClock();
-  try {
-    const manager = fakeDataManager();
-    const watch = createSentinelWatch({ dataManager: manager });
-    const seen = [];
-    watch.addListener((event) => seen.push(event));
-    watch.bind();
-
-    const rowsFor = (n) =>
-      Array.from({ length: n }, (_, i) => ({ eventId: `id-${i}`, mag: 6.2 }));
-    manager.channels.onSnapshotUpdate.forEach((listener) =>
-      listener({ layerId: 'emsc-seismic', rows: rowsFor(2) }),
-    );
-    clock.tick(1000);
-    manager.channels.onSnapshotUpdate.forEach((listener) =>
-      listener({ layerId: 'emsc-seismic', rows: rowsFor(BURST_ROW_COUNT) }),
-    );
-    assert.equal(seen.length, 1);
-    assert.equal(seen[0].count, BURST_ROW_COUNT - 2);
-    assert.equal(
-      seen[0].subjects.length,
-      20,
-      'BURST_CAP holds on a 22-row burst',
-    );
-    assert.equal(seen[0].magnitude, 6.2);
-    assert.equal(seen[0].severity, 'emergency');
-    watch.destroy();
-  } finally {
-    clock.restore();
-  }
-});
-
-test('sentinel watch: LOST dedup — a repeated identical loss stays silent, a post-window repeat fires', () => {
-  const clock = withFakeClock();
-  try {
-    const manager = fakeDataManager();
-    const watch = createSentinelWatch({ dataManager: manager });
-    const seen = [];
-    watch.addListener((event) => seen.push(event));
-    watch.bind();
-
-    const rowsFor = (ids) => ids.map((id) => ({ id }));
-    manager.channels.onSnapshotUpdate.forEach((listener) =>
-      listener({ layerId: 'emsc-seismic', rows: rowsFor(['ev-0']) }),
-    );
-    clock.tick(60_000);
-    // Flicker in, so a LOST of exactly ev-1 exists.
-    manager.channels.onSnapshotUpdate.forEach((listener) =>
-      listener({ layerId: 'emsc-seismic', rows: rowsFor(['ev-0', 'ev-1']) }),
-    );
-    assert.equal(seen.length, 1);
-    assert.equal(seen[0].kind, 'new');
-    // The loss itself: dead within the dedup window.
-    clock.tick(1000);
-    manager.channels.onSnapshotUpdate.forEach((listener) =>
-      listener({ layerId: 'emsc-seismic', rows: rowsFor(['ev-0']) }),
-    );
-    const lostEvents = () => seen.filter((event) => event.kind === 'lost');
-    assert.equal(lostEvents().length, 1);
-    assert.deepEqual(lostEvents()[0].subjects, ['ev-1']);
-
-    // Flicker once more and kill it again: the same batch is swallowed while
-    // the window holds.
-    clock.tick(1000);
-    manager.channels.onSnapshotUpdate.forEach((listener) =>
-      listener({ layerId: 'emsc-seismic', rows: rowsFor(['ev-0', 'ev-1']) }),
-    );
-    clock.tick(1000);
-    manager.channels.onSnapshotUpdate.forEach((listener) =>
-      listener({ layerId: 'emsc-seismic', rows: rowsFor(['ev-0']) }),
-    );
-    assert.equal(
-      lostEvents().length,
-      1,
-      'identical loss still deduped inside the window',
-    );
-
-    // Past the window the same loss reports again.
-    clock.tick(SENTINEL_WINDOWS.dedup + 1);
-    manager.channels.onSnapshotUpdate.forEach((listener) =>
-      listener({ layerId: 'emsc-seismic', rows: rowsFor(['ev-0', 'ev-1']) }),
-    );
-    clock.tick(1000);
-    manager.channels.onSnapshotUpdate.forEach((listener) =>
-      listener({ layerId: 'emsc-seismic', rows: rowsFor(['ev-0']) }),
-    );
-    assert.equal(lostEvents().length, 2);
-    assert.deepEqual(lostEvents()[1].subjects, ['ev-1']);
-
-    watch.destroy();
-  } finally {
-    clock.restore();
-  }
-});
-
-test('sentinel watch: id fallback chain and rows without any tracked id', () => {
-  const clock = withFakeClock();
-  try {
-    const manager = fakeDataManager();
-    const watch = createSentinelWatch({ dataManager: manager });
-    const seen = [];
-    watch.addListener((event) => seen.push(event));
-    watch.bind();
-
-    // First read: 'weather-cyclones' reads id then sid; only these exist.
-    manager.channels.onSnapshotUpdate.forEach((listener) =>
-      listener({
-        layerId: 'weather-cyclones',
-        rows: [{ id: 'a' }, { id: 'b' }],
-      }),
-    );
-    assert.deepEqual(seen, [], 'first read arms silently');
-
-    const news = () => seen.filter((event) => event.kind === 'new');
-    const losts = () => seen.filter((event) => event.kind === 'lost');
-
-    clock.tick(1000);
-    manager.channels.onSnapshotUpdate.forEach((listener) =>
-      listener({
-        layerId: 'weather-cyclones',
-        rows: [{ id: 'a' }, { sid: 's1' }],
-      }),
-    );
-    const newEvent = news()[0];
-    assert.ok(newEvent, 'the sid-only row shows up as new');
-    assert.equal(newEvent.count, 1);
-    assert.deepEqual(
-      newEvent.subjects,
-      ['s1'],
-      'the fallback field wins when id is absent',
-    );
-    assert.equal(
-      newEvent.severity,
-      'warn',
-      'no magnitude fields for this layer → plain warning',
-    );
-    assert.equal(newEvent.magnitude, undefined);
-    assert.equal(
-      losts().length,
-      1,
-      'the old id-b read as lost in the same snapshot',
-    );
-
-    // A snapshot where no row carries any tracked id reads as a total loss.
-    clock.tick(1000);
-    manager.channels.onSnapshotUpdate.forEach((listener) =>
-      listener({ layerId: 'weather-cyclones', rows: [{ mystery: 'x' }] }),
-    );
-    const lost = losts().at(-1);
-    assert.equal(lost.count, 2);
-    assert.deepEqual(lost.subjects, ['a', 's1']);
-
-    manager.channels.onSnapshotUpdate.forEach((listener) =>
-      listener({ layerId: 'not-a-layer', rows: [{ id: 'x' }] }),
-    );
-    assert.equal(seen.length, 3, 'a layer with no id rule contributes nothing');
-    watch.destroy();
-  } finally {
-    clock.restore();
-  }
-});
-
-test('sentinel watch: state flows instantly, error dedups by message', () => {
-  const clock = withFakeClock();
-  try {
-    const manager = fakeDataManager();
-    const watch = createSentinelWatch({ dataManager: manager });
-    const seen = [];
-    watch.addListener((event) => seen.push(event));
-    watch.bind();
-
-    manager.channels.onLayerState.forEach((listener) =>
-      listener({ layerId: 'flights', enabled: false }),
-    );
-    assert.equal(seen.length, 1);
-    assert.equal(seen[0].kind, 'state');
-    assert.equal(seen[0].enabled, false);
-    assert.equal(seen[0].severity, 'info');
-
-    // State events are not deduped: an explicit toggle is always news.
-    manager.channels.onLayerState.forEach((listener) =>
-      listener({ layerId: 'flights', enabled: true }),
-    );
-    assert.equal(seen.length, 2);
-    assert.equal(seen[1].enabled, true);
-
-    manager.channels.onLayerError.forEach((listener) =>
-      listener({ layerId: 'flights', error: new Error('feed down') }),
-    );
-    assert.equal(seen.at(-1).kind, 'error');
-    assert.equal(seen.at(-1).severity, 'warn');
-    assert.equal(seen.at(-1).message, 'feed down');
-
-    // The same message within DEDUP_MS lands once; a new message lands again.
-    clock.tick(1000);
-    manager.channels.onLayerError.forEach((listener) =>
-      listener({ layerId: 'flights', error: new Error('feed down') }),
-    );
-    clock.tick(1000);
-    manager.channels.onLayerError.forEach((listener) =>
-      listener({ layerId: 'flights', error: new Error('different failure') }),
-    );
-    assert.equal(seen.filter((event) => event.kind === 'error').length, 2);
-    watch.destroy();
-  } finally {
-    clock.restore();
-  }
-});
-
-test('sentinel watch: contract guards — manager required, bind once, destroy idempotent', () => {
-  assert.throws(() => createSentinelWatch({}), TypeError);
-  assert.throws(() => createSentinelWatch({ dataManager: 'x' }), TypeError);
-
-  const manager = fakeDataManager();
-  const watch = createSentinelWatch({ dataManager: manager });
-  let boomed = false;
-  const seen = [];
-  watch.addListener(() => {
-    if (!boomed) {
-      boomed = true;
-      throw new Error('listener boom');
-    }
-  });
-  watch.addListener((event) => seen.push(event));
-  watch.bind();
-
-  // A listener throwing must not break the batch for the others.
-  assert.doesNotThrow(() =>
-    manager.channels.onLayerState.forEach((listener) =>
-      listener({ layerId: 'flights', enabled: true }),
-    ),
-  );
-  assert.equal(seen.length, 1);
-
-  watch.destroy();
-  watch.destroy(); // idempotent
-  manager.channels.onLayerState.forEach((listener) =>
-    listener({ layerId: 'flights', enabled: false }),
-  );
-  assert.equal(seen.length, 1, 'a destroyed engine never emits');
-  assert.equal(watch.bind(), null, 'a destroyed engine never rebinds');
-});
-
-// ---------------------------------------------------------------------------
-// safePlanActions: whitelisted names, self-disable refusal, caps, cloning
-// ---------------------------------------------------------------------------
-
-test('safePlanActions keeps only schema-known agent actions and caps the plan', () => {
-  const safe = safePlanActions([
-    {
-      action: 'set_layer_visibility',
-      args: { layerId: 'flights', enabled: true },
-    },
-    { action: 'zoom_to_globe', args: {} },
-    { action: 'toggle_hud', args: { visible: false } },
-    { action: 'focus_city', args: { city: 'Tokyo' } },
-    { action: 'adjust_camera_heading', args: { deg: 30 } }, // past the cap
-  ]);
-  assert.equal(safe.length, MAX_ACTIONS_PER_PLAN);
-  assert.deepEqual(
-    safe.map((plan) => plan.name),
-    ['set_layer_visibility', 'zoom_to_globe', 'toggle_hud'],
-  );
-});
-
-test('safePlanActions refuses any action targeting the ai-agent layer itself', () => {
-  const safe = safePlanActions([
-    {
-      action: 'set_layer_visibility',
-      args: { layerId: 'emsc-seismic', enabled: true },
-    },
-    {
-      action: 'set_layer_visibility',
-      args: { layerId: 'ai-agent', enabled: false },
-    },
-    { action: 'set_layer_visibility', args: {} }, // no layerId either
-    {
-      action: 'set_layer_visibility',
-      args: { layerId: 'ai-agent', enabled: true },
-    },
-  ]);
-  assert.deepEqual(safe, [
-    {
-      name: 'set_layer_visibility',
-      args: { layerId: 'emsc-seismic', enabled: true },
-    },
-  ]);
-});
-
-test('safePlanActions drops malformed and unknown entries, clones arguments', () => {
-  const deep = { layerId: 'flights', enabled: true };
-  const safe = safePlanActions([
-    { action: 'set_layer_visibility', args: deep },
-    { action: 'run_shell', args: { cmd: 'rm -rf /' } },
-    { action: 'set_context_mode', args: { mode: 'dark' } },
-    'a bare string entry',
-    null,
-    { args: {} }, // no action name
-  ]);
-  assert.deepEqual(safe, [
-    {
-      name: 'set_layer_visibility',
-      args: { layerId: 'flights', enabled: true },
-    },
-  ]);
-  // Arguments are cloned: mutating the plan afterwards cannot reach the runner.
-  deep.layerId = 'ai-agent';
-  assert.equal(safe[0].args.layerId, 'flights');
-  assert.notEqual(safe[0].args, deep);
-});
-
-test('safePlanActions slices the budget BEFORE filtering: junk still eats slots', () => {
-  // Three malformed entries at the head consume the whole plan of three.
-  assert.deepEqual(
-    safePlanActions([
-      'junk',
-      { action: 'not-a-real-tool' },
-      null,
-      { action: 'zoom_to_globe', args: {} },
-    ]),
-    [],
-    'the slice precedes the whitelist, exactly as shipped; the model is capped upstream too',
-  );
-});
-
-test('safePlanActions never explodes on garbage plans', () => {
-  assert.deepEqual(safePlanActions(undefined), []);
-  assert.deepEqual(safePlanActions('not an array'), []);
-  assert.deepEqual(safePlanActions([]), []);
-  assert.deepEqual(safePlanActions([{}, 3]), []);
-});
-
-test('requestAgentPlan degrades to watchdog-only on every relay failure', async () => {
-  // The planner rides the same-origin Gemini relay; no OpenAI fallback. The
-  // World Packet builder needs a real camera position; nothing beyond that.
-  const owners = {
-    viewer: { camera: { positionWC: { x: 0, y: 0, z: 6371000 } } },
-    dataManager: { getAll: () => [] },
-    styleManager: {},
-  };
-  const context = { events: [], actCount: 0 };
-  // The stub plays the RELAY, not the upstream model: requestAgentPlan
-  // consumes the relay's {plan} envelope (the candidates parsing lives
-  // behind /api/gemini/agent-plan, covered in its own suite).
-
-  // Keyless relay: the bounded 503 not-configured contract — no plan, no
-  // actions, no retry. (The browser never holds the key either way.)
-  const seen = [];
-  const keyless = await requestAgentPlan(owners, context, {
-    fetchImpl: async (url, options) => {
-      seen.push({ url, options });
-      return Response.json(
-        { plan: null, error: 'not-configured' },
-        { status: 503 },
-      );
-    },
-  });
-  assert.equal(keyless, null);
-  assert.deepEqual(
-    seen.map(({ url, options }) => [url, options.method, options.headers['Content-Type']]),
-    [['/api/gemini/agent-plan', 'POST', 'application/json']],
-    'the planner posts to the same-origin Gemini relay, never OpenAI or a cross-origin endpoint',
-  );
-
-  // Relay unreachable (dev server down) is the same local degradation.
-  assert.equal(
-    await requestAgentPlan(owners, context, {
-      fetchImpl: async () => {
-        throw Error('relay unreachable');
+test('rankInspectionTargets prefers severity, then health, then nearness', () => {
+  const from = { latDeg: 0, lonDeg: 0 };
+  const ranked = rankInspectionTargets(
+    [
+      { layerId: 'near-info', latDeg: 0, lonDeg: 1 },
+      {
+        layerId: 'far-emergency',
+        latDeg: 0,
+        lonDeg: 60,
+        severity: 'emergency',
       },
-    }),
-    null,
+      { layerId: 'broken', latDeg: 0, lonDeg: 40, error: true },
+      { layerId: 'no-position', latDeg: null, lonDeg: null },
+    ],
+    { from, now: 1_000_000 },
   );
-
-  // A relay 200 whose model answer never shaped into a plan degrades the
-  // same way instead of throwing into the layer's planning loop.
-  assert.equal(
-    await requestAgentPlan(owners, context, {
-      fetchImpl: async () => Response.json({ plan: null }),
-    }),
-    null,
+  assert.deepEqual(
+    ranked.map((entry) => entry.layerId),
+    ['far-emergency', 'broken', 'near-info'],
   );
+  assert.ok(ranked.every((entry) => Number.isFinite(entry.score)));
 
-  // A real plan survives the same call so the degradation stays precise:
-  // only the failures above are watchdog-only, not every answer.
-  const planned = await requestAgentPlan(owners, context, {
-    fetchImpl: async () =>
-      Response.json({ plan: { speech: 'Watching.', actions: [] } }),
-  });
-  assert.deepEqual(planned, { speech: 'Watching.', actions: [] });
+  // Reproducible: the same inputs always rank the same way.
+  const again = rankInspectionTargets(
+    [
+      { layerId: 'near-info', latDeg: 0, lonDeg: 1 },
+      {
+        layerId: 'far-emergency',
+        latDeg: 0,
+        lonDeg: 60,
+        severity: 'emergency',
+      },
+    ],
+    { from, now: 1_000_000 },
+  );
+  assert.equal(again[0].layerId, 'far-emergency');
+});
+
+test('a layer the spider is already on does not win by default', () => {
+  const ranked = rankInspectionTargets(
+    [
+      { layerId: 'underfoot', latDeg: 0, lonDeg: 0.01 },
+      { layerId: 'next-door', latDeg: 0, lonDeg: 6 },
+    ],
+    { from: { latDeg: 0, lonDeg: 0 }, now: 5_000, current: 'underfoot' },
+  );
+  assert.equal(ranked[0].layerId, 'next-door');
 });
 
 // ---------------------------------------------------------------------------
-// The layer itself: the avatar driven through docScope (node, no browser)
+// Watchdog
 // ---------------------------------------------------------------------------
 
-test('the layer works headless while everything stays watchdog-only', async () => {
-  const rows = [];
-  const layer = createAiAgentLayer({});
-  layer.attachDataManager({ getAll: () => rows });
-  assert.equal(layer.updateInterval, 30_000);
-  assert.equal(layer.init({}), true);
-  assert.equal(layer.enable(), true);
-  assert.equal(await layer.update(), true);
-  assert.equal(layer.getStats().mode, 'watchdog');
-  assert.equal(layer.getStats().loading, false);
+test('watchLayers arms the baseline, then reports errors and count moves', () => {
+  const rows = [
+    {
+      id: 'flights',
+      name: 'Live Flights',
+      enabled: true,
+      stats: { count: 10 },
+    },
+  ];
+  const state = { previous: null, seen: new Set() };
+  const arm = watchLayers(rows, state, { now: () => 1000 });
+  assert.equal(arm.events.length, 0, 'first sight is not news');
+  state.previous = arm.previous;
+
+  const broken = watchLayers(
+    [
+      {
+        id: 'flights',
+        name: 'Live Flights',
+        enabled: true,
+        stats: { count: 10, sourceUnavailable: true, error: 'upstream 503' },
+      },
+    ],
+    state,
+    { now: () => 2000 },
+  );
+  assert.equal(broken.events.length, 1);
+  assert.equal(broken.events[0].kind, 'layer-error');
+  assert.equal(eventSeverity(broken.events[0]), 'warn');
+  state.previous = broken.previous;
+
+  const moved = watchLayers(
+    [
+      {
+        id: 'flights',
+        name: 'Live Flights',
+        enabled: true,
+        stats: { count: 14, sourceUnavailable: true, error: 'upstream 503' },
+      },
+    ],
+    state,
+    { now: () => 3000 },
+  );
+  assert.equal(moved.events.length, 1);
+  assert.equal(moved.events[0].kind, 'event-update');
+  assert.equal(moved.events[0].detail, '+4');
+  assert.equal(worstSeverity(moved.events), 'info');
 });
 
-test('actions only run through the attached runner — never self-constructed', async () => {
-  const layer = createAiAgentLayer({});
-  const runs = [];
-  layer.attachActionControl({
-    actionRunner: async (name, args) => runs.push([name, args]),
-    styleManager: {},
-  });
-  assert.equal(layer.getStats().mode, 'autonomous');
-  // Nothing planned yet: the session has neither reached its plan slot nor
-  // called update(), and the layer disables without a system prompt of its own.
-  assert.deepEqual(runs, []);
-  // A destroy wipes the attached runner: state returns to watchdog-only.
-  layer.destroy();
-  assert.equal(layer.getStats().mode, 'watchdog');
+test('a loading tick carries no news', () => {
+  const state = {
+    previous: null,
+    seen: new Set(['flights']),
+  };
+  watchLayers(
+    [
+      {
+        id: 'flights',
+        name: 'Live Flights',
+        stats: { count: 4, loading: true },
+      },
+    ],
+    state,
+    { now: () => 1000 },
+  );
+  const tick = watchLayers(
+    [
+      {
+        id: 'flights',
+        name: 'Live Flights',
+        stats: { count: 9, loading: true },
+      },
+    ],
+    state,
+    { now: () => 2000 },
+  );
+  assert.equal(tick.events.length, 0);
 });
 
-test('the layer refuses a second init with the viewer still attached', () => {
-  const layer = createAiAgentLayer({});
-  layer.init({});
-  assert.throws(() => layer.init({}), /already initialized/);
+// ---------------------------------------------------------------------------
+// The robot body
+// ---------------------------------------------------------------------------
+
+test('the gait alternates leg pairs and cycles over the sprite frames', () => {
+  assert.ok(SPIDER_SPRITE_FRAMES >= 2);
+  const first = spiderLegPose(0, 4, 0);
+  const opposite = spiderLegPose(0, 4, 1);
+  assert.ok(Math.abs(first.swing + opposite.swing) < 1e-9);
+  assert.notEqual(spiderLegPose(1, 4, 0).swing, first.swing);
+  // Headless: no canvas means no frames, never a throw.
+  assert.deepEqual(spiderSpriteFrames({ doc: undefined }), []);
 });
 
-test('the avatar mounts on the docScope document and follows severity', async () => {
-  const dom = new FakeDocument();
-  const rows = [];
-  let clock = REAL_NOW();
-  const layer = createAiAgentLayer({ docScope: dom, now: () => clock });
-  layer.attachDataManager({ getAll: () => rows });
-
-  layer.init({});
-  const root = dom.body.children[0];
-  assert.equal(root.className, 'gev-ai-agent');
-  assert.equal(root.dataset.state, 'idle');
-
-  layer.enable();
-  assert.ok(!root.classList.contains('asleep'));
-
-  rows.push(row('flights', { name: 'Live Flights', count: 0 }));
-  await layer.update(); // re-arms the baseline (same rows, same clock)
-  clock += 1000;
-  rows[0].stats.count = 3;
-  await layer.update(); // now the delta is news
-
-  assert.equal(root.dataset.state, 'calm', 'an info-severity event glows calm');
-  const feed = root.querySelector('.gev-ai-agent-feed');
-  assert.equal(feed.childElementCount, 1);
-  assert.match(feed.children[0].textContent, /Live Flights — \+3/);
-  const bubble = root.querySelector('.gev-ai-agent-bubble');
-  assert.match(bubble.textContent, /\+3/);
-
-  // A disable folds the avatar into its dormant orb.
-  layer.disable();
-  assert.ok(root.classList.contains('asleep'));
-  assert.equal(await layer.update(), false, 'a disabled layer does not watch');
-  layer.destroy();
-  assert.equal(dom.body.children.length, 0, 'destroy removes the overlay root');
-  assert.equal(await layer.update(), false, 'a destroyed layer does not watch');
-});
-
-test('the avatar feed is bounded by the same cap the overlay promises', async () => {
-  const dom = new FakeDocument();
-  const rows = [];
-  let clock = REAL_NOW();
-  const layer = createAiAgentLayer({ docScope: dom, now: () => clock });
-  layer.attachDataManager({ getAll: () => rows });
-  layer.init({});
-  layer.enable();
-
-  rows.push(row('flights', { count: 0 }));
-  await layer.update();
-  for (let step = 1; step <= 20; step++) {
-    clock += 1000;
-    rows[0].stats.count = step;
-    await layer.update();
+/** A Cesium stand-in: enough of the API the spider body touches. */
+function fakeCesium() {
+  class CallbackProperty {
+    constructor(callback, isConstant) {
+      this.callback = callback;
+      this.isConstant = isConstant;
+    }
+    getValue() {
+      return this.callback();
+    }
   }
-  const feed = dom.body.children[0].querySelector('.gev-ai-agent-feed');
-  assert.ok(
-    feed.childElementCount <= 12,
-    'the overlay keeps at most 12 feed rows',
+  class CustomDataSource {
+    constructor(name) {
+      this.name = name;
+      this.entities = {
+        items: [],
+        add: (definition) => {
+          this.entities.items.push(definition);
+          return definition;
+        },
+      };
+    }
+  }
+  function Cartesian3() {
+    this.x = 1;
+  }
+  Cartesian3.fromDegrees = (lon, lat, height) => ({ lon, lat, height });
+  Cartesian3.normalize = () => ({ x: 1, y: 0, z: 0 });
+  class Color {
+    constructor(css, alpha = 1) {
+      this.css = css;
+      this.alpha = alpha;
+    }
+    withAlpha(alpha) {
+      return new Color(this.css, alpha);
+    }
+  }
+  Color.fromCssColorString = (css) => new Color(css);
+  class Cartesian2 {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+    }
+  }
+  class NearFarScalar {
+    constructor() {}
+  }
+  class ColorMaterialProperty {
+    constructor(color) {
+      this.color = color;
+    }
+  }
+  return {
+    CallbackProperty,
+    CustomDataSource,
+    Cartesian2,
+    Cartesian3,
+    Color,
+    NearFarScalar,
+    ColorMaterialProperty,
+  };
+}
+
+test('createSpiderBody rides the state object and leaves nothing behind', () => {
+  const CesiumFake = fakeCesium();
+  const added = [];
+  const removed = [];
+  const viewer = {
+    dataSources: {
+      add: (source) => {
+        added.push(source);
+        return Promise.resolve(source);
+      },
+      remove: (source) => {
+        removed.push(source);
+        return Promise.resolve(true);
+      },
+    },
+  };
+  const state = {
+    latDeg: 12,
+    lonDeg: 34,
+    headingRad: 1.2,
+    frame: 0,
+    visible: true,
+    scanning: true,
+    ringRadiusM: 250000,
+    note: 'Live Flights',
+    severity: 'warn',
+  };
+  const frames = ['data:frame-0', 'data:frame-1'];
+  const body = createSpiderBody({
+    viewer,
+    state,
+    frames,
+    cesium: CesiumFake,
+  });
+  assert.ok(body);
+  assert.equal(added.length, 1);
+  const { billboard } = body.entity;
+  assert.equal(billboard.image.getValue(), 'data:frame-0');
+  assert.equal(billboard.rotation.getValue(), 1.2);
+  // The inspection note is NOT an entity label graphic (noCesiumLabels); it
+  // rides the world-overlay host through syncSpiderNoteOverlay.
+  assert.equal(body.entity.label, undefined);
+  assert.equal(body.ring.ellipse.semiMajorAxis.getValue(), 250000);
+  state.frame = 1;
+  state.visible = false;
+  state.scanning = false;
+  assert.equal(billboard.image.getValue(), 'data:frame-1');
+  assert.equal(body.ring.show.getValue(), false);
+
+  body.destroy();
+  assert.equal(removed.length, 1);
+});
+
+test('createSpiderBody degrades without a scene instead of throwing', () => {
+  assert.equal(createSpiderBody({ viewer: {}, state: {} }), null);
+  assert.equal(createSpiderBody({}), null);
+});
+
+test('the inspection note rides the world-overlay host, never an entity label', () => {
+  destroySpiderNoteOverlay();
+  syncSpiderNoteOverlay({
+    state: {
+      note: 'Live Flights',
+      severity: 'warn',
+      latDeg: 12,
+      lonDeg: 34,
+    },
+  });
+  const withEntry = getWorldOverlayDiagnostics();
+  assert.equal(withEntry.entriesBySource[SPIDER_NOTE_SOURCE], 1);
+
+  // Moving on clears the caption instead of drawing an empty one.
+  syncSpiderNoteOverlay({ state: { note: '', latDeg: 12, lonDeg: 34 } });
+  const cleared = getWorldOverlayDiagnostics();
+  assert.equal(cleared.entriesBySource[SPIDER_NOTE_SOURCE] ?? 0, 0);
+
+  syncSpiderNoteOverlay({ state: { note: 'Cyclones', severity: 'emergency' } });
+  syncSpiderNoteOverlay({ state: { note: '   ', severity: 'info' } });
+  assert.equal(
+    getWorldOverlayDiagnostics().entriesBySource[SPIDER_NOTE_SOURCE] ?? 0,
+    0,
+    'a blank note is not a caption',
   );
-  // The layer's own event pool is capped at 30 regardless of the overlay.
-  assert.ok(layer.getStats().count <= 30);
+
+  destroySpiderNoteOverlay();
+});
+
+test('a note source that never existed removes without creating one', () => {
+  destroySpiderNoteOverlay();
+  assert.doesNotThrow(() => syncSpiderNoteOverlay({ state: {} }));
+  assert.equal(
+    getWorldOverlayDiagnostics().entriesBySource[SPIDER_NOTE_SOURCE] ?? 0,
+    0,
+  );
+  assert.ok(SPIDER_NOTE_ID);
+});
+
+// ---------------------------------------------------------------------------
+// The report card
+// ---------------------------------------------------------------------------
+
+test('the card mounts, expands on click and lists what the spider read', () => {
+  const doc = fakeDocument();
+  const card = createAvatarOverlay({ doc });
+  const root = doc.body.children[0];
+  assert.ok(root.hasClass('gev-ai-agent'));
+  assert.equal(root.getAttribute('data-state'), 'idle');
+  assert.equal(card.visible, true);
+
+  card.setState('warn');
+  assert.equal(root.getAttribute('data-state'), 'alert');
+
+  card.pushEvent({
+    layerId: 'flights',
+    label: 'Live Flights',
+    detail: '128 records',
+    at: Date.now(),
+    severity: 'info',
+  });
+  const feed = root.querySelector('.gev-ai-agent-feed');
+  const bubble = root.querySelector('.gev-ai-agent-bubble');
+  assert.equal(feed.childElementCount, 1);
+  assert.match(feed.children[0].textContent, /Live Flights — 128 records/);
+  assert.equal(feed.hidden, true, 'collapsed until the operator opens it');
+  assert.equal(bubble.hidden, true);
+
+  root.querySelector('.gev-ai-agent-toggle').click();
+  assert.equal(feed.hidden, false);
+  assert.equal(bubble.hidden, false);
+
+  card.setSleeping(true);
+  assert.equal(root.hasClass('asleep'), true);
+  assert.equal(feed.hidden, true, 'a sleeping spider closes its card');
+
+  card.destroy();
+  assert.equal(doc.body.children.length, 0);
+  assert.equal(card.visible, false);
+});
+
+test('the card keeps only the newest findings', () => {
+  const doc = fakeDocument();
+  const card = createAvatarOverlay({ doc });
+  const feed = doc.body.children[0].querySelector('.gev-ai-agent-feed');
+  for (let i = 0; i < 20; i++) {
+    card.pushEvent({
+      layerId: 'flights',
+      label: 'Live Flights',
+      detail: `${i}`,
+      at: Date.now(),
+      severity: 'info',
+    });
+  }
+  assert.equal(feed.childElementCount, 12);
+  assert.match(feed.children[0].textContent, /Live Flights — 19/);
+  card.destroy();
+});
+
+test('a document-less run gets no card at all', () => {
+  assert.equal(createAvatarOverlay({ doc: null, host: null }), null);
+});
+
+// ---------------------------------------------------------------------------
+// The layer
+// ---------------------------------------------------------------------------
+
+function fakeViewer({ latDeg = 0, lonDeg = 0 } = {}) {
+  return {
+    camera: {
+      positionCartographic: { latitude: latDeg * DEG, longitude: lonDeg * DEG },
+      setView() {
+        throw new Error('the spider must never move the camera');
+      },
+    },
+    scene: { preUpdate: new Cesium.Event() },
+  };
+}
+
+/** One managed layer whose reader holds a single positioned record. */
+function fakeManager(rows) {
+  const manager = {
+    rows,
+    getAll: () => manager.rows,
+    layers: new Map([
+      [
+        'flights',
+        {
+          module: {
+            getAllPositions: () => [{ latitude: 0.2, longitude: 0.2 }],
+          },
+        },
+      ],
+    ]),
+  };
+  return manager;
+}
+
+test('the spider walks to an enabled layer and reports what it holds', async () => {
+  const doc = fakeDocument();
+  const viewer = fakeViewer({ latDeg: 0, lonDeg: 0 });
+  let clock = 1_000_000;
+  const layer = createAiAgentLayer({
+    docScope: doc,
+    now: () => clock,
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({}) }),
+  });
+  const manager = fakeManager([
+    {
+      id: 'flights',
+      name: 'Live Flights',
+      enabled: true,
+      stats: { count: 5, loading: false, error: null },
+    },
+  ]);
+  layer.attachDataManager(manager);
+  assert.equal(layer.init(viewer), true);
+  assert.equal(layer.enable(), true);
+  assert.equal(
+    layer.getStats().mode,
+    'watchdog',
+    'no scene container, no body',
+  );
+
+  // Walk the frames: the body turns toward the record and lands on it.
+  for (let i = 0; i < 40; i++) {
+    clock += 250;
+    viewer.scene.preUpdate.raiseEvent();
+  }
+  const feed = doc.body.children[0].querySelector('.gev-ai-agent-feed');
+  assert.ok(feed.childElementCount >= 1, 'the inspection reached the card');
+  assert.match(feed.children[0].textContent, /Live Flights — 5 records/);
+
+  // The scan holds, then the spider rests before choosing again.
+  for (let i = 0; i < 40; i++) {
+    clock += 250;
+    viewer.scene.preUpdate.raiseEvent();
+  }
+  assert.ok(SCAN_MS > 0);
+  assert.equal(layer.disable(), true);
+  assert.equal(layer.destroy(), true);
+  assert.equal(doc.body.children.length, 0);
+});
+
+test('a feed that breaks diverts the spider and words one brief', async () => {
+  const doc = fakeDocument();
+  const viewer = fakeViewer();
+  let clock = 2_000_000;
+  const relay = [];
+  const layer = createAiAgentLayer({
+    docScope: doc,
+    now: () => clock,
+    fetchImpl: async (url, request) => {
+      relay.push({ url, request });
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ plan: { speech: 'Barometer feed is down.' } }),
+      };
+    },
+  });
+  const manager = fakeManager([
+    {
+      id: 'flights',
+      name: 'Live Flights',
+      enabled: true,
+      stats: { count: 5, loading: false, error: null },
+    },
+  ]);
+  layer.attachDataManager(manager);
+  layer.init(viewer);
+  layer.enable(); // arms the watchdog baseline
+
+  manager.rows = [
+    {
+      id: 'flights',
+      name: 'Live Flights',
+      enabled: true,
+      stats: {
+        count: 5,
+        loading: false,
+        sourceUnavailable: true,
+        error: '503',
+      },
+    },
+  ];
+  clock += 30_000;
+  await layer.update();
+  const card = doc.body.children[0];
+  assert.equal(card.getAttribute('data-state'), 'alert');
+
+  for (let i = 0; i < 40; i++) {
+    clock += 250;
+    viewer.scene.preUpdate.raiseEvent();
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(relay.length, 1, 'one sentence, one request');
+  assert.equal(relay[0].url, '/api/openai/agent-plan');
+  const feed = card.querySelector('.gev-ai-agent-feed');
+  assert.ok(
+    feed.children.some((row) =>
+      /Barometer feed is down\./.test(row.textContent),
+    ),
+    'the brief lands in the same feed as the deterministic findings',
+  );
+
+  // The next warning inside the window spends nothing.
+  clock += 30_000;
+  manager.rows = [
+    {
+      id: 'flights',
+      name: 'Live Flights',
+      enabled: true,
+      stats: {
+        count: 5,
+        loading: false,
+        sourceUnavailable: true,
+        error: '503',
+      },
+    },
+  ];
+  await layer.update();
+  for (let i = 0; i < 40; i++) {
+    clock += 250;
+    viewer.scene.preUpdate.raiseEvent();
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(relay.length, 1, 'the twenty-minute cap holds');
+
   layer.destroy();
 });
 
-test('the layer forgets events past the ten-minute memory window', async () => {
-  const dom = new FakeDocument();
-  const rows = [];
-  let clock = REAL_NOW();
-  const layer = createAiAgentLayer({ docScope: dom, now: () => clock });
-  layer.attachDataManager({ getAll: () => rows });
-  layer.init({});
+test('a keyless relay leaves the deterministic finding untouched', async () => {
+  const doc = fakeDocument();
+  const viewer = fakeViewer();
+  let clock = 3_000_000;
+  const layer = createAiAgentLayer({
+    docScope: doc,
+    now: () => clock,
+    fetchImpl: async () => ({ ok: false, status: 503, json: async () => ({}) }),
+  });
+  layer.attachDataManager(
+    fakeManager([
+      {
+        id: 'flights',
+        name: 'Live Flights',
+        enabled: true,
+        stats: { count: 7, loading: false, error: null },
+      },
+    ]),
+  );
+  layer.init(viewer);
   layer.enable();
+  for (let i = 0; i < 40; i++) {
+    clock += 250;
+    viewer.scene.preUpdate.raiseEvent();
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const feed = doc.body.children[0].querySelector('.gev-ai-agent-feed');
+  assert.match(feed.children[0].textContent, /Live Flights — 7 records/);
+  layer.destroy();
+});
 
-  rows.push(row('flights', { count: 0 }));
-  await layer.update();
-  clock += 1000;
-  rows[0].stats.count = 2;
-  await layer.update();
-  assert.ok(layer.getStats().count > 0);
-
-  clock += 11 * 60 * 1000; // past EVENT_MEMORY_MS
-  assert.equal(layer.getStats().count, 0, 'old events age out of the pool');
+test('the layer refuses a second init and never claims a count it lacks', () => {
+  const layer = createAiAgentLayer({ docScope: null, now: () => 0 });
+  assert.equal(layer.id, AI_AGENT_LAYER_ID);
+  layer.attachDataManager(fakeManager([]));
+  const viewer = fakeViewer();
+  assert.equal(layer.init(viewer), true);
+  assert.throws(() => layer.init(viewer), /already initialized/);
+  const stats = layer.getStats();
+  assert.equal(stats.loading, false);
+  assert.equal(stats.count, 0);
+  assert.ok(stats.emptyHint.includes('Sentinel'));
+  layer.enable();
+  layer.disable();
   layer.destroy();
 });

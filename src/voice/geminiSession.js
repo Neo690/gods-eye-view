@@ -75,6 +75,7 @@ function tokenErrorMessage(error) {
     case msg('Gemini voice could not connect. Try again.'):
     case msg('Gemini voice requires a same-origin app request'):
     case msg('Add a Gemini API key in Provider Settings'):
+    case msg('The Gemini API key was refused. Check it in Provider Settings.'):
     case msg('The Gemini Live model configuration is invalid'):
     case msg('Gemini voice is starting too often. Try again shortly.'):
     case msg('Gemini quota is unavailable. Try again later.'):

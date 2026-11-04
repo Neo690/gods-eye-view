@@ -7,17 +7,21 @@ import { GEMINI_AGENT_PLAN_MODEL_DEFAULT } from './config.js';
 const MAX_PLAN_REQUEST_BYTES = 512 * 1024;
 
 /**
- * sentinel planning on Gemini instead of OpenAI (operator pivoted 2026-11):
- * the same World-Packet planning loop, but as one generateContent round-trip
- * with responseMimeType application/json, so the model answers with the plan
- * envelope directly. The permanent credential — the one registered through
- * the key-setup panel — stays on Node; the browser only sees the plan.
+ * Sentinel planning on Gemini — the AUTOMATIC FALLBACK the planner rides when
+ * the OpenAI relay is unusable (2026-11 pivot made it primary; it is the
+ * fallback again, so its own budget never double-spends a throttled OpenAI
+ * cycle). The same World-Packet planning loop, but as one generateContent
+ * round-trip with responseMimeType application/json, so the model answers
+ * with the plan envelope directly. The permanent credential — the one
+ * registered through the key-setup panel — stays on Node; the browser only
+ * sees the plan.
  */
 
 // Built lazily on first request (like the OpenAI limiter): `.env` is applied
 // to process.env later, at the plugin config hook, so reading it at import
 // time would always see it unset. The shared GEV_RATELIMIT_GEMINI_PER_MIN
-// budget already guards the voice token mint; the planner rides the same cap.
+// budget already guards the voice token mint; the fallback planner rides the
+// same cap.
 let _geminiPlanRateLimiter;
 
 function geminiPlanRateLimiter() {
@@ -115,7 +119,8 @@ async function handleGeminiAgentPlan(req, res) {
     res.statusCode = plan ? 200 : response.ok ? 502 : response.status || 502;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
-    if (!plan) console.warn(`[gemini-agent-plan] upstream HTTP ${response.status}`);
+    if (!plan)
+      console.warn(`[gemini-agent-plan] upstream HTTP ${response.status}`);
     res.end(JSON.stringify({ plan }));
   } catch {
     console.warn('[gemini-agent-plan] request failed');

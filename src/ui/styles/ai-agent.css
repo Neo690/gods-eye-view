@@ -1,6 +1,6 @@
-/* AI Sentinel avatar (translucent human figure + alert feed).
-   Fixed to the bottom-left corner, clear of the status text and the panel
-   rail; translucent everywhere so the map stays readable behind it. */
+/* Sentinel badge: the robot spider that walks the globe, plus the card it
+   writes to. Fixed to the bottom-left corner, clear of the status text and the
+   panel rail; translucent everywhere so the map stays readable behind it. */
 
 .gev-ai-agent {
   position: fixed;
@@ -14,32 +14,63 @@
   font-size: 13px;
   color: rgba(230, 238, 255, 0.92);
   pointer-events: none;
-  /* One translucent glass panel instead of hard boxes, so the map shows
-     through the feed and the figure alike. */
 }
 
 .gev-ai-agent-avatar {
   position: relative;
-  width: 64px;
-  height: 72px;
+  width: 56px;
+  height: 56px;
   pointer-events: auto;
   filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.35));
 }
 
+/* The glyph is one robot spider: angular legs, two body plates, one eye. */
 .gev-ai-agent-figure {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  fill: rgba(190, 215, 255, 0.30);
-  stroke: rgba(210, 228, 255, 0.5);
-  stroke-width: 1.2;
-  opacity: 0.55;
-  transition: opacity 0.4s ease, fill 0.4s ease;
+  fill: rgba(190, 215, 255, 0.34);
+  stroke: rgba(210, 228, 255, 0.62);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.7;
+  transition:
+    opacity 0.4s ease,
+    fill 0.4s ease,
+    stroke 0.4s ease;
+}
+
+.gev-ai-agent-figure .gev-ai-agent-legs {
+  fill: none;
+  transform-origin: 50% 60%;
+  animation: gev-ai-agent-tread 1.6s ease-in-out infinite;
+}
+
+.gev-ai-agent-figure .gev-ai-agent-eye {
+  fill: rgba(255, 110, 84, 0.95);
+  stroke: none;
+}
+
+/* The legs shuffle in place: the badge keeps walking even while the globe
+   holds still, which is what makes it read as a sentinel on patrol. */
+@keyframes gev-ai-agent-tread {
+  0%,
+  100% {
+    transform: rotate(-3deg) translateY(0);
+  }
+  50% {
+    transform: rotate(3deg) translateY(1px);
+  }
+}
+
+.gev-ai-agent.asleep .gev-ai-agent-figure .gev-ai-agent-legs {
+  animation: none;
 }
 
 .gev-ai-agent::after {
-  /* One soft state glow behind the figure, tinted per severity. */
+  /* One soft state glow behind the spider, tinted per severity. */
   content: '';
   position: absolute;
   left: 4%;
@@ -57,8 +88,8 @@
 }
 
 .gev-ai-agent[data-state='calm'] .gev-ai-agent-figure {
-  fill: rgba(120, 210, 160, 0.32);
-  stroke: rgba(140, 230, 180, 0.55);
+  fill: rgba(120, 210, 160, 0.34);
+  stroke: rgba(140, 230, 180, 0.6);
 }
 .gev-ai-agent[data-state='calm']::after {
   background: radial-gradient(
@@ -69,8 +100,8 @@
 }
 
 .gev-ai-agent[data-state='alert'] .gev-ai-agent-figure {
-  fill: rgba(255, 190, 110, 0.34);
-  stroke: rgba(255, 200, 130, 0.6);
+  fill: rgba(255, 190, 110, 0.36);
+  stroke: rgba(255, 200, 130, 0.65);
 }
 .gev-ai-agent[data-state='alert']::after {
   background: radial-gradient(
@@ -81,9 +112,9 @@
 }
 
 .gev-ai-agent[data-state='emergency'] .gev-ai-agent-figure {
-  fill: rgba(255, 110, 110, 0.38);
-  stroke: rgba(255, 140, 140, 0.7);
-  opacity: 0.85;
+  fill: rgba(255, 110, 110, 0.4);
+  stroke: rgba(255, 140, 140, 0.72);
+  opacity: 0.92;
 }
 .gev-ai-agent[data-state='emergency']::after {
   background: radial-gradient(
@@ -94,7 +125,7 @@
 }
 
 .gev-ai-agent.asleep .gev-ai-agent-figure {
-  opacity: 0.28;
+  opacity: 0.3;
   fill: rgba(170, 190, 220, 0.2);
 }
 
@@ -107,27 +138,8 @@
   color: transparent;
 }
 
-.gev-ai-agent-rate {
-  position: absolute;
-  right: -6px;
-  top: 2px;
-  min-width: 16px;
-  height: 16px;
-  border-radius: 8px;
-  background: rgba(255, 120, 120, 0.8);
-  border: 1px solid rgba(255, 160, 160, 0.7);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.gev-ai-agent[data-state='emergency'] .gev-ai-agent-rate,
-.gev-ai-agent[data-state='alert'] .gev-ai-agent-rate {
-  opacity: 1;
-}
-
 .gev-ai-agent-bubble,
-.gev-ai-agent-feed,
-.gev-ai-agent-actions {
+.gev-ai-agent-feed {
   pointer-events: auto;
   max-width: 320px;
   padding: 8px 10px;
@@ -142,6 +154,13 @@
 .gev-ai-agent-bubble {
   font-weight: 600;
   line-height: 1.35;
+}
+
+/* The card collapses through the `hidden` attribute: `display: flex` would
+   otherwise outrank the user agent's rule and keep an empty feed on screen. */
+.gev-ai-agent-bubble[hidden],
+.gev-ai-agent-feed[hidden] {
+  display: none;
 }
 
 .gev-ai-agent-feed {
@@ -174,14 +193,10 @@
   color: rgba(255, 210, 210, 0.95);
 }
 
-.gev-ai-agent-chip {
-  display: inline-block;
-  margin: 2px 4px 2px 0;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  background: rgba(120, 170, 255, 0.16);
-  border: 1px solid rgba(150, 185, 240, 0.35);
+@media (prefers-reduced-motion: reduce) {
+  .gev-ai-agent-figure .gev-ai-agent-legs {
+    animation: none;
+  }
 }
 
 @media (max-width: 720px) {
@@ -190,8 +205,7 @@
     bottom: 32px;
   }
   .gev-ai-agent-bubble,
-  .gev-ai-agent-feed,
-  .gev-ai-agent-actions {
+  .gev-ai-agent-feed {
     max-width: 240px;
   }
 }

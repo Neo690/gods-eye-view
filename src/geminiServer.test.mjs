@@ -647,6 +647,67 @@ test('upstream refusals and network exceptions are normalized and never log secr
   assert.equal(logs.join(' ').includes(API_KEY), false);
 });
 
+test('a 400 upstream refusal that names the key is diagnosed at setup, not as a dead model', async (t) => {
+  // Google answers an invalid credential with 400 API_KEY_INVALID / "API key
+  // not valid"; the setup panel is where that is fixed, so the mint must say
+  // so instead of "unavailable for the configured model" — without ever
+  // forwarding the upstream body, even when it embeds the key.
+  const cases = [
+    [
+      JSON.stringify({
+        error: {
+          code: 400,
+          message: 'API key not valid. Please pass a valid API key.',
+          status: 'INVALID_ARGUMENT',
+        },
+      }),
+      503,
+      'The Gemini API key was refused. Check it in Provider Settings.',
+    ],
+    [
+      JSON.stringify({
+        error: {
+          code: 400,
+          message: 'The requester does not have access to the model.',
+          details: [
+            {
+              '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+              reason: 'API_KEY_INVALID',
+              domain: 'googleapis.com',
+              metadata: { service: 'generativelanguage' },
+            },
+          ],
+        },
+      }),
+      503,
+      'The Gemini API key was refused. Check it in Provider Settings.',
+    ],
+    // A 400 that does NOT name the key stays the model-unavailable answer.
+    [
+      JSON.stringify({
+        error: {
+          code: 400,
+          message: 'Model is not enabled for this project',
+          status: 'FAILED_PRECONDITION',
+        },
+      }),
+      502,
+      'Gemini Live is unavailable for the configured model.',
+    ],
+    // A non-JSON body that happens to embed the key is never mistaken for a
+    // key diagnosis, and the key never reaches the browser either way.
+    [`${API_KEY} api key not valid`, 502, 'Gemini Live is unavailable for the configured model.'],
+  ];
+  for (const [upstream, expectedStatus, expectedError] of cases) {
+    const f = await fixture(t, {
+      fetchImpl: async () => new Response(upstream, { status: 400 }),
+    });
+    const response = await f.send();
+    assert.equal(response.status, expectedStatus, upstream);
+    assert.deepEqual(await response.json(), { error: expectedError }, upstream);
+  }
+});
+
 test('a stalled mint is aborted at the deadline without forwarding error details', async (t) => {
   let cancelled = false;
   const f = await fixture(t, {

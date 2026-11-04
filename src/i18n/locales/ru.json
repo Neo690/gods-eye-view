@@ -1,5 +1,10 @@
 {
-  "AI Agent": "ИИ-агент",
+  "{count} records": {
+    "one": "{count} запись",
+    "few": "{count} записи",
+    "many": "{count} записей",
+    "other": "{count} записи"
+  },
   "Global disasters": "Мировые катастрофы",
   "calm": "спокойно",
   "attention": "внимание",
@@ -493,7 +498,8 @@
   "PARTIAL": "ЧАСТИЧНО",
   "FALLBACK": "РЕЗЕРВ",
   "Live Flights": "Рейсы онлайн",
-  "Military Flights": "Военные рейсы",  "Earthquakes (24h)": "Землетрясения (24 ч)",
+  "Military Flights": "Военные рейсы",
+  "Earthquakes (24h)": "Землетрясения (24 ч)",
   "Earthquakes (EMSC)": "Землетрясения (EMSC)",
   "Satellites": "Спутники",
   "Space Missions (30d)": "Космические миссии (30 дн.)",
@@ -3014,6 +3020,7 @@
   "Gemini voice could not connect. Try again.": "Не удалось подключить голосовой режим Gemini. Повторите попытку.",
   "Gemini voice requires a same-origin app request": "Голосовой режим Gemini требует запрос из того же источника, что и приложение",
   "Add a Gemini API key in Provider Settings": "Добавьте ключ API Gemini в настройках поставщиков",
+  "The Gemini API key was refused. Check it in Provider Settings.": "Ключ API Gemini отклонён. Проверьте его в настройках поставщиков.",
   "The Gemini Live model configuration is invalid": "Недопустимая конфигурация модели Gemini Live",
   "Gemini voice is starting too often. Try again shortly.": "Голосовой режим Gemini запускается слишком часто. Повторите попытку чуть позже.",
   "Gemini quota is unavailable. Try again later.": "Квота Gemini недоступна. Повторите попытку позже.",
@@ -3040,7 +3047,7 @@
   "Unclassified storm": "Неклассифицированный шторм",
   "Winds {wind} kt · pressure {pressure} hPa": "Ветер {wind} уз · давление {pressure} гПа",
   "Military air activity — {count} aircraft": "Военная активность в воздухе — {count} самолётов",
-  "GNSS integrity degraded — {count} cells": "Целостность GNSS нарушена — {count} ячеек",
+  "Low GNSS integrity cluster — {count} cells": "Кластер низкой целостности GNSS — {count} ячеек",
   "Navigation-integrity anomalies, not proof of jamming": "Аномалии целостности навигации, а не доказательство глушения",
   "Alerts: {count}": "Оповещения: {count}",
   "Alerts": "Оповещения",
