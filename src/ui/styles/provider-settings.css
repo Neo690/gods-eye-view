@@ -273,6 +273,14 @@
   font-size: 0.66rem;
 }
 
+.key-setup-openai-check {
+  margin: 0.4rem 0 0;
+  color: rgba(190, 214, 222, 0.72);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.02rem;
+}
+
 .key-setup-fields {
   display: grid;
   gap: 0.3rem;

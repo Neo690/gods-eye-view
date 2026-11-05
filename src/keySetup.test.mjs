@@ -7,6 +7,7 @@ import {
   bindKeySetupPlacement,
   waitForChatGptOAuth,
   initKeySetup,
+  openaiCheckText,
 } from './keySetup.js';
 import { describeUnsavedWork } from './i18n/index.js';
 
@@ -213,4 +214,28 @@ test('a pasted, unsaved key makes the language switch ask first until teardown',
   // The field still holds the key, so only teardown dropping the check clears it.
   controller.abort();
   assert.deepEqual(describeUnsavedWork(), []);
+});
+
+test('the post-save OpenAI check reads as one sentence per answer, never a raw status dump', () => {
+  assert.equal(openaiCheckText({ status: 200 }), 'OpenAI answered 200 — this key works.');
+  assert.equal(openaiCheckText({ status: 401 }), 'OpenAI answered 401 — this key is rejected.');
+  // OpenAI's own `code` picks the 429 sentence: out of credits is a billing
+  // problem, anything else is a rate limit.
+  assert.equal(
+    openaiCheckText({ status: 429, code: 'insufficient_quota' }),
+    'OpenAI answered 429 — the account is out of credits; top it up in OpenAI Billing.',
+  );
+  assert.equal(
+    openaiCheckText({ status: 429, code: null }),
+    'OpenAI answered 429 — slow down and try again in a minute.',
+  );
+  assert.equal(
+    openaiCheckText(null),
+    'OpenAI could not be reached to verify the key.',
+  );
+  assert.equal(openaiCheckText(undefined), 'OpenAI could not be reached to verify the key.');
+  assert.equal(
+    openaiCheckText({ status: 403, code: 'region_blocked' }),
+    'OpenAI answered 403 — verify the key on the OpenAI portal.',
+  );
 });

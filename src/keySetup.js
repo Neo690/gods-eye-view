@@ -239,6 +239,32 @@ export function clientExposedKeyTitles(status, updates) {
 
 const TIER_DOTS = Object.freeze({ metered: '🔴', paid: '🔴', free: '🟡' });
 
+/**
+ * The post-save OpenAI key check (server/standalone/key-setup.js pings
+ * /v1/models once with the saved key) as one panel sentence. Status codes
+ * only: OpenAI's message body is never relayed, and the server never returns
+ * a silent success for a key it never verified.
+ * Pure, exported for tests (keySetup.test.mjs pins the English).
+ * @param {{status?: number|null, code?: string|null}|null} check
+ * @returns {string}
+ */
+export function openaiCheckText(check) {
+  if (check?.status === 200) return t('OpenAI answered 200 — this key works.');
+  if (check?.status === 401)
+    return t('OpenAI answered 401 — this key is rejected.');
+  if (check?.status === 429)
+    return check?.code === 'insufficient_quota'
+      ? t(
+          'OpenAI answered 429 — the account is out of credits; top it up in OpenAI Billing.',
+        )
+      : t('OpenAI answered 429 — slow down and try again in a minute.');
+  if (check?.status == null)
+    return t('OpenAI could not be reached to verify the key.');
+  return t('OpenAI answered {status} — verify the key on the OpenAI portal.', {
+    status: String(check.status),
+  });
+}
+
 function updateCloudVoiceAuthControl(auth, busy = false) {
   const mode = readStoredCloudVoiceAuthMode();
   const state = auth.querySelector('.key-setup-cloud-auth-state');
@@ -260,7 +286,7 @@ function updateCloudVoiceAuthControl(auth, busy = false) {
 }
 
 /** Build one key row. All content is our own registry text, set via textContent. */
-function buildRow(documentRef, key) {
+function buildRow(documentRef, key, openaiCheck = null) {
   const row = documentRef.createElement('section');
   row.className = 'key-setup-row';
   row.dataset.keyId = key.id;
@@ -361,6 +387,16 @@ function buildRow(documentRef, key) {
     auth.append(state, toggle);
     updateCloudVoiceAuthControl(auth);
     row.append(auth);
+    if (openaiCheck) {
+      // The server's post-save ping (server/standalone/key-setup.js): what
+      // OpenAI answered for the key that was just saved, one line that stays
+      // in the row until the next save or re-render — there is no way to
+      // pin this to a status whose provider answer was never asked.
+      const check = documentRef.createElement('p');
+      check.className = 'key-setup-openai-check';
+      check.textContent = openaiCheckText(openaiCheck);
+      row.append(check);
+    }
   }
   return row;
 }
@@ -457,6 +493,9 @@ export async function initKeySetup({
   const statusLine = root.querySelector('[data-key-setup-status]');
   const defaultStatusText = statusLine?.textContent || '';
   let busy = false;
+  // Verified by the server after the newest OpenAI save (see buildRow); a
+  // removal has no key to verify and clears it.
+  let openaiCheck = null;
   let oauthBusy = false;
   let open = false;
 
@@ -478,7 +517,9 @@ export async function initKeySetup({
     if (!rowsHost) return;
     rowsHost.textContent = '';
     for (const key of status.keys || [])
-      rowsHost.append(buildRow(documentRef, key));
+      rowsHost.append(
+        buildRow(documentRef, key, key.id === 'openai' ? openaiCheck : null),
+      );
     syncCloudVoiceAuth();
   };
 
@@ -576,6 +617,12 @@ export async function initKeySetup({
       }
       for (const input of root.querySelectorAll('input[data-env-var]'))
         input.value = '';
+      // The newest saved OPENAI_API_KEY carries the server's answer from
+      // OpenAI itself; the row keeps showing it until the next save removes
+      // the key (no key, no check) or replaces it.
+      openaiCheck = payload.saved?.includes('OPENAI_API_KEY')
+        ? (payload.openaiCheck ?? null)
+        : null;
       render(payload.status);
       if (googleWasUnset && payload.saved?.includes('GOOGLE_MAPS_API_KEY')) {
         const strip = () => {

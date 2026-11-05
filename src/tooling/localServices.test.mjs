@@ -18,7 +18,10 @@ import {
   weatherEffectsProxy,
 } from 'gods-eye-view/server/providers/regional';
 import { openAiRealtimeProxy } from 'gods-eye-view/server/providers/openai';
-import { keySetupEndpoint } from 'gods-eye-view/server/standalone/key-setup';
+import {
+  keySetupEndpoint,
+  pingOpenAiKey,
+} from 'gods-eye-view/server/standalone/key-setup';
 import { KEY_SETUP_KEYS } from '../../src/keySetupCore.mjs';
 import { realtimeInstructions } from '../../server/providers/openai/instructions.js';
 import { GEV_REALTIME_TOOLS } from '../../server/providers/openai/tools.js';
@@ -670,7 +673,16 @@ test('key setup writes only the supplied application root, keeps its request gua
   const first = root(t),
     untouched = root(t);
   env(t, 'OPENAI_API_KEY', undefined);
-  const plugin = keySetupEndpoint({ sourceRoot: first });
+  const pings = [];
+  const plugin = keySetupEndpoint({
+    sourceRoot: first,
+    // The real probe is OpenAI's own answer for a just-saved key; the save test
+    // stubs it so no test ever talks to api.openai.com.
+    pingOpenAi: async (apiKey) => {
+      pings.push(apiKey);
+      return { status: 200, code: null };
+    },
+  });
   // Both servers carry the routes — the packaged desktop app runs `vite
   // preview` — while a build never does.
   assert.equal(plugin.apply({}, { command: 'serve', isPreview: false }), true);
@@ -703,6 +715,10 @@ test('key setup writes only the supplied application root, keeps its request gua
   assert.equal(saved.status, 200);
   // A dev server reloads the page itself, so the panel may promise that.
   assert.equal(saved.json().restarting, true);
+  // The saved OpenAI key was probed with OpenAI itself: its answer travels in the
+  // save response so the panel can say what happened instead of a silent success.
+  assert.deepEqual(pings, ['sk-fixture-only-not-a-real-key']);
+  assert.deepEqual(saved.json().openaiCheck, { status: 200, code: null });
   assert.match(
     readFileSync(path.join(first, '.env'), 'utf8'),
     /OPENAI_API_KEY=sk-fixture-only-not-a-real-key/,
@@ -723,6 +739,9 @@ test('key setup writes only the supplied application root, keeps its request gua
   });
   assert.equal(shellSaved.status, 200, 'an Origin-less POST saves');
   assert.equal(shellSaved.json().ok, true);
+  // A non-OpenAI save never probes OpenAI and carries no openaiCheck field.
+  assert.deepEqual(pings, ['sk-fixture-only-not-a-real-key']);
+  assert.equal('openaiCheck' in shellSaved.json(), false);
   assert.match(
     readFileSync(path.join(first, '.env'), 'utf8'),
     /TOMTOM_API_KEY=tt-shell-shape/,
@@ -749,6 +768,113 @@ test('key setup writes only the supplied application root, keeps its request gua
   const previewSaved = await request(previewHandler, { method: 'POST', body });
   assert.equal(previewSaved.status, 200);
   assert.equal(previewSaved.json().restarting, false);
+});
+
+test("the post-save OpenAI key probe reports OpenAI's verdict without relaying its message body", async (t) => {
+  const store = root(t);
+  env(t, 'OPENAI_API_KEY', undefined);
+  // Each save probes exactly once, and the status travels to the panel while
+  // OpenAI's own error text (request ids, organization phrasing) never does.
+  const verdicts = [
+    { status: 200, code: null },
+    { status: 401, code: 'invalid_api_key' },
+    { status: 429, code: 'insufficient_quota' },
+    { status: null, code: null }, // no network — the panel has its own sentence
+  ];
+  let calls = 0;
+  const plugin = keySetupEndpoint({
+    sourceRoot: store,
+    pingOpenAi: async (apiKey) => {
+      calls += 1;
+      assert.equal(apiKey, `sk-probe-${calls}`);
+      return verdicts[calls - 1];
+    },
+  });
+  const handler = install(plugin).get('/api/setup/keys');
+  for (let i = 1; i <= verdicts.length; i += 1) {
+    const saved = await request(handler, {
+      method: 'POST',
+      body: JSON.stringify({ OPENAI_API_KEY: `sk-probe-${i}` }),
+    });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(saved.json().openaiCheck, verdicts[i - 1]);
+    assert.equal(
+      saved.body.includes('organization') ||
+        saved.body.includes('req_') ||
+        saved.body.includes('sk-probe-'),
+      false,
+      'the response never carries the key or OpenAI error detail',
+    );
+  }
+  // A removal (the panel posts null) has no key to verify — no probe.
+  const removed = await request(handler, {
+    method: 'POST',
+    body: JSON.stringify({ OPENAI_API_KEY: null }),
+  });
+  assert.equal(removed.status, 200);
+  assert.equal(calls, 4, 'only submitted values are probed');
+  assert.equal('openaiCheck' in removed.json(), false);
+});
+
+test('the OpenAI key probe stays a bounded GET, answers by status, and never trusts a redirect or a body', async () => {
+  let probed = 0;
+  const fetchImpl = async (url, init) => {
+    probed += 1;
+    assert.equal(url, 'https://api.openai.com/v1/models');
+    assert.equal(init.method, 'GET');
+    assert.equal(init.headers.Authorization, 'Bearer sk-probe-1');
+    // Bounded: a dead network cannot stall the save response forever.
+    assert.ok(init.signal instanceof AbortSignal);
+    assert.ok(init.redirect === 'error');
+    if (probed === 1) {
+      return {
+        status: 200,
+        json: async () => ({ data: [{ id: 'gpt-fixture' }] }),
+      };
+    }
+    if (probed === 2)
+      return {
+        status: 401,
+        json: async () => ({
+          error: { message: 'req_1234 org-x invalid', code: 'invalid_api_key' },
+        }),
+      };
+    if (probed === 3)
+      return {
+        status: 429,
+        json: async () => ({ error: { code: 'insufficient_quota' } }),
+      };
+    if (probed === 4)
+      return {
+        status: 503,
+        json: async () => {
+          throw new Error('not JSON');
+        },
+      };
+    throw new TypeError('fetch failed'); // DNS down, etc.
+  };
+  assert.deepEqual(await pingOpenAiKey('sk-probe-1', { fetchImpl }), {
+    status: 200,
+    code: null,
+  });
+  // Only OpenAI's short error `code` is echoed; its own message (request ids,
+  // org hints) stays out of the answer the server hands to the page.
+  assert.deepEqual(await pingOpenAiKey('sk-probe-1', { fetchImpl }), {
+    status: 401,
+    code: 'invalid_api_key',
+  });
+  assert.deepEqual(await pingOpenAiKey('sk-probe-1', { fetchImpl }), {
+    status: 429,
+    code: 'insufficient_quota',
+  });
+  assert.deepEqual(await pingOpenAiKey('sk-probe-1', { fetchImpl }), {
+    status: 503,
+    code: null,
+  });
+  assert.deepEqual(await pingOpenAiKey('sk-probe-1', { fetchImpl }), {
+    status: null,
+    code: null,
+  });
 });
 
 test('the provider-link opener launches only a registry page, in the machine browser, on both servers', async (t) => {

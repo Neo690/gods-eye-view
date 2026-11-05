@@ -55,6 +55,49 @@ const DEV_FRESH_EXTERNAL_KEYS_AT_BOOT = new Set(
     .filter((name) => knownKeySetupEnvVars().has(name)),
 );
 
+/** The cheap “is this key accepted?” probe the panel's post-save check uses. */
+const OPENAI_KEY_PING_URL = 'https://api.openai.com/v1/models';
+/** Bounded, so a dead network cannot stall the save's own answer. */
+const OPENAI_KEY_PING_TIMEOUT_MS = 10_000;
+
+/**
+ * One GET /v1/models with the key that was just saved — OpenAI's own verdict on
+ * whether it is accepted, reported by HTTP status so the panel can say it in a
+ * sentence instead of a silent success. The key travels to OpenAI and nowhere
+ * else, and the answer carries no body worth echoing: only the status, plus
+ * OpenAI's own short error `code` (never its message, which carries request
+ * ids and organization phrasing).
+ *
+ * Never throws: an unreachable OpenAI is a null status, and the panel says so.
+ */
+async function pingOpenAiKey(
+  apiKey,
+  {
+    fetchImpl = (...args) => fetch(...args),
+    timeoutMs = OPENAI_KEY_PING_TIMEOUT_MS,
+  } = {},
+) {
+  try {
+    const response = await fetchImpl(OPENAI_KEY_PING_URL, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${apiKey}` },
+      redirect: 'error',
+      // The bounded read lives as high as available; a signal this short keeps
+      // the save response under a status line's patience.
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    let body = null;
+    try {
+      body = await response.json();
+    } catch {
+      /* Status stays authoritative for non-JSON answers. */
+    }
+    return { status: response.status, code: body?.error?.code ?? null };
+  } catch {
+    return { status: null, code: null };
+  }
+}
+
 /**
  * In-app key setup ("POWER UP" panel) — served by the dev AND preview servers.
  *
@@ -83,6 +126,7 @@ const DEV_FRESH_EXTERNAL_KEYS_AT_BOOT = new Set(
 function keySetupEndpoint({
   sourceRoot = defaultSourceRoot,
   openUrl = openUrlInBrowser,
+  pingOpenAi = pingOpenAiKey,
 } = {}) {
   const respond = (res, statusCode, payload) => {
     res.statusCode = statusCode;
@@ -357,7 +401,7 @@ function keySetupEndpoint({
           req.destroy();
         }
       });
-      req.on('end', () => {
+      req.on('end', async () => {
         if (overflowed)
           return respond(res, 413, {
             error: 'Request too large',
@@ -426,11 +470,22 @@ function keySetupEndpoint({
         for (const [name, value] of Object.entries(verdict.updates)) {
           process.env[name] = value === null ? '' : value;
         }
+        // Live check of the saved OpenAI key (a key rotation's own test):
+        // OpenAI's HTTP status for the newest value, so the panel can report
+        // it rather than claim a success it never verified. Only a submitted
+        // value is checked — a removal (null → '') has no key to verify, and
+        // other providers' keys are not OpenAI's to answer for.
+        const openaiUpdate = verdict.updates.OPENAI_API_KEY;
+        let openaiCheck = null;
+        if (typeof openaiUpdate === 'string' && openaiUpdate.trim()) {
+          openaiCheck = await pingOpenAi(openaiUpdate.trim());
+        }
         respond(res, 200, {
           ok: true,
           saved: Object.keys(verdict.updates),
           status: providerStatus(),
           restarting: canRestart,
+          ...(openaiCheck ? { openaiCheck } : {}),
         });
         if (canRestart) {
           // One deliberate restart, after the response has flushed. Vite's own
@@ -465,4 +520,4 @@ function keySetupEndpoint({
   };
 }
 
-export { keySetupEndpoint };
+export { keySetupEndpoint, pingOpenAiKey };
