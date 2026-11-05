@@ -18,6 +18,12 @@
  *   flag. gpsjam.org does not publish its per-aircraft threshold.
  * - Cell aggregation: gpsjam.org's published formula and 2% / 10% bands.
  * - Window: a GEV-defined rolling 30 minutes over the views the user visits.
+ * - Evidence-grade restraint: only a high cell is ever treated as
+ *   anchor-grade evidence for a cross-layer reading. Low accuracy reports
+ *   are common and transient in dense traffic, so a medium cell is never
+ *   promoted to evidence for anything else (a GEV-defined caution, matched
+ *   informally to Shadowbroker's correlation-engine rule that jamming may
+ *   anchor an RF anomaly only above its 60% ratio, not at its 20% floor).
  */
 
 /** Position source can switch to MLAT after GPS loss; quality must remain aircraft-reported. */
@@ -39,6 +45,10 @@ export const GNSS_WINDOW_MS = 30 * 60_000;
 /** gpsjam.org band edges, in percent of aircraft (after discounting one). */
 export const GNSS_MEDIUM_PERCENT = 2;
 export const GNSS_HIGH_PERCENT = 10;
+/** The only level ever treated as anchor-grade evidence for a cross-layer
+ * reading: the top gpsjam band. See the `anchor` section of
+ * `gnssProvenance` for what that restraint means and how little it claims. */
+export const GNSS_ANCHOR_LEVEL = 'high';
 
 /** Primary cell state: what the data shows (low navigation accuracy). */
 export const GNSS_ANOMALY_STATE = 'navigation-integrity-anomaly';
@@ -77,6 +87,14 @@ export function gnssProvenance({ windowMs = GNSS_WINDOW_MS } = {}) {
       cellDeg: GNSS_CELL_DEG,
       minAircraft: GNSS_MIN_AIRCRAFT,
       definedBy: 'GEV',
+    }),
+    anchor: Object.freeze({
+      id: 'high-band-only',
+      rule: `only a cell at level ${GNSS_ANCHOR_LEVEL} counts as anchor-grade evidence for a cross-layer reading`,
+      rationale:
+        'low accuracy reports are common and transient in dense traffic, so no band below the top one is promoted to evidence for anything outside this layer',
+      definedBy: 'GEV',
+      validated: false,
     }),
     state: Object.freeze({
       id: GNSS_ANOMALY_STATE,
@@ -244,7 +262,8 @@ export function pruneGnssObservations(
  * Navigation-integrity level of a cell, using gpsjam.org's published cell
  * formula and bands: the first degraded aircraft is discounted to limit false
  * positives, then under 2% is low, 2–10% medium and over 10% high. Medium and
- * high cells are navigation-integrity anomalies.
+ * high cells are navigation-integrity anomalies; only a high cell also passes
+ * the evidence-grade restraint for cross-layer use.
  */
 export function gnssIntegrityLevel(total, degraded) {
   const percent = total > 0 ? (100 * Math.max(0, degraded - 1)) / total : 0;
@@ -260,6 +279,10 @@ export function gnssIntegrityLevel(total, degraded) {
     level,
     state: anomaly ? GNSS_ANOMALY_STATE : GNSS_NOMINAL_STATE,
     interpretation: anomaly ? GNSS_INTERPRETATION : null,
+    // Evidence-grade restraint: transient low accuracy reports are common
+    // coincidences in dense traffic, so only a top-band cell may anchor a
+    // reading of anything beyond this layer's own state.
+    anchor: level === GNSS_ANCHOR_LEVEL,
   };
 }
 
@@ -287,7 +310,13 @@ export function binGnssCells(
     const [row, col] = id.split(':').map(Number);
     const south = row * cellDeg - 90;
     const west = col * cellDeg - 180;
-    const { percent, level, state, interpretation } = gnssIntegrityLevel(
+    const {
+      percent,
+      level,
+      state,
+      interpretation,
+      anchor,
+    } = gnssIntegrityLevel(
       aircraft,
       degraded,
     );
@@ -305,6 +334,7 @@ export function binGnssCells(
       level,
       state,
       interpretation,
+      anchor,
     });
   }
   return cells.sort((a, b) => a.id.localeCompare(b.id));

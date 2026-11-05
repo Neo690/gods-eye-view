@@ -132,6 +132,7 @@ test('integrity level follows the gpsjam.org published cell formula and bands', 
     level: 'low',
     state: 'nominal',
     interpretation: null,
+    anchor: false,
   };
   assert.deepEqual(gnssIntegrityLevel(10, 0), nominal);
   // One degraded aircraft is always discounted.
@@ -140,6 +141,22 @@ test('integrity level follows the gpsjam.org published cell formula and bands', 
   assert.equal(gnssIntegrityLevel(10, 2).level, 'medium');
   assert.equal(gnssIntegrityLevel(10, 3).level, 'high');
   assert.equal(gnssIntegrityLevel(0, 0).level, 'low');
+});
+
+test('only a top-band cell passes the evidence-grade restraint for cross-layer use', () => {
+  // A 40% anomaly is a strong sighting but is never promoted to evidence
+  // for anything outside this layer: dense-traffic dips are common
+  // coincidences, and the restraint is the whole point.
+  const strong = gnssIntegrityLevel(10, 5);
+  assert.equal(strong.level, 'high');
+  assert.equal(strong.anchor, true);
+  const marginal = gnssIntegrityLevel(48, 2);
+  assert.equal(marginal.level, 'medium');
+  assert.equal(marginal.state, 'navigation-integrity-anomaly');
+  assert.equal(marginal.anchor, false);
+  assert.equal(gnssIntegrityLevel(100, 1).anchor, false);
+  // The restraint never changes the cell's own primary state.
+  assert.equal(marginal.state, strong.state);
 });
 
 test('the primary state is a navigation-integrity anomaly; interference is only the secondary reading', () => {
@@ -165,6 +182,8 @@ test('the primary state is a navigation-integrity anomaly; interference is only 
   assert.equal(cell.level, 'high');
   assert.equal(cell.state, 'navigation-integrity-anomaly');
   assert.equal(cell.interpretation, 'suspected-gnss-interference');
+  // A strongly degraded cell carries the anchor flag through to the cell.
+  assert.equal(cell.anchor, true);
   for (const key of Object.keys(cell))
     assert.doesNotMatch(key, /interference|jamming|spoof/i);
 });
@@ -192,6 +211,17 @@ test('provenance separates the GEV classifier from the gpsjam aggregation and th
     minAircraft: 3,
     definedBy: 'GEV',
   });
+  // The evidence-grade restraint is machine-readable like the rest of the
+  // method, declared by its user and marked unvalidated.
+  assert.deepEqual(GNSS_PROVENANCE.anchor, {
+    id: 'high-band-only',
+    rule: 'only a cell at level high counts as anchor-grade evidence for a cross-layer reading',
+    rationale:
+      'low accuracy reports are common and transient in dense traffic, so no band below the top one is promoted to evidence for anything outside this layer',
+    definedBy: 'GEV',
+    validated: false,
+  });
+  assert.ok(Object.isFrozen(GNSS_PROVENANCE.anchor));
   assert.equal(GNSS_PROVENANCE.state.id, 'navigation-integrity-anomaly');
   assert.equal(
     GNSS_PROVENANCE.interpretation.id,

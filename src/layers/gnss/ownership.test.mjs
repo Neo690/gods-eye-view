@@ -255,6 +255,11 @@ test('the visible layer leads with low navigation accuracy and exposes its prove
   assert.match(blurb, /one aircraft is discounted/);
   assert.match(blurb, /not the raw share/);
   assert.match(blurb, /not a detection/);
+  // The evidence-grade restraint and its coincidence caution ride the
+  // top-band entry, where an operator is deciding whether to treat a cell
+  // as evidence for anything else.
+  assert.match(blurb, /only a high cell counts as evidence-grade/);
+  assert.match(blurb, /common coincidence in dense traffic/);
   assert.equal(layer.provenance.classifier.id, 'gev-nic-nacp-v2');
   assert.equal(layer.provenance.classifier.definedBy, 'GEV');
   assert.equal(layer.provenance.classifier.validated, false);

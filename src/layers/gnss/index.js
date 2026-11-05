@@ -396,7 +396,7 @@ export function createGnssIntegrityLayer({
           ...(index === 0
             ? {
                 blurb: t(
-                  'Low-accuracy score = 100 × max(0, bad − 1) / total: one aircraft is discounted, so this is not the raw share. Cells need {aircraft} aircraft over {minutes} minutes. Navigation-integrity anomalies are not a detection of jamming or spoofing.',
+                  'Low-accuracy score = 100 × max(0, bad − 1) / total: one aircraft is discounted, so this is not the raw share. Cells need {aircraft} aircraft over {minutes} minutes. Navigation-integrity anomalies are not a detection of jamming or spoofing, and only a high cell counts as evidence-grade for a cross-layer reading — transient low accuracy is a common coincidence in dense traffic.',
                   {
                     aircraft: formatNumber(GNSS_MIN_AIRCRAFT),
                     minutes: formatNumber(provenance.window.minutes),
