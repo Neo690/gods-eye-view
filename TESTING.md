@@ -254,3 +254,33 @@ Director authoring and sharing acceptance: `node scripts/qa-director-sharing.mjs
 checks installed import previews, draft validation, file-bundle round trips,
 cancellation, resource ownership and narrow-screen controls. Run alongside the
 scene-controls, camera, pack, interaction and timing harnesses.
+
+## Sentinel orb patrol across every catalog layer
+
+The Sentinel layer (`src/layers/aiAgent`) was exercised end to end once per
+catalog layer on 2026-11-05, with the layer's own test seams (a scored clock,
+the small DOM double, the real Cesium `Event`) driving four frames of 250 ms
+tick per simulated second against the true registry built from
+`VOICE_LAYER_MANIFEST` — one positioned record per layer, up to 900 simulated
+frames. A layer passes when the orb (1) targets it, (2) walks to its record to
+within 0.05°, (3) advances through multiple pulse frames (`PULSE_INTENSITY`-
+scaled glow), (4) opens the tightened scan ring (1% of camera altitude,
+20 km floor) and (5) posts an inspection note naming the layer and its count.
+
+Recorded run: 43 of 43 layers passed every gate (`gnss-integrity`, `flights`,
+`military`, `local-adsb`, `ais-live-vessels`, `satellites`, `rocket-launches`,
+`earthquakes`, `emsc-seismic`, `global-disasters`, `local-firms`,
+`fire-perimeters`, all five weather climatology layers plus `wind`,
+`air-quality`, `traffic`, `transit`, `railway-stations`, `israeli-transport`,
+`bikeshare`, `cctv`, `alpr-cameras`, `radio`, `street-level`,
+`recent-imagery`, `directions`, `military-installations`,
+`local-datacenters`, `local-dams`, `telegeography-submarine-cables`,
+`military-awareness`, `cell-towers`, `iot-sensors`, `netmon`, `radiation`,
+`satellite-watch`, `orbit-changes`, `space-weather`, `fishing-effort`,
+`windy-weather`, `private-wifi`). The one skipped row is the Sentinel's own
+`ai-agent` id, which the watch cycle deliberately filters out of its roster —
+the orb must never inspect itself. The disposable harness was removed after
+the run; the module's `node --test src/layers/aiAgent/` suites (layer 20,
+follow 15) remain the standing automated gate. Pixel-level rendering stays a
+manual check on the dev server: this run proves the patrol, pulse, scan and
+report machinery, not what the canvas draws.
