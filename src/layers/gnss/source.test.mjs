@@ -30,6 +30,63 @@ test('the source asks the same-origin proxy for the view anchor', async () => {
   });
 });
 
+test('a sweep request marks itself; a 403 kill switch refuses it terminally', async () => {
+  const calls = [];
+  const source = createAdsbGnssSource({
+    fetchImpl: async (url) => {
+      calls.push(url);
+      return Response.json({ fetchedAt: 5, ageMs: 0, rows: [] });
+    },
+  });
+  const snapshot = await source.getSnapshot(
+    { latitude: 50.06143, longitude: 19.93658 },
+    { signal: new AbortController().signal, sweep: true },
+  );
+  assert.deepEqual(calls, ['/api/gnss-integrity?lat=50&lon=20&sweep=1']);
+  assert.deepEqual(snapshot.rows, []);
+
+  const disabled = createAdsbGnssSource({
+    fetchImpl: async () =>
+      Response.json({ error: 'sweep_disabled' }, { status: 403 }),
+  });
+  await assert.rejects(
+    disabled.getSnapshot(
+      { latitude: 50, longitude: 20 },
+      { signal: new AbortController().signal, sweep: true },
+    ),
+    (error) => {
+      assert.match(error.message, /Coverage sweep disabled/g);
+      assert.equal(error.status, 403);
+      assert.equal(error.retryable, false);
+      assert.equal(error.retryAfterMs, null);
+      return true;
+    },
+  );
+});
+
+test('a sweep budget 429 hands its Retry-After back as the sweep backoff', async () => {
+  const source = createAdsbGnssSource({
+    fetchImpl: async () =>
+      Response.json(
+        { error: 'sweep_budget_exhausted' },
+        { status: 429, headers: { 'retry-after': '300' } },
+      ),
+    now: () => Date.parse('2026-11-05T12:00:00Z'),
+  });
+  await assert.rejects(
+    source.getSnapshot(
+      { latitude: 50, longitude: 20 },
+      { signal: new AbortController().signal, sweep: true },
+    ),
+    (error) => {
+      assert.match(error.message, /HTTP 429/);
+      assert.equal(error.retryable, true);
+      assert.equal(error.retryAfterMs, 300_000);
+      return true;
+    },
+  );
+});
+
 test('the source reports stale proxy data and rejects bad input or responses', async () => {
   const reply = (body, init) => async () => Response.json(body, init);
   const stale = await createAdsbGnssSource({

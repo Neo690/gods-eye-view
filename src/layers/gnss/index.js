@@ -60,6 +60,62 @@ export function defaultGnssViewAnchor(viewer) {
     : null;
 }
 
+/** User-initiated coverage sweep. The ordinary route samples only the view
+ * anchor; a sweep extends observed coverage to a coarse whole-degree lattice
+ * around it, once, on explicit request. 250 nm (~4.2°) circles on a 5° lattice
+ * just overlap, so no point of the swept plane is farther from an anchor than
+ * one cell radius. */
+export const GNSS_SWEEP_SPACING_DEG = 5;
+/** Half-width of the lattice in degrees; the budget usually stops long before
+ * the corner, which the distance ordering guarantees is reached last. */
+export const GNSS_SWEEP_MAX_DEG = 20;
+/** Per-sweep request budget: at the 3 s pace a full sweep spends under half
+ * of the server's per-minute view cap and under half of its per-hour sweep
+ * budget, so an honest operator never feels the server's refusal lane. */
+export const GNSS_SWEEP_MAX_QUERIES = 24;
+/** Wall-clock pace between sweep reads; keeps the whole sweep well inside the
+ * server's per-minute view limiter rather than testing its edges. */
+export const GNSS_SWEEP_STAGGER_MS = 3000;
+
+/** Nearest-first whole-degree lattice around a view anchor, view anchor
+ * excluded (the ordinary route owns it), deduplicated across the antimeridian,
+ * out of polar latitudes. Pure geometry: the caller applies recency and the
+ * per-sweep budget.
+ *
+ * @param {{latitude: number, longitude: number}} view The camera anchor.
+ * @returns {Array<{latitude: number, longitude: number}>} Ordered lattice anchors.
+ */
+export function gnssSweepPlan({ latitude, longitude } = {}) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return [];
+  const lat0 = Math.round(latitude);
+  const lon0 = Math.round(longitude);
+  const kept = new Map();
+  for (
+    let dLat = -GNSS_SWEEP_MAX_DEG;
+    dLat <= GNSS_SWEEP_MAX_DEG;
+    dLat += GNSS_SWEEP_SPACING_DEG
+  ) {
+    for (
+      let dLon = -GNSS_SWEEP_MAX_DEG;
+      dLon <= GNSS_SWEEP_MAX_DEG;
+      dLon += GNSS_SWEEP_SPACING_DEG
+    ) {
+      // dLat = dLon = 0 is the view anchor the ordinary route already reads.
+      if (dLat === 0 && dLon === 0) continue;
+      const lat = Math.min(85, Math.max(-85, lat0 + dLat));
+      const lon = Math.trunc(((((lon0 + dLon + 180) % 360) + 360) % 360) - 180);
+      const key = `${lat},${lon}`;
+      const distanceSq = dLat * dLat + dLon * dLon;
+      const previous = kept.get(key);
+      if (!previous || distanceSq < previous[0])
+        kept.set(key, [distanceSq, { latitude: lat, longitude: lon }]);
+    }
+  }
+  return [...kept.values()]
+    .sort((a, b) => a[0] - b[0] || a[1].latitude - b[1].latitude)
+    .map(([, anchor]) => anchor);
+}
+
 /**
  * Own one GNSS navigation-integrity display: rolling integrity observations
  * around the views the user visits, binned into cells coloured by the
@@ -71,6 +127,8 @@ export function createGnssIntegrityLayer({
   now = () => Date.now(),
   monotonicNow = () => performance.now(),
   windowMs = GNSS_WINDOW_MS,
+  /** The wall pace between sweep reads; 0 is a test-only configuration. */
+  sweepStaggerMs = GNSS_SWEEP_STAGGER_MS,
 } = {}) {
   if (typeof source?.getSnapshot !== 'function')
     throw new TypeError('GNSS integrity layer requires a snapshot source');
@@ -94,8 +152,34 @@ export function createGnssIntegrityLayer({
   let _retryTimer = null;
   let _retryAt = 0;
   let _failureCount = 0;
+  let _sweepController = null;
+  let _lastSweepAt = null;
+  let _lastSweepKey = null;
+  const _recentQueries = new Map(); // whole-degree key -> monotonic time
+  const _sweep = {
+    running: false,
+    done: 0,
+    total: 0,
+    failed: 0,
+    error: null,
+    startedAt: null,
+    finishedAt: null,
+  };
   const _observations = new Map();
-  const provenance = gnssProvenance({ windowMs });
+  const provenance = gnssProvenance({
+    windowMs,
+    sweep: {
+      id: 'user-grid-sweep',
+      spacingDeg: GNSS_SWEEP_SPACING_DEG,
+      reachDeg: GNSS_SWEEP_MAX_DEG,
+      maxQueries: GNSS_SWEEP_MAX_QUERIES,
+      staggerMs: sweepStaggerMs,
+      serverSideRefusal:
+        'per-client hourly sweep budget (GNSS_SWEEP_MAX_PER_HOUR) and kill switch (GNSS_SWEEP_ENABLED=0 answers HTTP 403)',
+      definedBy: 'GEV',
+      validated: false,
+    },
+  });
 
   const queryKey = (anchor) =>
     anchor
@@ -153,6 +237,125 @@ export function createGnssIntegrityLayer({
       Math.min(2147483647, Math.max(0, _retryAt - now())),
     );
     _retryTimer?.unref?.();
+  }
+
+  /** Record that a whole-degree anchor was just read, so a sweep a minute
+   * later does not spend its budget re-fetching coverage the store holds. */
+  function noteQuery(key) {
+    if (!key) return;
+    _recentQueries.set(key, monotonicNow());
+    for (const [k, at] of _recentQueries) {
+      const age = monotonicNow() - at;
+      if (age < 0 || age > windowMs) _recentQueries.delete(k);
+    }
+  }
+
+  /** Abort-aware wait that resolves (never rejects); the sweep loop re-checks
+   * its own stop conditions instead of racing this helper. */
+  function delay(ms, signal) {
+    if (signal?.aborted) return Promise.resolve();
+    return new Promise((resolve) => {
+      const timer = setTimeout(resolve, ms);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+    });
+  }
+
+  function stopCoverageSweep() {
+    _sweepController?.abort();
+    _sweepController = null;
+  }
+
+  async function runSweep(plan, controller) {
+    const { signal } = controller;
+    for (const anchor of plan) {
+      if (signal.aborted || !_enabled) break;
+      try {
+        const snapshot = await source.getSnapshot(anchor, { signal });
+        if (signal.aborted || !_enabled) break;
+        // Same evidence path as the ordinary update: the age the proxy reports
+        // dates these rows, so a sweep never re-dates a cached replay as new.
+        const at = now();
+        accumulateGnssObservations(_observations, snapshot.rows, at, {
+          windowMs,
+          observedAt: at - snapshot.ageMs,
+        });
+        _cells = binGnssCells(_observations);
+        render();
+        noteQuery(queryKey(anchor));
+        _sweep.done += 1;
+      } catch (error) {
+        if (signal.aborted || !_enabled) break;
+        _sweep.failed += 1;
+        console.warn('[Data:GNSS] sweep fetch error:', error);
+        // A budget or cooldown refusal (429 with its Retry-After) ends the
+        // sweep: the remaining anchors would each just spend guaranteed
+        // refusals. A terminal refusal (the server's kill-switch 403) stops
+        // it for the same reason.
+        if (
+          (Number.isFinite(error?.retryAfterMs) && error.retryAfterMs > 0) ||
+          error?.retryable === false
+        ) {
+          _sweep.error =
+            error?.message || msg('GNSS integrity source unavailable');
+          break;
+        }
+      }
+      if (signal.aborted) break;
+      if (sweepStaggerMs > 0) await delay(sweepStaggerMs, signal);
+    }
+    if (_sweepController === controller) _sweepController = null;
+    _sweep.running = false;
+    _sweep.finishedAt = now();
+  }
+
+  /**
+   * Optional user-initiated coverage sweep. Independent of the manager: it
+   * fetches, accumulates and re-bins through the same evidence path as
+   * `update`, without touching the feed's own error and retry lane.
+   */
+  function startCoverageSweep() {
+    if (_sweep.running) return true; // the chip becomes the stop control
+    if (!_enabled || !_primitives) return false;
+    const view = viewAnchor(_viewer);
+    if (!view) return false;
+    // One sweep per view per window: a second press while the first sweep's
+    // evidence is still live adds nothing worth the budget.
+    const viewKey = queryKey(view);
+    if (
+      _lastSweepAt != null &&
+      monotonicNow() - _lastSweepAt < windowMs &&
+      _lastSweepKey === viewKey
+    )
+      return false;
+    const plan = gnssSweepPlan(view)
+      .filter(
+        (anchor) =>
+          monotonicNow() -
+            (_recentQueries.get(queryKey(anchor)) ?? -Infinity) >=
+          windowMs,
+      )
+      .slice(0, GNSS_SWEEP_MAX_QUERIES);
+    if (!plan.length) return false;
+    _sweep.running = true;
+    _sweep.done = 0;
+    _sweep.total = plan.length;
+    _sweep.failed = 0;
+    _sweep.error = null;
+    _sweep.startedAt = now();
+    _sweep.finishedAt = null;
+    _lastSweepAt = monotonicNow();
+    _lastSweepKey = viewKey;
+    const controller = new AbortController();
+    _sweepController = controller;
+    void runSweep(plan, controller);
+    return true;
   }
 
   /** Age the store without new evidence, so expired cells leave the globe. */
@@ -252,6 +455,7 @@ export function createGnssIntegrityLayer({
       _cameraTimer = null;
       clearTimeout(_retryTimer);
       _retryTimer = null;
+      stopCoverageSweep();
       _backgroundRefresh?.abort();
       _backgroundRefresh = null;
       _request?.abort();
@@ -285,6 +489,7 @@ export function createGnssIntegrityLayer({
       signal?.addEventListener('abort', onAbort, { once: true });
       _lastQueryKey = queryKey(anchor);
       _lastRequestAt = monotonicNow();
+      noteQuery(_lastQueryKey);
       _coverage = {
         kind: 'regional',
         latitude: Math.round(anchor.latitude),
@@ -368,11 +573,49 @@ export function createGnssIntegrityLayer({
       _failureCount = 0;
       _lastQueryKey = null;
       _manager = null;
+      stopCoverageSweep();
+      _recentQueries.clear();
+      _lastSweepAt = null;
+      _lastSweepKey = null;
+      _sweep.running = false;
+      _sweep.done = 0;
+      _sweep.total = 0;
+      _sweep.failed = 0;
+      _sweep.error = null;
+      _sweep.startedAt = null;
+      _sweep.finishedAt = null;
     },
 
+    startCoverageSweep,
+
     getRowControls() {
+      const sweepNote = _sweep.running
+        ? t('Coverage sweep · {done} of {total} anchors', {
+            done: formatNumber(_sweep.done),
+            total: formatNumber(_sweep.total),
+          })
+        : _sweep.total && (_sweep.error || _sweep.failed)
+          ? t('Last sweep: {done} of {total} anchors; {failed} failed', {
+              done: formatNumber(_sweep.done),
+              total: formatNumber(_sweep.total),
+              failed: formatNumber(_sweep.failed),
+            })
+          : null;
       return {
-        chips: [],
+        chips: [
+          {
+            id: 'sweep',
+            label: _sweep.running ? t('Stop sweep') : t('Coverage sweep'),
+            title: t(
+              'Fetch up to {count} extra lattice anchors around the view once, at a deliberate pace. The server keeps its own per-hour budget and an overall kill switch.',
+              { count: formatNumber(GNSS_SWEEP_MAX_QUERIES) },
+            ),
+            active: _sweep.running,
+            busy: _sweep.running,
+            onClick: () =>
+              _sweep.running ? stopCoverageSweep() : startCoverageSweep(),
+          },
+        ],
         info:
           t(
             'Regional sample · 250 nm radius · cells from visited views over 30 min',
@@ -385,9 +628,11 @@ export function createGnssIntegrityLayer({
                     })
                   : t('Retrying automatically after provider cooldown')
               }`
-            : ''),
+            : '') +
+          (sweepNote ? ` · ${sweepNote}` : ''),
         infoTitle: t(
-          'Updates automatically after pan or zoom and once a minute. The public feed covers a 250-nautical-mile circle around the view centre; zooming out does not make it a worldwide snapshot. Blank cells are outside sampled coverage or have insufficient observations.',
+          'Updates automatically after pan or zoom and once a minute. The public feed covers a 250-nautical-mile circle around the view centre; zooming out does not make it a worldwide snapshot. Blank cells are outside sampled coverage or have insufficient observations. The optional coverage sweep fetches up to {count} whole-degree lattice anchors around the view once, on request only; the server refuses sweeps past its own per-hour budget and disabling (GNSS_SWEEP_ENABLED=0).',
+          { count: formatNumber(GNSS_SWEEP_MAX_QUERIES) },
         ),
         legend: ['high', 'medium', 'low'].map((level, index) => ({
           label: t(LEVEL_LABELS[level]),
@@ -425,6 +670,15 @@ export function createGnssIntegrityLayer({
         stale: _stale,
         provenance,
         coverage: _coverage,
+        sweep: {
+          running: _sweep.running,
+          done: _sweep.done,
+          total: _sweep.total,
+          failed: _sweep.failed,
+          error: _sweep.error,
+          startedAt: _sweep.startedAt,
+          finishedAt: _sweep.finishedAt,
+        },
         // Load-bearing: without an explicit boolean, layerFeedState reads the
         // adsb.lol source name as a flights fallback (src/data/feedState.js).
         fallback: false,

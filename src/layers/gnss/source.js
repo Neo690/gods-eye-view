@@ -16,19 +16,25 @@ function retryDelay(raw, nowMs) {
     : null;
 }
 
-/** Request integrity facts around a view anchor through the same-origin adsb.lol proxy. */
+/** Request integrity facts around a view anchor through the same-origin adsb.lol proxy.
+ * `sweep` marks a user-initiated coverage-sweep request, which the server answers
+ * only under its separate per-hour budget and kill switch. */
 export function createAdsbGnssSource({
   fetchImpl = (...args) => globalThis.fetch(...args),
   now = () => Date.now(),
 } = {}) {
   return {
-    async getSnapshot({ latitude, longitude } = {}, { signal } = {}) {
+    async getSnapshot(
+      { latitude, longitude } = {},
+      { signal, sweep = false } = {},
+    ) {
       signal?.throwIfAborted();
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude))
         throw new Error(msg('GNSS snapshot needs a view anchor'));
       const params = new URLSearchParams({
         lat: String(Math.round(latitude)),
         lon: String(Math.round(longitude)),
+        ...(sweep ? { sweep: '1' } : {}),
       });
       const response = await fetchImpl(`/api/gnss-integrity?${params}`, {
         signal,
@@ -39,12 +45,15 @@ export function createAdsbGnssSource({
           response.headers.get('retry-after'),
           now(),
         );
+        const disabled = sweep && response.status === 403;
         throw Object.assign(
           new Error(
             // HTTP errors are matched by FEED_ERROR_PATTERNS in ui/statusText.js.
-            limited
-              ? msg('GNSS feed rate limited (HTTP 429)')
-              : `GNSS feed unavailable (HTTP ${response.status})`,
+            disabled
+              ? msg('Coverage sweep disabled by the server (HTTP 403)')
+              : limited
+                ? msg('GNSS feed rate limited (HTTP 429)')
+                : `GNSS feed unavailable (HTTP ${response.status})`,
           ),
           {
             status: response.status,

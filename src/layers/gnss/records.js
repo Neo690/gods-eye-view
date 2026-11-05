@@ -69,9 +69,11 @@ export const GNSS_CLASSIFIER = Object.freeze({
  * Machine-readable provenance of the cell output: which part of the method
  * comes from where, and which parts are unvalidated.
  *
- * @param {{windowMs?: number}} [options] The window the layer actually uses.
+ * @param {{windowMs?: number, sweep?: object}} [options] The window the layer
+ *   actually uses, and the layer-provided description of its optional
+ *   user-initiated coverage sweep (limits and kill switch), when it declares one.
  */
-export function gnssProvenance({ windowMs = GNSS_WINDOW_MS } = {}) {
+export function gnssProvenance({ windowMs = GNSS_WINDOW_MS, sweep } = {}) {
   return Object.freeze({
     classifier: GNSS_CLASSIFIER,
     aggregation: Object.freeze({
@@ -88,6 +90,7 @@ export function gnssProvenance({ windowMs = GNSS_WINDOW_MS } = {}) {
       minAircraft: GNSS_MIN_AIRCRAFT,
       definedBy: 'GEV',
     }),
+    ...(sweep ? { sweep: Object.freeze({ ...sweep }) } : {}),
     anchor: Object.freeze({
       id: 'high-band-only',
       rule: `only a cell at level ${GNSS_ANCHOR_LEVEL} counts as anchor-grade evidence for a cross-layer reading`,
@@ -310,16 +313,8 @@ export function binGnssCells(
     const [row, col] = id.split(':').map(Number);
     const south = row * cellDeg - 90;
     const west = col * cellDeg - 180;
-    const {
-      percent,
-      level,
-      state,
-      interpretation,
-      anchor,
-    } = gnssIntegrityLevel(
-      aircraft,
-      degraded,
-    );
+    const { percent, level, state, interpretation, anchor } =
+      gnssIntegrityLevel(aircraft, degraded);
     cells.push({
       id,
       south,

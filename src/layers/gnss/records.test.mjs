@@ -238,6 +238,24 @@ test('provenance separates the GEV classifier from the gpsjam aggregation and th
   assert.equal(gnssProvenance({ windowMs: 10 * 60_000 }).window.minutes, 10);
 });
 
+test('provenance carries an optional frozen sweep section only when the layer declares one', () => {
+  assert.equal('sweep' in GNSS_PROVENANCE, false);
+  const sweep = {
+    id: 'user-grid-sweep',
+    maxQueries: 24,
+    definedBy: 'GEV',
+    validated: false,
+  };
+  const declared = gnssProvenance({ sweep });
+  assert.deepEqual(declared.sweep, sweep);
+  assert.ok(Object.isFrozen(declared.sweep));
+  assert.ok(Object.isFrozen(declared));
+  // The declared section is a copy: mutating the input afterwards must not
+  // bleed into the frozen answer.
+  sweep.maxQueries = 999;
+  assert.equal(declared.sweep.maxQueries, 24);
+});
+
 test('observations count each aircraft once per cell and expire after the window', () => {
   const store = new Map();
   const at = (lat, hex, degraded) => ({ hex, lat, lon: 20.1, degraded });

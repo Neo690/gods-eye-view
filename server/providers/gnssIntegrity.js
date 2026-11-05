@@ -5,7 +5,11 @@ import {
 } from '../../src/layers/gnss/records.js';
 import { adsbLolFallbackAnchor } from './aircraft/opensky.js';
 import { coalesceProxyRequest, readResponseJsonCapped } from './common/http.js';
-import { makeRateLimiter, clientKey } from './common/rate-limit.js';
+import {
+  makeRateLimiter,
+  resolvePerMinuteCap,
+  clientKey,
+} from './common/rate-limit.js';
 
 // adsb.lol regional snapshot (keyless, ODbL). Only the integrity fields the
 // GNSS layer needs leave this proxy, so the browser never sees the full feed.
@@ -25,6 +29,12 @@ const FAILURE_COOLDOWN_MS = 15_000;
 const MAX_IN_FLIGHT = 8;
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 const TIMEOUT_MS = 10_000;
+/** Default per-client hourly budget for user-initiated coverage sweeps. */
+const SWEEP_MAX_PER_HOUR = 60;
+const SWEEP_WINDOW_MS = 3_600_000;
+/** Retry-After (s) when the sweep budget refuses: the window rolls per-key,
+ * so a full hour is the honest ceiling. */
+const SWEEP_RETRY_AFTER_S = 300;
 
 /** Snap a view anchor to a whole degree so nearby views share one upstream read. */
 export function gnssIntegrityAnchor(url) {
@@ -52,15 +62,35 @@ export function gnssRetryCooldownMs(raw, nowMs) {
 }
 
 /** Fixed-origin, bounded adsb.lol integrity route for dev and preview. */
+/** The coverage sweep is an opt-out kill switch, not an opt-in: `GNSS_SWEEP_ENABLED=0`
+ * refuses `?sweep=1` with 403 while the ordinary per-view route keeps working.
+ * Like the cost caps, an operator's explicit `0` on `GNSS_SWEEP_MAX_PER_HOUR` means
+ * "no budget guard", never "budget exhausted". */
 export function gnssIntegrityProxy({
   fetchImpl = (...args) => globalThis.fetch(...args),
   now = () => Date.now(),
   monotonicNow = () => performance.now(),
   warn = (...args) => console.warn(...args),
+  sweepEnabled = process.env.GNSS_SWEEP_ENABLED !== '0',
+  sweepMaxPerHour = resolvePerMinuteCap(
+    process.env.GNSS_SWEEP_MAX_PER_HOUR,
+    SWEEP_MAX_PER_HOUR,
+  ),
 } = {}) {
   const cache = new Map();
   const inFlight = new Map();
   const allow = makeRateLimiter({ windowMs: 60_000, max: 30, globalMax: 600 });
+  // Sweeps count against their own hourly window, well above what the client's
+  // own request budget (24 anchors per sweep) can spend in an hour, so the
+  // guard exists to stop unauthorised bulk sampling, not honest operators.
+  const allowSweep =
+    sweepEnabled && sweepMaxPerHour > 0
+      ? makeRateLimiter({
+          windowMs: SWEEP_WINDOW_MS,
+          max: sweepMaxPerHour,
+          globalMax: sweepMaxPerHour * 4,
+        })
+      : null;
   let cooldownUntil = 0;
   let cooldownStatus = 429;
 
@@ -194,6 +224,16 @@ export function gnssIntegrityProxy({
     const path = (req.url || '/').split('?')[0];
     if (path !== '/' && path !== '')
       return json(404, { error: 'unknown_route' });
+    const params = new URLSearchParams((req.url || '/').split('?')[1] || '');
+    const sweep = params.get('sweep') === '1';
+    if (sweep && !sweepEnabled) return json(403, { error: 'sweep_disabled' });
+    if (sweep && allowSweep && !allowSweep(clientKey(req)))
+      return json(
+        429,
+        { error: 'sweep_budget_exhausted' },
+        false,
+        SWEEP_RETRY_AFTER_S,
+      );
     const anchor = gnssIntegrityAnchor(req.url);
     if (!anchor) return json(400, { error: 'invalid_anchor' });
     try {

@@ -205,6 +205,19 @@ Candidate sources that are evaluated but not yet integrated are ranked and descr
   can be outside coverage or lack enough observations. Attribution: adsb.lol
   contributors, ODbL 1.0; GPSJAM for aggregation only.
 
+  A user can extend the layer's sampled plane beyond the visited views with an
+  explicit **coverage sweep**: up to 24 whole-degree anchors on a 5° lattice
+  within ±20° of the view centre, nearest first, read once each at a 3 s pace.
+  Sweeps ride the same `/api/gnss-integrity` route marked `sweep=1`, and the
+  proxy guards them separately: a per-client hourly budget
+  (`GNSS_SWEEP_MAX_PER_HOUR`, default 60, `0` removes the guard) refuses further
+  sweeps with 429, and the kill switch `GNSS_SWEEP_ENABLED=0` refuses every
+  sweep with 403 while the ordinary per-view route keeps working. A refused
+  sweep stops on its first refusal rather than spending its remaining budget.
+  Swept coverage is the same evidence as any other read: rows enter the
+  30-minute window dated by the proxy's observation clock, and a swept view
+  cannot be re-swept inside that window.
+
 - **adsbdb enrichment.** `/api/adsbdb` resolves an ICAO hex to aircraft type, model name and registration, and the tracked flight's callsign to an airline and an origin/destination pair. Fan-out is deliberately small because adsbdb is a free community API that publishes no quota: at most 4 requests in flight, dispatches dripped to roughly 5/s, and each key asked for at most once per session, with route lookups reserved for the tracked aircraft. The dev-server proxy caches each key for 24 hours in `.gev-cache/adsbdb.json`, negative answers included, so fresh entries survive server restarts. That gitignored cache remains local to the deployment and is not bundled with this repo. adsbdb publishes no general service license; its README says the route data may not be copied, published, or incorporated into other databases without the explicit permission of David J Taylor, Edinburgh. Deployers are responsible for obtaining any permission their use requires. Enrichment is best-effort and fail-silent — a flight that gets no answer keeps what the flight feed already gave it.
 - **Launch Library 2.** `/api/launches` makes a server-side rolling-30-day query against the supported v2.3 detailed launch endpoint, caches successful responses for 15 minutes in memory and on disk, and serves the last successful response during a throttle or transient outage. Anonymous access is limited to 15 calls/hour; deployments can provide `LL2_API_TOKEN` for authenticated access. The Space Devs' published terms permit using and sharing the API data in any form, ask users not to forward it without adding value, disclaim complete accuracy, and encourage—but do not require—attribution. This app keeps a courtesy credit. Payload and stage/recovery records are shown only when supplied. Failed launches expose their source status and never receive fallback orbit geometry or a live/estimated marker. LL2 supplies launch context and event timing, not continuous ascent telemetry or live orbital state.
 - **TfL JamCams.** The camera list comes from the keyless `api.tfl.gov.uk` endpoint (an optional `TFL_APP_KEY` raises its rate limit); frames come from TfL's public S3 bucket. The "Powered by TfL Open Data" attribution is required by TfL's terms and is registered in the Data attribution popover.

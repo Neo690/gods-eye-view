@@ -20,6 +20,7 @@ function harness(
   {
     anchor: initialAnchor = { latitude: 50, longitude: 30 },
     initialize = true,
+    layerOptions = {},
   } = {},
 ) {
   let anchor = initialAnchor;
@@ -42,6 +43,7 @@ function harness(
   let clock = 1_000;
   const anchors = [];
   const layer = createGnssIntegrityLayer({
+    ...layerOptions,
     // The real source refuses an undated snapshot; stubs default to a fresh one.
     source: {
       async getSnapshot(...args) {
@@ -684,6 +686,227 @@ test('GNSS fill emits no pick-pass commands but keeps normal rendering', async (
   assert.equal(updates, 1);
   h.layer.destroy();
   assert.equal(fill.isDestroyed(), true);
+});
+
+// ---- Coverage sweep (user-initiated, budgeted, kill-switchable) ----
+
+/** Let the sweep loop run to completion; stagger 0 keeps every step a
+ * microtask, so setImmediate flushes suffice between checks. */
+async function untilSweepSettles(h) {
+  for (let i = 0; i < 1000 && h.layer.getStats().sweep.running; i += 1)
+    await flush();
+}
+
+const degradeCluster = (anchor, ordinal) => [
+  row(`${ordinal}a`, anchor.latitude + 0.1, true),
+  row(`${ordinal}b`, anchor.latitude + 0.2, true),
+  row(`${ordinal}c`, anchor.latitude + 0.3, true),
+];
+
+test('the sweep spends one fixed budget on nearest-first lattice anchors and merges through the ordinary evidence path', async () => {
+  const calls = [];
+  let index = 0;
+  const h = harness(
+    async (anchor) => {
+      calls.push(`${anchor.latitude},${anchor.longitude}`);
+      return { rows: degradeCluster(anchor, `sw${++index}`) };
+    },
+    { layerOptions: { sweepStaggerMs: 0 } },
+  );
+  h.layer.enable();
+  let controls = h.layer.getRowControls();
+  assert.deepEqual(
+    controls.chips.map(({ id, label }) => [id, label]),
+    [['sweep', 'Coverage sweep']],
+  );
+  assert.equal(h.layer.startCoverageSweep(), true);
+  assert.equal(h.layer.getStats().sweep.running, true);
+  assert.equal(h.layer.getRowControls().chips[0].label, 'Stop sweep');
+  await untilSweepSettles(h);
+  const sweep = h.layer.getStats().sweep;
+  assert.equal(sweep.running, false);
+  assert.equal(
+    sweep.done,
+    24,
+    'one per-sweep budget, not “everything in reach”',
+  );
+  assert.equal(sweep.total, 24);
+  assert.equal(sweep.failed, 0);
+  assert.equal(sweep.error, null);
+  assert.ok(sweep.finishedAt != null);
+  assert.equal(calls.length, 24);
+  assert.deepEqual(
+    calls.slice(0, 3),
+    ['45,30', '50,25', '50,35'],
+    'nearest-first ordering',
+  );
+  assert.ok(
+    !calls.includes('50,30'),
+    'the view anchor stays the ordinary route',
+  );
+  assert.equal(
+    new Set(calls).size,
+    24,
+    'no anchor is asked twice in one sweep',
+  );
+  // The sweep merged into the store through the ordinary path (degrade
+  // clusters bin high), and the feed's own coverage report is untouched.
+  const stats = h.layer.getStats();
+  assert.ok(stats.count > 0);
+  assert.ok(stats.levels.high > 0);
+  assert.equal(stats.coverage, null);
+  assert.equal(h.layer.provenance.sweep.maxQueries, 24);
+  assert.equal(h.layer.provenance.sweep.validated, false);
+  controls = h.layer.getRowControls();
+  assert.equal(controls.chips[0].label, 'Coverage sweep');
+  assert.equal(
+    controls.info,
+    'Regional sample · 250 nm radius · cells from visited views over 30 min',
+    'a clean sweep adds no note',
+  );
+  h.layer.destroy();
+});
+
+test('a view whose window was just swept refuses to spend the budget again', async () => {
+  const calls = [];
+  const h = harness(
+    async (anchor) => {
+      calls.push(`${anchor.latitude},${anchor.longitude}`);
+      return { rows: [] };
+    },
+    { layerOptions: { sweepStaggerMs: 0 } },
+  );
+  h.layer.enable();
+  assert.equal(h.layer.startCoverageSweep(), true);
+  await untilSweepSettles(h);
+  assert.equal(h.layer.getStats().sweep.done, 24);
+  assert.equal(
+    h.layer.startCoverageSweep(),
+    false,
+    'no re-sweep inside the window',
+  );
+  assert.equal(calls.length, 24);
+  // Move far away: a new view has unqueried nearest anchors, but the old
+  // window's anchors are not re-asked either.
+  h.setAnchor({ latitude: -50.4, longitude: 122.6 });
+  assert.equal(h.layer.startCoverageSweep(), true);
+  await untilSweepSettles(h);
+  assert.equal(h.layer.getStats().sweep.done, 24);
+  assert.equal(calls.length, 48);
+  assert.equal(
+    new Set(calls).size,
+    48,
+    'never re-ask an anchor inside the window',
+  );
+  h.layer.destroy();
+});
+
+test('disabling the layer aborts an in-flight sweep read and stops the loop', async () => {
+  let calls = 0;
+  const h = harness(
+    async (anchor, { signal } = {}) => {
+      calls += 1;
+      // Hang until the disable's abort fires, as a real proxy read would.
+      return new Promise((resolve, reject) => {
+        signal?.addEventListener('abort', () =>
+          reject(new DOMException('aborted', 'AbortError')),
+        );
+        setTimeout(() => resolve({ rows: [] }), 50);
+      });
+    },
+    { layerOptions: { sweepStaggerMs: 0 } },
+  );
+  h.layer.enable();
+  assert.equal(h.layer.startCoverageSweep(), true);
+  h.layer.disable();
+  await untilSweepSettles(h);
+  const sweep = h.layer.getStats().sweep;
+  assert.equal(sweep.done, 0);
+  assert.equal(sweep.failed, 0, 'an abort is not a refusal');
+  assert.equal(sweep.running, false);
+  assert.equal(calls, 1, 'no further sweep fetch after disable');
+  assert.equal(h.layer.startCoverageSweep(), false);
+  h.layer.destroy();
+});
+
+test('a server budget refusal (429 with Retry-After) ends the sweep, not the feed', async () => {
+  const calls = [];
+  let index = 0;
+  const h = harness(
+    async (anchor) => {
+      calls.push(`${anchor.latitude},${anchor.longitude}`);
+      if (++index === 3)
+        throw Object.assign(new Error('GNSS feed rate limited (HTTP 429)'), {
+          status: 429,
+          retryable: true,
+          retryAfterMs: 300_000,
+        });
+      return { rows: [] };
+    },
+    { layerOptions: { sweepStaggerMs: 0 } },
+  );
+  h.layer.enable();
+  h.layer.startCoverageSweep();
+  await untilSweepSettles(h);
+  const sweep = h.layer.getStats().sweep;
+  assert.equal(sweep.done, 2);
+  assert.equal(sweep.failed, 1);
+  assert.equal(sweep.error, 'GNSS feed rate limited (HTTP 429)');
+  assert.equal(sweep.running, false);
+  assert.equal(calls.length, 3, 'pressing on would spend guaranteed refusals');
+  const controls = h.layer.getRowControls();
+  assert.equal(controls.chips[0].label, 'Coverage sweep');
+  assert.match(controls.info, /Last sweep: 2 of 24 anchors; 1 failed/);
+  h.layer.destroy();
+});
+
+test('a kill-switch refusal (403) also ends the sweep, like any terminal error', async () => {
+  const calls = [];
+  let index = 0;
+  const h = harness(
+    async (anchor) => {
+      calls.push(`${anchor.latitude},${anchor.longitude}`);
+      if (++index === 2)
+        throw Object.assign(
+          new Error('Coverage sweep disabled by the server (HTTP 403)'),
+          { status: 403, retryable: false },
+        );
+      return { rows: [] };
+    },
+    { layerOptions: { sweepStaggerMs: 0 } },
+  );
+  h.layer.enable();
+  h.layer.startCoverageSweep();
+  await untilSweepSettles(h);
+  const sweep = h.layer.getStats().sweep;
+  assert.equal(sweep.done, 1);
+  assert.equal(sweep.failed, 1);
+  assert.equal(sweep.error, 'Coverage sweep disabled by the server (HTTP 403)');
+  assert.equal(
+    calls.length,
+    2,
+    'the sweep does not burn the budget behind a kill switch',
+  );
+  h.layer.destroy();
+});
+
+test('a sweep needs the layer enabled and a view anchor', () => {
+  const h = harness(async () => ({ rows: [] }), {
+    initialize: false,
+    layerOptions: { sweepStaggerMs: 0 },
+  });
+  h.layer.enable();
+  assert.equal(h.layer.startCoverageSweep(), false, 'no primitives, no sweep');
+  h.layer.init(h.viewer);
+  const disabled = harness(async () => ({ rows: [] }), {
+    initialize: true,
+    layerOptions: { sweepStaggerMs: 0 },
+  });
+  assert.equal(
+    disabled.layer.startCoverageSweep(),
+    false,
+    'not while the feed is off',
+  );
 });
 
 test('view anchor falls back to rectangle, then nadir, then no camera', () => {
