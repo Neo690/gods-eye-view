@@ -28,6 +28,8 @@ import {
   loadNycSourcesFromOpenData,
   loadTorontoSourcesFromOpenData,
   loadFloridaSourcesFromOpenData,
+  loadAlbertaSourcesFromOpenData,
+  loadGeorgiaSourcesFromOpenData,
 } from './sources.js';
 
 /** Env kill switch: unset or anything but "0" means enabled. */
@@ -104,6 +106,11 @@ const LIVE_PACKS = [
     load: loadCalgarySourcesFromOpenData,
   },
   {
+    name: 'alberta',
+    enabled: () => envEnabled('CCTV_ALBERTA_ENABLED'),
+    load: loadAlbertaSourcesFromOpenData,
+  },
+  {
     name: 'catalonia',
     enabled: () => envEnabled('CCTV_CATALONIA_ENABLED'),
     load: loadCataloniaSourcesFromOpenData,
@@ -159,6 +166,11 @@ const LIVE_PACKS = [
     name: 'florida',
     enabled: () => envOptIn('CCTV_FLORIDA_ENABLED'),
     load: loadFloridaSourcesFromOpenData,
+  },
+  {
+    name: 'georgia',
+    enabled: () => envEnabled('CCTV_GEORGIA_ENABLED'),
+    load: loadGeorgiaSourcesFromOpenData,
   },
   {
     name: 'taiwan',

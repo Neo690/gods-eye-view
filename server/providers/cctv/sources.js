@@ -62,6 +62,18 @@ import {
   FLORIDA_ANCHORS,
   FLORIDA_MAX_CATALOG_BYTES,
   FLORIDA_MAX_CATALOG_PAGES,
+  ALBERTA_511_CAMERAS_URL,
+  ALBERTA_511_IMAGE_ORIGIN,
+  DEFAULT_ALBERTA_MAX_SOURCES,
+  ALBERTA_ANCHORS,
+  GEORGIA_511_CAMERAS_URL,
+  GEORGIA_511_PAGE_SIZE,
+  GEORGIA_MAX_CATALOG_PAGES,
+  GEORGIA_MAX_CATALOG_BYTES,
+  GEORGIA_IMAGE_HOSTS,
+  GEORGIA_IMAGE_HOST_ALIASES,
+  DEFAULT_GEORGIA_MAX_SOURCES,
+  GEORGIA_ANCHORS,
   CATALONIA_CAMERAS_URL,
   CATALONIA_MAX_CATALOG_BYTES,
   CATALONIA_IMAGE_HOSTS,
@@ -3753,6 +3765,390 @@ export async function loadFloridaSourcesFromOpenData() {
   } catch (error) {
     console.warn(
       '[CCTV] Florida camera download error:',
+      error?.message || error,
+    );
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 511 Alberta (TravelIQ)
+// ---------------------------------------------------------------------------
+
+/**
+ * Alberta's bounding box: the province spans roughly 49N (the US border) to
+ * 60N and 110W to the provincial line at 120W.
+ *
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {boolean}
+ */
+function isLikelyAlbertaCoordinate(lat, lon) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+  return lat >= 49.0 && lat <= 60.0 && lon >= -120.0 && lon <= -110.0;
+}
+
+/**
+ * Pin an Alberta 511 camera view URL to the site's production still-image
+ * directory. TravelIQ staging hosts (`*.traveliq.co`) occasionally appear in
+ * the catalog's view URLs with the same path; they are rewritten onto the
+ * 511.alberta.ca origin, so the frame proxy registers one host.
+ *
+ * @param {string} value - Upstream view URL.
+ * @returns {string} Canonical 511.alberta.ca still URL, or '' if not accepted.
+ */
+function normalizeAlbertaCctvUrl(value) {
+  try {
+    const parsed = new URL(String(value || '').trim());
+    const match = /^\/map\/Cctv\/([^/?#]+)$/.exec(parsed.pathname);
+    if (!match) return '';
+    const host = parsed.hostname.toLowerCase();
+    if (
+      parsed.protocol !== 'https:' ||
+      (host !== '511.alberta.ca' && !host.endsWith('.traveliq.co'))
+    ) {
+      return '';
+    }
+    const viewId = decodeURIComponent(match[1]);
+    if (!/^[A-Za-z0-9_.-]+$/.test(viewId)) return '';
+    return `${ALBERTA_511_IMAGE_ORIGIN}${encodeURIComponent(viewId)}`;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Select the best Alberta 511 still view for a camera.
+ *
+ * @param {Array<object>} views
+ * @returns {{url:string,description:string}|null}
+ */
+function pickAlbertaCctvView(views) {
+  const enabled = (Array.isArray(views) ? views : [])
+    .filter(
+      (view) =>
+        String(view?.Status || view?.status || '')
+          .trim()
+          .toLowerCase() === 'enabled',
+    )
+    .map((view) => ({
+      url: normalizeAlbertaCctvUrl(view?.Url || view?.url),
+      description: String(view?.Description || view?.description || '').trim(),
+    }))
+    .filter((view) => view.url);
+  if (!enabled.length) return null;
+  return (
+    enabled.find((view) => !/\bdown\b/i.test(view.description)) || enabled[0]
+  );
+}
+
+/**
+ * Fetch 511 Alberta CCTV cameras, keyless: the same TravelIQ CARS catalog as
+ * Ontario 511 (`/api/v2/get/cameras`), where every enabled camera view is a
+ * still image under 511.alberta.ca/map/Cctv/. Only rows with finite Alberta
+ * coordinates and at least one enabled official still view are kept. No
+ * compass heading is published, so headings use the shared id-hash fallback
+ * at low confidence, correctable with the in-app calibration gizmo.
+ *
+ * @param {object} [_options] The catalog's loader options (unused).
+ * @param {object} [env] Environment to read the source cap from.
+ * @returns {Promise<Array<object>>} Normalized camera source objects.
+ */
+export async function loadAlbertaSourcesFromOpenData(
+  _options = {},
+  env = process.env,
+) {
+  try {
+    const resp = await fetch(ALBERTA_511_CAMERAS_URL, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(CCTV_SOURCE_FETCH_TIMEOUT_MS),
+    });
+    if (!resp.ok) {
+      console.warn(`[CCTV] Alberta 511 camera download failed: ${resp.status}`);
+      return [];
+    }
+    const rows = await resp.json();
+    if (!Array.isArray(rows)) return [];
+
+    const cameras = [];
+    for (const row of rows) {
+      const rawId = String(row?.Id ?? row?.id ?? '').trim();
+      if (!rawId) continue;
+      const lat = toFiniteNumber(row?.Latitude ?? row?.latitude);
+      const lon = toFiniteNumber(row?.Longitude ?? row?.longitude);
+      if (!isLikelyAlbertaCoordinate(lat, lon)) continue;
+
+      const view = pickAlbertaCctvView(row?.Views || row?.views);
+      if (!view) continue;
+
+      const cameraId = `ab-${rawId}`;
+      const location = String(row?.Location || row?.location || '').trim();
+      const roadway = String(row?.Roadway || row?.roadway || '').trim();
+      const viewLabel =
+        view.description && !/\bdown\b/i.test(view.description)
+          ? view.description
+          : '';
+      const label = [
+        location || roadway || `Alberta 511 Camera ${rawId}`,
+        viewLabel,
+      ]
+        .filter(Boolean)
+        .join(' - ');
+      let heading = directionToHeading(row?.Direction ?? row?.direction, true);
+      if (!Number.isFinite(heading)) {
+        heading = directionToHeading(view.description, true);
+      }
+      const hasHeading = Number.isFinite(heading);
+
+      cameras.push({
+        id: cameraId,
+        name: label,
+        city: location || roadway || 'Alberta',
+        cityId: 'alberta',
+        provider: '511 Alberta',
+        lat,
+        lon,
+        headingDeg: hasHeading ? heading : fallbackHeadingFromId(cameraId),
+        headingConfidence: hasHeading ? 'high' : 'low',
+        pitchDeg: hasHeading ? -24 : -18,
+        fovDeg: hasHeading ? 56 : 44,
+        rangeM: hasHeading ? 210 : 145,
+        mountHeightM: hasHeading ? 10 : 8,
+        groundElevationM: 700, // Prairie and foothill prior; the client snaps.
+        feedType: 'image',
+        url: view.url,
+        snapshotUrl: view.url,
+        sourceKind: 'alberta-511-open-data',
+        license: 'Government of Alberta — 511 Alberta (courtesy attribution)',
+      });
+    }
+
+    const unique = Array.from(
+      new Map(cameras.map((camera) => [camera.id, camera])).values(),
+    );
+    const maxRaw = Number(
+      env.CCTV_ALBERTA_MAX_SOURCES || DEFAULT_ALBERTA_MAX_SOURCES,
+    );
+    const maxCount = Number.isFinite(maxRaw)
+      ? Math.max(8, Math.min(1200, Math.floor(maxRaw)))
+      : DEFAULT_ALBERTA_MAX_SOURCES;
+    const prioritized = prioritizeSources(unique, maxCount, ALBERTA_ANCHORS);
+    console.log(
+      `[CCTV] Loaded Alberta 511 camera sources: ${unique.length} enabled (using nearest ${prioritized.length})`,
+    );
+    return prioritized;
+  } catch (error) {
+    console.warn(
+      '[CCTV] Alberta 511 camera download error:',
+      error?.message || error,
+    );
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 511 Georgia (Georgia DOT)
+// ---------------------------------------------------------------------------
+
+/** WKT POINT is written x y (lon lat); the feed's geography field follows it. */
+const GEORGIA_WKT_POINT_RE = /^POINT\s*\(\s*(.+?)\s+(.+?)\s*\)\s*$/i;
+
+function parseGeorgiaWktPoint(value) {
+  const match = GEORGIA_WKT_POINT_RE.exec(String(value || '').trim());
+  if (!match) return [NaN, NaN];
+  const lon = toFiniteNumber(match[1]);
+  const lat = toFiniteNumber(match[2]);
+  return [lat, lon];
+}
+
+/**
+ * Georgia's bounding box: roughly 30.36N-34.99N, 80.84W-85.61W.
+ *
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {boolean}
+ */
+function isLikelyGeorgiaCoordinate(lat, lon) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+  return lat >= 30.35 && lat <= 35.0 && lon >= -85.61 && lon <= -80.83;
+}
+
+/**
+ * Pin a Georgia camera image URL to the registered image hosts: the 511 site
+ * itself plus Georgia DOT's camera-origin host. The feed persistently
+ * misspells that host and serves some URLs over plain http; both are
+ * normalized here (typo host replaced, scheme upgraded) so the frame proxy
+ * registers one origin. Embedded credentials and explicit ports are refused.
+ *
+ * @param {string} value - Upstream image URL.
+ * @returns {string} Canonical HTTPS image URL, or '' if not accepted.
+ */
+function normalizeGeorgiaImageUrl(value) {
+  let parsed;
+  try {
+    parsed = new URL(String(value || '').trim());
+  } catch {
+    return '';
+  }
+  const host = parsed.hostname.toLowerCase();
+  const finalHost = GEORGIA_IMAGE_HOST_ALIASES[host] || host;
+  const inHosts =
+    finalHost === '511ga.org' ||
+    finalHost.endsWith('.511ga.org') ||
+    finalHost === 'dot.ga.gov' ||
+    finalHost.endsWith('.dot.ga.gov');
+  if (!inHosts) return '';
+  if (parsed.username || parsed.password) return '';
+  if (
+    parsed.port &&
+    parsed.port !== (parsed.protocol === 'https:' ? '443' : '80')
+  ) {
+    return '';
+  }
+  if (!GEORGIA_IMAGE_HOSTS.includes(finalHost)) return '';
+  if (!parsed.pathname || parsed.pathname === '/') return '';
+  // Upgrade to HTTPS so every pinned camera registers under one scheme; the
+  // hosts serve it in practice.
+  parsed.protocol = 'https:';
+  parsed.hostname = finalHost;
+  return parsed.toString();
+}
+
+/**
+ * One 511 Georgia DataTables row -> one catalog source, or null. Rows carry
+ * WKT POINT geography in `latLng.geography.wellKnownText`, a `location`
+ * string and an image list whose entries can be `blocked`.
+ *
+ * @param {object} row - A row of the feed's `data` array.
+ * @returns {?object}
+ */
+export function georgiaRowToSource(row) {
+  if (!row || typeof row !== 'object') return null;
+  const rawId = String(row?.id ?? row?.DT_RowId ?? '').trim();
+  if (!rawId) return null;
+  const [lat, lon] = parseGeorgiaWktPoint(
+    row?.latLng?.geography?.wellKnownText,
+  );
+  if (!isLikelyGeorgiaCoordinate(lat, lon)) return null;
+  const images = Array.isArray(row?.images) ? row.images : [];
+  const image = images.find(
+    (candidate) =>
+      String(candidate?.imageUrl || '').trim() && !candidate?.blocked,
+  );
+  if (!image) return null;
+  const imageUrl = normalizeGeorgiaImageUrl(image.imageUrl);
+  if (!imageUrl) return null;
+
+  const cameraId = `ga-${rawId}`;
+  const location = String(row?.location || row?.roadway || '').trim();
+  const heading = directionToHeading(row?.direction ?? row?.Direction, true);
+  const hasHeading = Number.isFinite(heading);
+
+  return {
+    id: cameraId,
+    name: location || `511 Georgia Camera ${rawId}`,
+    city: location || 'Georgia',
+    cityId: 'georgia',
+    provider: '511 Georgia',
+    lat,
+    lon,
+    headingDeg: hasHeading ? heading : fallbackHeadingFromId(cameraId),
+    headingConfidence: hasHeading ? 'high' : 'low',
+    pitchDeg: hasHeading ? -24 : -18,
+    fovDeg: hasHeading ? 56 : 44,
+    rangeM: hasHeading ? 210 : 145,
+    mountHeightM: hasHeading ? 10 : 8,
+    groundElevationM: 150,
+    feedType: 'image',
+    url: imageUrl,
+    snapshotUrl: imageUrl,
+    sourceKind: 'georgia-511-open-data',
+    license: 'Georgia DOT — 511 Georgia (courtesy attribution)',
+  };
+}
+
+/**
+ * Fetch 511 Georgia (Georgia DOT) cameras, keyless: the page POSTs the
+ * browser camera table on 511ga.org/cctv sends ({draw, start, length}, the
+ * DataTables server-side protocol) with the Origin/Referer pair the site's
+ * own client sends. Paging advances by the rows each page returned until
+ * `recordsTotal` is reached, bounded by a page ceiling in case a page keeps
+ * mis-reporting. Frames are stills on the pinned Georgia DOT hosts, fetched
+ * live at request time and never stored or redistributed.
+ *
+ * @param {object} [_options] The catalog's loader options (unused).
+ * @param {object} [env] Environment to read the source cap from.
+ * @returns {Promise<Array<object>>} Normalized camera source objects.
+ */
+export async function loadGeorgiaSourcesFromOpenData(
+  _options = {},
+  env = process.env,
+) {
+  try {
+    const cameras = [];
+    const seen = new Set();
+    let start = 0;
+    let draw = 1;
+    for (let page = 0; ; page += 1) {
+      if (page >= GEORGIA_MAX_CATALOG_PAGES) {
+        console.warn(
+          `[CCTV] Georgia catalog stopped at the ${GEORGIA_MAX_CATALOG_PAGES}-page ceiling; the catalog may be incomplete`,
+        );
+        break;
+      }
+      const resp = await fetch(GEORGIA_511_CAMERAS_URL, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Origin: 'https://511ga.org',
+          Referer: 'https://511ga.org/cctv',
+        },
+        body: JSON.stringify({
+          draw,
+          start,
+          length: GEORGIA_511_PAGE_SIZE,
+        }),
+        signal: AbortSignal.timeout(CCTV_SOURCE_FETCH_TIMEOUT_MS),
+      });
+      if (!resp.ok) {
+        console.warn(`[CCTV] Georgia camera download failed: ${resp.status}`);
+        break;
+      }
+      const body = await readResponseJsonCapped(
+        resp,
+        GEORGIA_MAX_CATALOG_BYTES,
+      );
+      const rows = Array.isArray(body?.data) ? body.data : [];
+      for (const row of rows) {
+        const camera = georgiaRowToSource(row);
+        if (!camera || seen.has(camera.id)) continue;
+        seen.add(camera.id);
+        cameras.push(camera);
+      }
+      const total = toFiniteNumber(body?.recordsTotal, 0);
+      start += rows.length;
+      draw += 1;
+      // An exhausted page (or one reporting zero rows) ends the read.
+      if (!rows.length) break;
+      if (total && start >= total) break;
+      if (rows.length < GEORGIA_511_PAGE_SIZE && !total) break;
+    }
+
+    const maxRaw = Number(
+      env.CCTV_GEORGIA_MAX_SOURCES || DEFAULT_GEORGIA_MAX_SOURCES,
+    );
+    const maxCount = Number.isFinite(maxRaw)
+      ? Math.max(8, Math.min(4200, Math.floor(maxRaw)))
+      : DEFAULT_GEORGIA_MAX_SOURCES;
+    const prioritized = prioritizeSources(cameras, maxCount, GEORGIA_ANCHORS);
+    console.log(
+      `[CCTV] Loaded Georgia camera sources: ${cameras.length} (using nearest ${prioritized.length})`,
+    );
+    return prioritized;
+  } catch (error) {
+    console.warn(
+      '[CCTV] Georgia camera download error:',
       error?.message || error,
     );
     return [];

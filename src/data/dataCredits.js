@@ -336,6 +336,20 @@ export const DATA_CREDITS = [
       '<a href="https://data.calgary.ca/stories/s/Open-Calgary-Terms-of-Use/u45n-7awa" target="_blank" rel="noopener">Open Government Licence – City of Calgary</a>',
   },
   {
+    key: 'alberta-511-cctv',
+    html:
+      'CCTV cameras &amp; frames (Alberta): ' +
+      '<a href="https://511.alberta.ca/" target="_blank" rel="noopener">511 Alberta</a>, ' +
+      'Alberta Transportation — Government of Alberta',
+  },
+  {
+    key: 'georgia-cctv',
+    html:
+      'Traffic cameras (Georgia): ' +
+      '<a href="https://511ga.org/" target="_blank" rel="noopener">511 Georgia</a>, ' +
+      'Georgia Department of Transportation',
+  },
+  {
     key: 'florida-cctv',
     html:
       'Traffic cameras (Florida): FL511, Florida Department of Transportation. ' +

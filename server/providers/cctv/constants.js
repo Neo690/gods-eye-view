@@ -134,6 +134,49 @@ export const FLORIDA_ANCHORS = [
   { lat: 26.7153, lon: -80.0534 }, // West Palm Beach
   { lat: 30.4213, lon: -87.2169 }, // Pensacola (panhandle)
 ];
+/** 511 Alberta: keyless TravelIQ camera catalog (the same CARS platform as
+ * Ontario 511); every camera view is a still image under the site's own
+ * /map/Cctv/ directory. Staging hosts occasionally appear in catalog view
+ * URLs with the same path, and are rewritten onto the production origin. */
+export const ALBERTA_511_CAMERAS_URL =
+  'https://511.alberta.ca/api/v2/get/cameras?format=json&lang=en';
+export const ALBERTA_511_IMAGE_ORIGIN = 'https://511.alberta.ca/map/Cctv/';
+export const DEFAULT_ALBERTA_MAX_SOURCES = 400;
+/** Prioritization anchors: Alberta's population and highway centres. */
+export const ALBERTA_ANCHORS = [
+  { lat: 51.0447, lon: -114.0719 }, // Calgary
+  { lat: 53.5461, lon: -113.4938 }, // Edmonton
+  { lat: 52.2681, lon: -113.8112 }, // Red Deer
+  { lat: 49.6951, lon: -112.8451 }, // Lethbridge
+  { lat: 55.1709, lon: -118.7945 }, // Grande Prairie
+  { lat: 56.7262, lon: -111.379 }, // Fort McMurray
+];
+/** 511 Georgia (Georgia DOT) cameras: the keyless DataTables list endpoint the
+ * 511ga.org site POSTs its own camera table from. Rows carry WKT POINT
+ * geography and per-image lists on Georgia DOT hosts. */
+export const GEORGIA_511_CAMERAS_URL = 'https://511ga.org/List/GetData/Cameras';
+export const GEORGIA_511_PAGE_SIZE = 500;
+/** Paging ceiling: 8 pages covers 4,000 rows, far above the live table. */
+export const GEORGIA_MAX_CATALOG_PAGES = 8;
+/** Byte cap per DataTables page (500 rows as drawn). */
+export const GEORGIA_MAX_CATALOG_BYTES = 2 * 1024 * 1024;
+/** Locked frame hosts: the 511 site itself plus Georgia DOT's camera-origin
+ * host. The feed persistently misspells that host ("navigatos"), normalized
+ * at ingest so the frame proxy stays on one registered origin. */
+export const GEORGIA_IMAGE_HOSTS = ['511ga.org', 'navigator-c2c.dot.ga.gov'];
+export const GEORGIA_IMAGE_HOST_ALIASES = Object.freeze({
+  'navigatos-c2c.dot.ga.gov': 'navigator-c2c.dot.ga.gov',
+});
+export const DEFAULT_GEORGIA_MAX_SOURCES = 400;
+/** Prioritization anchors: Georgia's metro and highway-corridor centres. */
+export const GEORGIA_ANCHORS = Object.freeze([
+  { lat: 33.749, lon: -84.388 }, // Atlanta
+  { lat: 32.0835, lon: -81.0998 }, // Savannah
+  { lat: 32.4609, lon: -84.9877 }, // Columbus
+  { lat: 32.8407, lon: -83.6324 }, // Macon
+  { lat: 33.4735, lon: -82.0105 }, // Augusta
+  { lat: 30.8327, lon: -83.2785 }, // Valdosta
+]);
 /** TfL JamCams: one keyless list endpoint; frames live on a public S3 bucket. */
 export const TFL_JAMCAM_URL = 'https://api.tfl.gov.uk/Place/Type/JamCam';
 export const TFL_IMAGE_ORIGIN =
