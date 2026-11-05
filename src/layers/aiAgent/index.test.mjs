@@ -390,14 +390,30 @@ test('a loading tick carries no news', () => {
 // The robot body
 // ---------------------------------------------------------------------------
 
-test('the gait alternates leg pairs and cycles over the sprite frames', () => {
+test('the gait cycles over the sprite frames', () => {
   assert.ok(SPIDER_SPRITE_FRAMES >= 2);
-  const first = spiderLegPose(0, 4, 0);
-  const opposite = spiderLegPose(0, 4, 1);
-  assert.ok(Math.abs(first.swing + opposite.swing) < 1e-9);
-  assert.notEqual(spiderLegPose(1, 4, 0).swing, first.swing);
+  // The learned gait is a pure cycle: frame N + total lands on frame N.
+  for (let leg = 0; leg < 8; leg++) {
+    const first = spiderLegPose(0, 4, leg);
+    const wrapped = spiderLegPose(4, 4, leg);
+    assert.ok(Math.abs(first.swing - wrapped.swing) < 1e-9);
+    assert.ok(Math.abs(first.knee - wrapped.knee) < 1e-9);
+    assert.notEqual(spiderLegPose(1, 4, leg).swing, first.swing);
+  }
   // Headless: no canvas means no frames, never a throw.
   assert.deepEqual(spiderSpriteFrames({ doc: undefined }), []);
+});
+
+test('the learned walk is not a mirrored leg pair any more', () => {
+  // The analytic gait cancelled exactly every frame; the learned one does
+  // not — the two front legs lift at different phases of the cycle.
+  let unwrap = 0;
+  for (let f = 0; f < 4; f++) {
+    const left = spiderLegPose(f, 4, 0).swing;
+    const right = spiderLegPose(f, 4, 1).swing;
+    if (Math.abs(left + right) > 0.3) unwrap += 1;
+  }
+  assert.ok(unwrap > 0);
 });
 
 /** A Cesium stand-in: enough of the API the spider body touches. */
