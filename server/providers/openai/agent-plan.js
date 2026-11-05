@@ -5,6 +5,24 @@ import { OPENAI_AGENT_PLAN_MODEL_DEFAULT } from './constants.js';
 /** The agent relay never buffers more than this request body. */
 const MAX_PLAN_REQUEST_BYTES = 512 * 1024;
 
+/** The bounded upstream wait both planning relays share (see the Gemini fallback relay). */
+export const AGENT_PLAN_UPSTREAM_TIMEOUT_MS = 30_000;
+
+/**
+ * The status a plan relay answers after an upstream round trip — shared with
+ * the Gemini fallback so the planner ladder's symmetry is one function, not
+ * two copies that can drift: a shapable plan is 200, an upstream 2xx whose
+ * text never shapes into a plan is the relay's own 502, and any other
+ * upstream status passes through (a 429 ends the planner's ladder instead of
+ * falling through, which would repay one provider's throttle to another).
+ * @param {object|null} plan the parsed plan envelope, null when unusable.
+ * @param {{ok:boolean, status:number}} upstream the upstream fetch response.
+ * @returns {number}
+ */
+export function planRelayStatus(plan, upstream) {
+  return plan ? 200 : upstream.ok ? 502 : upstream.status || 502;
+}
+
 /**
  * Extract the model's answer text from an /v1/responses payload (same shape
  * as the HUD summary handler reads).
@@ -113,10 +131,14 @@ async function handleAgentPlan(req, res) {
         reasoning: { effort: 'low' },
         max_output_tokens: 700,
       }),
+      // Same safeguard as the Gemini fallback relay: a bounded wait so a
+      // hung upstream can't hold the planner's connection open forever —
+      // the timeout rethrows as a plain failure in the catch below.
+      signal: AbortSignal.timeout(AGENT_PLAN_UPSTREAM_TIMEOUT_MS),
     });
     const data = await response.json().catch(() => ({}));
     const plan = response.ok ? parseAgentPlan(extractResponseText(data)) : null;
-    res.statusCode = plan ? 200 : response.ok ? 502 : response.status || 502;
+    res.statusCode = planRelayStatus(plan, response);
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
     if (!plan) console.warn(`[agent-plan] upstream HTTP ${response.status}`);

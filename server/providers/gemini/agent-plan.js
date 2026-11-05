@@ -1,6 +1,10 @@
 import { readRequestBody } from '../common/request.js';
 import { makeCostRateLimiter, clientKey } from '../common/rate-limit.js';
-import { parseAgentPlan } from '../openai/agent-plan.js';
+import {
+  parseAgentPlan,
+  planRelayStatus,
+  AGENT_PLAN_UPSTREAM_TIMEOUT_MS,
+} from '../openai/agent-plan.js';
 import { GEMINI_AGENT_PLAN_MODEL_DEFAULT } from './config.js';
 
 /** The agent relay never buffers more than this request body. */
@@ -111,12 +115,14 @@ async function handleGeminiAgentPlan(req, res) {
             maxOutputTokens: 700,
           },
         }),
-        signal: AbortSignal.timeout(30_000),
+        // Same safeguard as the OpenAI primary relay (shared constant): a
+        // bounded wait so a hung upstream can't hold the connection open.
+        signal: AbortSignal.timeout(AGENT_PLAN_UPSTREAM_TIMEOUT_MS),
       },
     );
     const data = await response.json().catch(() => ({}));
     const plan = response.ok ? parseAgentPlan(extractResponseText(data)) : null;
-    res.statusCode = plan ? 200 : response.ok ? 502 : response.status || 502;
+    res.statusCode = planRelayStatus(plan, response);
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
     if (!plan)
