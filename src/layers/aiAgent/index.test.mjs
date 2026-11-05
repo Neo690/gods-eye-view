@@ -27,6 +27,9 @@ import {
   syncSpiderNoteOverlay,
 } from './spider.js';
 import { getWorldOverlayDiagnostics } from '../../overlays/worldOverlay.js';
+// The real application adapter: the note path is proven against the actual
+// world-overlay host, not a mock of it.
+import { overlayHost } from '../../app/layers/overlayHost.js';
 
 const DEG = Math.PI / 180;
 
@@ -538,7 +541,7 @@ test('createSpiderBody degrades without a scene instead of throwing', () => {
 });
 
 test('the inspection note rides the world-overlay host, never an entity label', () => {
-  destroySpiderNoteOverlay();
+  destroySpiderNoteOverlay(overlayHost);
   syncSpiderNoteOverlay({
     state: {
       note: 'Live Flights',
@@ -546,34 +549,47 @@ test('the inspection note rides the world-overlay host, never an entity label', 
       latDeg: 12,
       lonDeg: 34,
     },
+    host: overlayHost,
   });
   const withEntry = getWorldOverlayDiagnostics();
   assert.equal(withEntry.entriesBySource[SPIDER_NOTE_SOURCE], 1);
 
   // Moving on clears the caption instead of drawing an empty one.
-  syncSpiderNoteOverlay({ state: { note: '', latDeg: 12, lonDeg: 34 } });
+  syncSpiderNoteOverlay({ state: { note: '', latDeg: 12, lonDeg: 34 }, host: overlayHost });
   const cleared = getWorldOverlayDiagnostics();
   assert.equal(cleared.entriesBySource[SPIDER_NOTE_SOURCE] ?? 0, 0);
 
-  syncSpiderNoteOverlay({ state: { note: 'Cyclones', severity: 'emergency' } });
-  syncSpiderNoteOverlay({ state: { note: '   ', severity: 'info' } });
+  syncSpiderNoteOverlay({ state: { note: 'Cyclones', severity: 'emergency' }, host: overlayHost });
+  syncSpiderNoteOverlay({ state: { note: '   ', severity: 'info' }, host: overlayHost });
   assert.equal(
     getWorldOverlayDiagnostics().entriesBySource[SPIDER_NOTE_SOURCE] ?? 0,
     0,
     'a blank note is not a caption',
   );
 
-  destroySpiderNoteOverlay();
+  destroySpiderNoteOverlay(overlayHost);
 });
 
 test('a note source that never existed removes without creating one', () => {
-  destroySpiderNoteOverlay();
-  assert.doesNotThrow(() => syncSpiderNoteOverlay({ state: {} }));
+  destroySpiderNoteOverlay(overlayHost);
+  assert.doesNotThrow(() => syncSpiderNoteOverlay({ state: {}, host: overlayHost }));
   assert.equal(
     getWorldOverlayDiagnostics().entriesBySource[SPIDER_NOTE_SOURCE] ?? 0,
     0,
   );
   assert.ok(SPIDER_NOTE_ID);
+});
+
+// A layer built without an injected host simply has no note: it neither
+// creates nor destroys an overlay source.
+test('without an overlay host the note path is a no-op', () => {
+  destroySpiderNoteOverlay();
+  syncSpiderNoteOverlay({ state: { note: 'Cyclones', severity: 'warn' } });
+  assert.equal(
+    getWorldOverlayDiagnostics().entriesBySource[SPIDER_NOTE_SOURCE] ?? 0,
+    0,
+  );
+  destroySpiderNoteOverlay(overlayHost);
 });
 
 // ---------------------------------------------------------------------------

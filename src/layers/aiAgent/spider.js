@@ -15,11 +15,6 @@
 // @module layers/aiAgent/spider
 
 import * as CesiumModule from 'cesium';
-import {
-  clearOverlaySource,
-  removeOverlayEntry,
-  upsertOverlayEntry,
-} from '../../overlays/worldOverlay.js';
 
 /** One gait cycle in this many sprites. */
 export const SPIDER_SPRITE_FRAMES = 4;
@@ -417,7 +412,8 @@ export function createSpiderBody({
 }
 
 // ---------------------------------------------------------------------------
-// The inspection note, drawn by the world-overlay host, never a Cesium label.
+// The inspection note, drawn by the world-overlay host through the injected
+// adapter (src/app/layers/overlayHost.js), never a Cesium label.
 // ---------------------------------------------------------------------------
 
 /** World-overlay source reserved for the spider's inspection note. */
@@ -427,9 +423,10 @@ export const SPIDER_NOTE_SOURCE = 'gev-sentinel-spider-note';
 export const SPIDER_NOTE_ID = 'sentinel-note';
 
 /** Every entry of the note source at once, when the layer is torn down. */
-export function destroySpiderNoteOverlay() {
+export function destroySpiderNoteOverlay(host = null) {
+  if (!host) return;
   try {
-    clearOverlaySource(SPIDER_NOTE_SOURCE);
+    host.clearSource?.(SPIDER_NOTE_SOURCE);
   } catch {
     // The overlay host may already be gone with the page.
   }
@@ -446,18 +443,25 @@ export function destroySpiderNoteOverlay() {
  * @param {object} [options]
  * @param {object} [options.state] the layer's spider state (`note`, `severity`,
  *   `latDeg`, `lonDeg`). Read-only here.
+ * @param {object} [options.host] the world-overlay adapter handed in by the
+ *   application (no import across the package boundary).
  * @param {object} [options.cesium] Cesium module (test seam).
  */
-export function syncSpiderNoteOverlay({ state = {}, cesium = undefined } = {}) {
+export function syncSpiderNoteOverlay({
+  state = {},
+  host = null,
+  cesium = undefined,
+} = {}) {
   const Cesium = cesium ?? CesiumModule;
   const note = String(state?.note ?? '').trim();
+  if (!host) return;
   try {
     if (!note) {
-      removeOverlayEntry(SPIDER_NOTE_SOURCE, SPIDER_NOTE_ID);
+      host.removeEntry?.(SPIDER_NOTE_SOURCE, SPIDER_NOTE_ID);
       return;
     }
     const fromDegrees = Cesium?.Cartesian3?.fromDegrees;
-    upsertOverlayEntry(SPIDER_NOTE_SOURCE, {
+    host.upsertEntry?.(SPIDER_NOTE_SOURCE, {
       id: SPIDER_NOTE_ID,
       position: () =>
         typeof fromDegrees === 'function'

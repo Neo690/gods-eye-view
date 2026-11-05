@@ -76,12 +76,16 @@ const MAX_FRAME_DT_S = 0.25;
  * @param {{doc?: Document}} [options.docScope] test seam for the report card.
  * @param {() => number} [options.now] clock seam.
  * @param {Function} [options.fetchImpl] relay seam for the optional brief.
+ * @param {object} [options.overlayHost] the world-overlay adapter (see
+ *   `src/app/layers/overlayHost.js`); without one the inspection note stays
+ *   silent rather than reaching across the package boundary.
  * @returns {object} data-layer module (lifecycle contract).
  */
 export function createAiAgentLayer({
   docScope = undefined,
   now: nowSource = Date.now,
   fetchImpl = undefined,
+  overlayHost: noteOverlayHost = null,
 } = {}) {
   let document = docScope ?? globalThis.document;
   let manager = null;
@@ -122,15 +126,15 @@ export function createAiAgentLayer({
 
   const strId = (raw) => String(raw?.id ?? '');
 
-  /**
-   * The world-overlay entry that names what the spider is inspecting rides
+  /** The world-overlay entry that names what the spider is inspecting rides
    * wherever `spider.note` changes, so the caption can never stale behind the
    * walk. Entry graphics are forbidden for this (noCesiumLabels). A vanishing
-   * note removes the entry rather than drawing an empty caption.
+   * note removes the entry rather than drawing an empty caption. Without an
+   * injected host there is simply no caption.
    */
   function syncNote() {
     if (destroyed) return;
-    syncSpiderNoteOverlay({ state: spider });
+    syncSpiderNoteOverlay({ state: spider, host: noteOverlayHost });
   }
 
   /** Events about a layer still fresh enough to matter. */
@@ -514,7 +518,7 @@ export function createAiAgentLayer({
         // The scene may already be gone with the page.
       }
       body = null;
-      destroySpiderNoteOverlay();
+      destroySpiderNoteOverlay(noteOverlayHost);
       try {
         avatar?.destroy();
       } catch {
