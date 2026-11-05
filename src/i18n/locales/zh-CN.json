@@ -2926,7 +2926,6 @@
   "Network Monitor": "网络监控",
   "Reachable": "可达",
   "Unreachable": "不可达",
-  "Unknown": "未知",
   "Network-monitor feed rate limited (HTTP 429)": "网络监控数据流受限（HTTP 429）",
   "Hide the window list": "隐藏窗口列表",
   "Show the window list": "显示窗口列表",
@@ -3114,5 +3113,7 @@
   "Get the {platform} update": "获取 {platform} 更新",
   "Android": "Android",
   "iOS": "iOS",
-  "Windows": "Windows"
+  "Windows": "Windows",
+  "FOLLOW CAMERA": "跟随镜头",
+  "Drift the view to the Sentinel as it patrols; paused while you drag or zoom": "巡逻时缓慢保持画面跟随哨兵；拖动或缩放时暂停"
 }

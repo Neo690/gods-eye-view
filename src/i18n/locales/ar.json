@@ -3266,7 +3266,6 @@
   "Network Monitor": "مراقب الشبكة",
   "Reachable": "مستجيب",
   "Unreachable": "غير مستجيب",
-  "Unknown": "غير معروف",
   "Network-monitor feed rate limited (HTTP 429)": "تم تقييد تدفق مراقب الشبكة (HTTP 429)",
   "Hide the window list": "إخفاء قائمة النوافذ",
   "Show the window list": "إظهار قائمة النوافذ",
@@ -3459,5 +3458,7 @@
   "Get the {platform} update": "احصل على تحديث {platform}",
   "Android": "Android",
   "iOS": "iOS",
-  "Windows": "Windows"
+  "Windows": "Windows",
+  "FOLLOW CAMERA": "تتبع الكاميرا",
+  "Drift the view to the Sentinel as it patrols; paused while you drag or zoom": "يعود بالعرض بلطف إلى المراقبة أثناء دوريتها؛ يتوقف أثناء السحب أو التكبير"
 }

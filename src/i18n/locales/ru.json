@@ -3130,7 +3130,6 @@
   "Network Monitor": "Монитор сети",
   "Reachable": "Доступен",
   "Unreachable": "Недоступен",
-  "Unknown": "Неизвестно",
   "Network-monitor feed rate limited (HTTP 429)": "Поток монитора сети ограничен (HTTP 429)",
   "Hide the window list": "Скрыть список окон",
   "Show the window list": "Показать список окон",
@@ -3321,5 +3320,7 @@
   "Get the {platform} update": "Скачать обновление для {platform}",
   "Android": "Android",
   "iOS": "iOS",
-  "Windows": "Windows"
+  "Windows": "Windows",
+  "FOLLOW CAMERA": "СЛЕДИТЬ ЗА КАМЕРОЙ",
+  "Drift the view to the Sentinel as it patrols; paused while you drag or zoom": "Плавно ведёт вид за стражем во время патруля; пауза при перетаскивании или масштабировании"
 }

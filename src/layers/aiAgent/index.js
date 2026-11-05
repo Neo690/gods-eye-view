@@ -1,5 +1,5 @@
 // The Sentinel data layer ("AI Agent" is the id it keeps, "Sentinel" what it
-// shows): a small robot spider that walks the globe instead of an avatar that
+// shows): a glowing orb that travels the globe instead of an avatar that
 // watches it from a corner.
 //
 //   - the watchdog (watch.js) still diffs the data-layer roster every cycle,
@@ -48,6 +48,7 @@ import {
   toDegrees,
 } from './patrol.js';
 import { requestFindingBrief, BRIEF_MIN_INTERVAL_MS } from './brief.js';
+import { createSpiderCameraFollow } from './follow.js';
 
 export const AI_AGENT_LAYER_ID = 'ai-agent';
 
@@ -60,8 +61,9 @@ const EVENT_MEMORY_MS = 10 * 60 * 1000;
 /** Positions sampled from one layer when looking for its nearest record. */
 const PULSE_SAMPLE = 512;
 
-/** Arc walked per sprite frame: the gait follows distance, not wall time. */
-const GAIT_RAD_PER_FRAME = 0.011;
+/** Pulse rate of the orb in cycles per second, so the frame counter is a
+ *  wall-clock phase and never tied to the walk's distance. */
+const PULSE_HZ = 0.75;
 
 /** Where the spider appears when the camera cannot say where it looks. */
 const FALLBACK_SPAWN = Object.freeze({ latDeg: 20, lonDeg: 0 });
@@ -92,6 +94,7 @@ export function createAiAgentLayer({
   let viewer = null;
   let avatar = null;
   let body = null;
+  let follow = null;
   let enabled = false;
   let destroyed = false;
   let stopAnimation = null;
@@ -110,12 +113,12 @@ export function createAiAgentLayer({
     frame: 0,
     visible: false,
     scanning: false,
-    ringRadiusM: 400_000,
+    ringRadiusM: 150_000,
     note: '',
     severity: 'info',
   };
   let spriteFrames = [];
-  let gaitRad = 0;
+  let pulsePhase = 0;
   let target = null;
   let phase = 'rest';
   let scanUntil = 0;
@@ -123,6 +126,12 @@ export function createAiAgentLayer({
   let lastFrameAt = 0;
   let lastBriefAt = 0;
   let briefing = false;
+
+  // Opt-in gentle camera follow (see follow.js): off until the operator
+  // ticks the layer's row chip, and never resurrected by a reload.
+  let followEnabled = false;
+  let rowControlsListener = null;
+  const notifyRow = () => rowControlsListener?.();
 
   const strId = (raw) => String(raw?.id ?? '');
 
@@ -297,9 +306,18 @@ export function createAiAgentLayer({
     });
   }
 
-  /** One animation step: walk, scan, rest, then choose again. */
+  /** One animation step: walk, scan, rest, then choose again.
+   *
+   * The orb's glow breathes on the clock while the walk itself stays tied to
+   * distance, so a crawling frame-tracker (throttled page, idle GPU) still
+   * pulses at a steady rate without walking further faster.
+   */
   function tick(dtSec) {
     if (!enabled || destroyed) return;
+    if (spriteFrames.length) {
+      pulsePhase += dtSec * PULSE_HZ;
+      spider.frame = Math.floor(pulsePhase) % spriteFrames.length;
+    }
     const now = nowSource();
     if (phase === 'rest') {
       if (now >= restUntil && !target && !selectTarget()) rest();
@@ -314,10 +332,6 @@ export function createAiAgentLayer({
       spider.latDeg = step.latDeg;
       spider.lonDeg = step.lonDeg;
       spider.headingRad = step.headingRad;
-      gaitRad += step.travelledRad;
-      if (spriteFrames.length)
-        spider.frame =
-          Math.floor(gaitRad / GAIT_RAD_PER_FRAME) % spriteFrames.length;
       if (!step.arrived) return;
       phase = 'scan';
       scanUntil = now + SCAN_MS;
@@ -340,12 +354,13 @@ export function createAiAgentLayer({
     rest();
   }
 
-  /** The scan pulse follows the camera: readable from orbit and from low. */
+  /** The scan pulse follows the camera: readable from orbit and from low, at
+   *  a tight 1% of the altitude so the ring never swallows the view. */
   function updateRing() {
     const height = Number(viewer?.camera?.positionCartographic?.height);
     spider.ringRadiusM = Number.isFinite(height)
-      ? Math.max(120_000, height * 0.03)
-      : 400_000;
+      ? Math.max(20_000, height * 0.01)
+      : 150_000;
   }
 
   /** Ride the scene clock, so the walk costs nothing when the page idles. */
@@ -361,6 +376,9 @@ export function createAiAgentLayer({
       );
       lastFrameAt = now;
       if (dt > 0) tick(dt);
+      // After the walk advanced: the camera chases where the spider now is,
+      // and it is the walk's dt so a throttled frame cannot outpace it.
+      if (dt > 0 && followEnabled) follow?.step(dt);
     };
     preUpdate.addEventListener(onFrame);
     stopAnimation = () => {
@@ -469,6 +487,12 @@ export function createAiAgentLayer({
       if (document) avatar = createAvatarOverlay({ doc: document });
       spriteFrames = spiderSpriteFrames({ doc: document });
       body = createSpiderBody({ viewer, frames: spriteFrames, state: spider });
+      follow = createSpiderCameraFollow({
+        camera: viewer?.camera,
+        canvas: viewer?.canvas ?? viewer?.scene?.canvas,
+        state: spider,
+      });
+      follow.setEnabled(followEnabled);
       spawnAtCamera();
       spider.visible = false;
       avatar?.setState('idle');
@@ -481,6 +505,9 @@ export function createAiAgentLayer({
       enabled = true;
       spider.visible = true;
       avatar?.setSleeping(false);
+      // The tick stalls before the follow does its one gate read: a hidden
+      // spider already stops the drift, so re-arming is a mirror of the flag.
+      follow?.setEnabled(followEnabled);
       watchCycle();
       if (!selectTarget()) rest();
       startAnimation();
@@ -494,6 +521,8 @@ export function createAiAgentLayer({
       spider.note = '';
       syncNote();
       stopTicking();
+      // The drift rides the same animation loop; without it, nothing moves.
+      follow?.setEnabled(false);
       avatar?.setSleeping(true);
       return true;
     },
@@ -519,6 +548,9 @@ export function createAiAgentLayer({
       }
       body = null;
       destroySpiderNoteOverlay(noteOverlayHost);
+      follow?.destroy();
+      follow = null;
+      rowControlsListener = null;
       try {
         avatar?.destroy();
       } catch {
@@ -531,12 +563,55 @@ export function createAiAgentLayer({
       return true;
     },
 
+    /**
+     * The Layers row's one control: an opt-in checkbox that asks the view to
+     * follow the sentinel gently. Re-read live on every render, so a stale
+     * chip can never flip the toggle the wrong way.
+     */
+    getRowControls() {
+      return {
+        chips: [
+          {
+            id: 'follow',
+            label: t('FOLLOW CAMERA'),
+            active: followEnabled,
+            title: t(
+              'Drift the view to the Sentinel as it patrols; paused while you drag or zoom',
+            ),
+            onClick: () => {
+              followEnabled = !followEnabled;
+              follow?.setEnabled(followEnabled);
+              notifyRow();
+            },
+          },
+        ],
+      };
+    },
+
+    setRowControlsListener(value) {
+      rowControlsListener = typeof value === 'function' ? value : null;
+    },
+
+    /** Drop the panel's listener; the panel may outlive this layer. */
+    clearRowControlsListener() {
+      rowControlsListener = null;
+    },
+
     getStats() {
       const fresh = freshEvents();
       return {
         count: fresh.length,
         lastUpdate: lastSeen,
         loading: false,
+        // Live patrol readout: where the body stands, which pulse frame it
+        // shows, whether the scan ring is open and what it is reading.
+        latDeg: spider.latDeg,
+        lonDeg: spider.lonDeg,
+        frame: spider.frame,
+        scanning: spider.scanning,
+        note: spider.note,
+        severity: spider.severity,
+        ringRadiusM: spider.ringRadiusM,
         emptyHint:
           'The Sentinel spider walks the globe, inspects enabled layers and reports what each one holds.',
         mode: body ? 'patrol' : 'watchdog',

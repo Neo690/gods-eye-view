@@ -19,11 +19,13 @@ import { createAvatarOverlay } from './overlay.js';
 import {
   createSpiderBody,
   destroySpiderNoteOverlay,
-  spiderLegPose,
+  orbPulseGeometry,
   spiderSpriteFrames,
+  PULSE_INTENSITY,
   SPIDER_NOTE_ID,
   SPIDER_NOTE_SOURCE,
   SPIDER_SPRITE_FRAMES,
+  SPIDER_SPRITE_SIZE,
   syncSpiderNoteOverlay,
 } from './spider.js';
 import { getWorldOverlayDiagnostics } from '../../overlays/worldOverlay.js';
@@ -393,30 +395,40 @@ test('a loading tick carries no news', () => {
 // The robot body
 // ---------------------------------------------------------------------------
 
-test('the gait cycles over the sprite frames', () => {
+test('the orb pulse cycles through the sprite frames', () => {
   assert.ok(SPIDER_SPRITE_FRAMES >= 2);
-  // The learned gait is a pure cycle: frame N + total lands on frame N.
-  for (let leg = 0; leg < 8; leg++) {
-    const first = spiderLegPose(0, 4, leg);
-    const wrapped = spiderLegPose(4, 4, leg);
-    assert.ok(Math.abs(first.swing - wrapped.swing) < 1e-9);
-    assert.ok(Math.abs(first.knee - wrapped.knee) < 1e-9);
-    assert.notEqual(spiderLegPose(1, 4, leg).swing, first.swing);
+  // The pulse is a pure cycle: frame N + total lands on frame N.
+  for (let frame = 0; frame < 4; frame++) {
+    const first = orbPulseGeometry(frame, 4);
+    const wrapped = orbPulseGeometry(frame + 4, 4);
+    assert.ok(Math.abs(first.haloRadius - wrapped.haloRadius) < 1e-9);
+    assert.ok(Math.abs(first.haloAlpha - wrapped.haloAlpha) < 1e-9);
   }
+  // A breathe, not a blink: the calm frame and the peak differ, but softly —
+  // the amplitude grows with the intensity dial and nothing more.
+  const calm = orbPulseGeometry(0, 4);
+  const peak = orbPulseGeometry(2, 4);
+  assert.notEqual(calm.haloRadius, peak.haloRadius);
+  assert.ok(peak.haloRadius - calm.haloRadius <= 18 * Math.max(1, PULSE_INTENSITY) + 0.001);
   // Headless: no canvas means no frames, never a throw.
   assert.deepEqual(spiderSpriteFrames({ doc: undefined }), []);
 });
 
-test('the learned walk is not a mirrored leg pair any more', () => {
-  // The analytic gait cancelled exactly every frame; the learned one does
-  // not — the two front legs lift at different phases of the cycle.
-  let unwrap = 0;
-  for (let f = 0; f < 4; f++) {
-    const left = spiderLegPose(f, 4, 0).swing;
-    const right = spiderLegPose(f, 4, 1).swing;
-    if (Math.abs(left + right) > 0.3) unwrap += 1;
+test('the orb pulse rises to one peak and settles', () => {
+  const frames = [0, 1, 2, 3].map((f) => orbPulseGeometry(f, 4));
+  // The glow widens to the peak (frame 2) then narrows back out.
+  assert.ok(frames[1].haloRadius > frames[0].haloRadius);
+  assert.ok(frames[2].haloRadius > frames[1].haloRadius);
+  assert.ok(frames[3].haloRadius < frames[2].haloRadius);
+  // The cosine breathes symmetrically: the fall matches the rise exactly.
+  assert.ok(Math.abs(frames[1].haloRadius - frames[3].haloRadius) < 1e-9);
+  // The whole sprite stays on the canvas: nothing clips off the 96-px box,
+  // whatever the intensity dial is set to.
+  for (const frame of frames) {
+    // The 1.2 hem factor is the widest stroke the drawing pass may paint.
+    assert.ok(frame.haloRadius * 1.2 <= SPIDER_SPRITE_SIZE / 2);
+    assert.ok(frame.coreRadius > 0 && frame.coreRadius <= 8);
   }
-  assert.ok(unwrap > 0);
 });
 
 /** A Cesium stand-in: enough of the API the spider body touches. */

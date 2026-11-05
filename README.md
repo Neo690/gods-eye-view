@@ -69,7 +69,7 @@ Start with the included data sources, then add your own. Each layer is a separat
 - **🔗 Share Links:** Camera, style, layers, and even one tracked target serialize into a URL — a live target is a handoff, not a bookmark.
 - **🏠 Reset Globe:** One control — or one sentence — back to the full Earth.
 - **🌦️ Weather:** Animate GFS or ECMWF forecast wind, replay observed radar, satellite clouds and lightning on one timeline, and follow NHC/CPHC cyclone tracks. No key needed.
-- **🤖 Sentinel patrol:** a robot spider that walks your enabled layers, scans each one and reports what it holds — a broken feed pulls it off its route. Keyless by default; the wording rides OpenAI first, then Gemini automatically ([The Sentinel](#-the-sentinel)).
+- **🤖 Sentinel patrol:** a glowing orb that travels your enabled layers, scans each one and reports what it holds — a broken feed pulls it off its route. Keyless by default; the wording rides OpenAI first, then Gemini automatically ([The Sentinel](#-the-sentinel)).
 - **📷 Mapped ALPR cameras:** License-plate-reader camera locations tagged in OpenStreetMap, one city at a time. Locations and tags only; no key needed.
 - **🔭 Satellite passes:** Ask by voice when any loaded satellite next rises over you: rise, peak and set times, and whether you can see it.
 - **🔎 Analyst answers:** Count, filter and rank satellites, datacenters and dams by voice, alongside flights, ships, fires and quakes; answers say when a feed is stale or on a fallback.
@@ -443,11 +443,11 @@ _Ask for radio near anywhere and the globe starts broadcasting — every station
 
 ## 🤖 The Sentinel
 
-**DATA ▸ Sentinel** gives your world a watch spider: a small robot that walks the enabled layers one by one. Every cycle it ranks them by severity, feed health, freshness, distance and how long ago it looked at each, crawls along a great circle to the nearest record of the winner at a bounded turn rate, scans the ground on arrival and reports what that layer holds, in your language. A feed that breaks — or an event that escalates — pulls it off its route to look at that layer first. The patrol is local and deterministic: it never turns a layer on, and it never moves your camera.
+**DATA ▸ Sentinel** gives your world a watchful light: a glowing orb that travels the enabled layers one by one. Every cycle it ranks them by severity, feed health, freshness, distance and how long ago it looked at each, glides along a great circle to the nearest record of the winner at a bounded turn rate, scans the ground on arrival and reports what that layer holds, in your language. A feed that breaks — or an event that escalates — pulls it off its route to look at that layer first. The patrol is local and deterministic: it never turns a layer on, and it never moves your camera.
 
-Its walk is not a hand-drawn wiggle: the eight legs ride a gait table retargeted from a text-generated quadruped motion ([UniMate](https://github.com/Friedrich-M/UniMate)) — stride and lift out of phase, diagonal pairs timed the way the learned foot curves say — baked inline so there is still no sprite asset and no build step.
+Its look is a pure heartbeat: a white core with a cyan rim whose halo breathes on the clock — calm to peak and back — drawn into four inline pulse frames, so there is still no sprite asset and no build step.
 
-Patrolling is a no-key activity. Without any provider key the watchdog, the walk, the scans and the translated reports all run, and nothing is spent. The only thing a key buys is wording: when one inspection really matters (a feed down, an escalation), the Sentinel asks a model for a single sentence instead of its deterministic line — at most once every twenty minutes, in your language — and it ignores every action that answer proposes. The spider inspects; it does not drive your globe.
+Patrolling is a no-key activity. Without any provider key the watchdog, the travel, the scans and the translated reports all run, and nothing is spent. The only thing a key buys is wording: when one inspection really matters (a feed down, an escalation), the Sentinel asks a model for a single sentence instead of its deterministic line — at most once every twenty minutes, in your language — and it ignores every action that answer proposes. The orb inspects; it does not drive your globe.
 
 That one question rides two same-origin relays, tried in order, with the credential always server-side:
 

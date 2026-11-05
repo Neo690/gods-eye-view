@@ -3062,7 +3062,6 @@
   "Network Monitor": "Monitor de red",
   "Reachable": "Alcanzable",
   "Unreachable": "Inalcanzable",
-  "Unknown": "Desconocido",
   "Network-monitor feed rate limited (HTTP 429)": "Flujo del monitor de red limitado (HTTP 429)",
   "Hide the window list": "Ocultar la lista de ventanas",
   "Show the window list": "Mostrar la lista de ventanas",
@@ -3252,5 +3251,7 @@
   "Get the {platform} update": "Obtener la actualización de {platform}",
   "Android": "Android",
   "iOS": "iOS",
-  "Windows": "Windows"
+  "Windows": "Windows",
+  "FOLLOW CAMERA": "SEGUIR LA CÁMARA",
+  "Drift the view to the Sentinel as it patrols; paused while you drag or zoom": "Arrastra la vista suavemente hacia la centinela mientras patrulla; en pausa mientras arrastras o haces zoom"
 }
