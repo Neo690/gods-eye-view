@@ -23,7 +23,11 @@ import { datasetModelRef } from './modelReference.js';
  */
 function applyModelEnrichment(camera, hardware, clamp) {
   const { model, manufacturer, explicitFov } = hardware;
-  const spec = model ? lookupModelSpec(model, manufacturer) : null;
+  // A confirmed dataset row (`modelRef`, set above from the server's catalog
+  // join) resolves the spec directly; the feed's own spelling is the fallback.
+  const spec = model
+    ? lookupModelSpec(model, manufacturer, camera.modelRef)
+    : null;
   if (!spec) return;
   const range = horizontalFovRangeDeg(spec);
   if (range) {

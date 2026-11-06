@@ -4,8 +4,11 @@
 // real fov_deg string shapes, and the HUD spec-summary line.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import {
   lookupModelSpec,
+  specByDatasetRef,
   horizontalFovRangeDeg,
   fixedHorizontalFovDeg,
   specFovCapabilityToken,
@@ -298,4 +301,111 @@ test('specSummary renders the HUD line and degrades by omission', () => {
     'Axis X · 4K',
   );
   assert.equal(specSummary(null), '');
+});
+
+/** Every dataset row id the shipped camera-model index knows. */
+function datasetRowIds() {
+  const file = path.resolve(
+    import.meta.dirname,
+    '../../data/local_data/cctv_camera_models/cctv_camera_models.json',
+  );
+  const db = JSON.parse(readFileSync(file, 'utf8'));
+  const ids = new Set();
+  for (const rows of Object.values(db.lookup)) {
+    for (const row of rows) ids.add(row.id);
+  }
+  return ids;
+}
+
+test('every vendored record is keyed by a real dataset row id', () => {
+  const ids = datasetRowIds();
+  const refs = [
+    'axis-q6135-le',
+    'hanwha-xnp-6400rw',
+    'hikvision-ds-2cd2087g3-li2uy',
+    'axis-f4105-lre',
+    'axis-p3707-pe',
+    'axis-q6000-e-mk-ii',
+    'axis-q6054-e',
+    'axis-q6155-e',
+    'bosch-autodome-500i',
+    'bosch-autodome-ip-dynamic-7000-hd',
+    'bosch-autodome-ip-starlight-7000-hd',
+    'bosch-ndp-5502-30',
+    'bosch-ndp-7512-z30',
+    'bosch-vg5-836-ecev',
+    'cohu-3920-idome',
+    'cohu-3950-iview',
+    'cohu-3960',
+  ];
+  assert.equal(refs.length, 17);
+  for (const ref of refs) {
+    assert.ok(ids.has(ref), `${ref} is not a dataset row id`);
+    assert.equal(specByDatasetRef(ref)?.id, ref, ref);
+  }
+});
+
+test('specByDatasetRef resolves only ids this module vendors', () => {
+  assert.equal(specByDatasetRef('  AXIS-Q6155-E ')?.model, 'Q6155-E');
+  // A real dataset row that this module does not vendor is still no record.
+  const ids = datasetRowIds();
+  const unvendored = [...ids].find(
+    (id) => id.startsWith('2n-') || id.startsWith('acti-'),
+  );
+  assert.ok(unvendored, 'the snapshot has rows outside the vendored table');
+  assert.equal(specByDatasetRef(unvendored), null);
+  assert.equal(specByDatasetRef('axis-not-a-row'), null);
+  assert.equal(specByDatasetRef(''), null);
+  assert.equal(specByDatasetRef(null), null);
+  assert.equal(specByDatasetRef(42), null);
+});
+
+test('a confirmed dataset ref outranks the string matcher', () => {
+  // The ref already identified the hardware, so it wins even when the feed's
+  // own words would resolve elsewhere (or nowhere).
+  assert.equal(
+    lookupModelSpec('AXIS Q6155-E PTZ Dome', 'Axis', 'axis-q6155-e')?.id,
+    'axis-q6155-e',
+  );
+  assert.equal(
+    lookupModelSpec('VG4 AUTODOME', 'Bosch', 'bosch-ndp-7512-z30')?.id,
+    'bosch-ndp-7512-z30',
+  );
+  assert.equal(
+    lookupModelSpec('NOPE-1', undefined, 'cohu-3950-iview')?.id,
+    'cohu-3950-iview',
+  );
+  // An unvendored ref falls back to the words rather than resolving nothing.
+  assert.equal(
+    lookupModelSpec('Q6135-LE', 'Axis', 'axis-some-other-row')?.id,
+    'axis-q6135-le',
+  );
+});
+
+test('catalog resolves a confirmed modelRef even for an unresolvable string', () => {
+  const [confirmed, unvendored] = browserCatalog().buildCatalogFromSources([
+    {
+      id: 'confirmed',
+      lat: 47.7,
+      lon: -122,
+      fovDeg: 44,
+      model: 'PTZ Dome Camera',
+      modelRef: 'cohu-3950-iview',
+      modelMatch: 'exact',
+    },
+    {
+      id: 'unvendored',
+      lat: 47.7,
+      lon: -122,
+      fovDeg: 44,
+      model: 'Q6155-E',
+      modelRef: 'axis-some-other-row',
+      modelMatch: 'exact',
+    },
+  ]);
+  // Words alone would never resolve "PTZ Dome Camera"; the ref does.
+  assert.equal(confirmed.spec?.id, 'cohu-3950-iview');
+  assert.equal(confirmed.specFovMaxDeg, undefined);
+  // A ref with no vendored record leaves the ordinary matcher in charge.
+  assert.equal(unvendored.spec?.id, 'axis-q6155-e');
 });

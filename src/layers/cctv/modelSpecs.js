@@ -21,6 +21,12 @@
  * appear in Sarasota County FL and Sioux Falls SD open data; packs that
  * publish other hardware models can grow it, or vendor the full extract.
  *
+ * Every record's `id` IS its dataset row id, so a camera the catalog join
+ * confirmed (`modelRef`, server/providers/cctv/cameraDb.js) resolves by that
+ * id alone and never re-reads the feed's spelling; the word matcher stays as
+ * the fallback for hardware that has no confirmed row (seeds and
+ * hand-authored sources publish a model but no dataset ref).
+ *
  * Scope guardrail: records describe camera PRODUCTS (optics, resolution,
  * night vision) — never endpoints, stream paths, or access/config data.
  */
@@ -313,6 +319,23 @@ const RECORDS = [
   },
 ];
 
+/**
+ * Dataset row id → record. Each record is keyed by the cctv-camera-database
+ * id it was vendored under, so a confirmed `modelRef` is a direct lookup.
+ */
+const BY_DATASET_REF = new Map(RECORDS.map((record) => [record.id, record]));
+
+/**
+ * The vendored spec record for a dataset row id.
+ * @param {string} ref - Dataset row id, e.g. 'cohu-3950-iview'.
+ * @returns {Object|null} The verbatim record, or null when this module does
+ *   not vendor that row.
+ */
+export function specByDatasetRef(ref) {
+  if (typeof ref !== 'string' || !ref.trim()) return null;
+  return BY_DATASET_REF.get(ref.trim().toLowerCase()) || null;
+}
+
 /** Lowercase + collapse whitespace, the shared normal form for matching. */
 function normalize(value) {
   return String(value || '')
@@ -429,11 +452,17 @@ const NAME_INDEX = RECORDS.flatMap((record) => {
  * query itself. A `manufacturer` that is not the record's brand always
  * rejects. Matches on two different records are ambiguous → null (never
  * guesses).
+ * A `modelRef` from the catalog join is tried first: the dataset row already
+ * identified the hardware, so its vendored record wins without re-reading the
+ * feed's string.
  * @param {string} model - Hardware model as named by a source pack or seed.
  * @param {string} [manufacturer] - The source's manufacturer, when published.
+ * @param {string} [modelRef] - Dataset row id confirmed by the catalog join.
  * @returns {Object|null} The verbatim spec record, or null when unknown.
  */
-export function lookupModelSpec(model, manufacturer) {
+export function lookupModelSpec(model, manufacturer, modelRef) {
+  const byRef = specByDatasetRef(modelRef);
+  if (byRef) return byRef;
   const query = words(model).map(stripVariantSuffix);
   if (!query.length) return null;
   const maker = words(manufacturer);
