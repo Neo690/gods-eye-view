@@ -204,6 +204,12 @@ test('King County model and manufacturer survive the /api/cctv/sources boundary 
     CCTV_KINGCOUNTY_ENABLED: undefined,
     CCTV_KINGCOUNTY_MAX_SOURCES: undefined,
     CCTV_MAX_SOURCES: undefined,
+    // The temp source root has no sidecar of its own; point the join at the
+    // committed snapshot so this pins the real dataset row, not a fixture.
+    CCTV_CAMERA_MODELS_FILE: path.resolve(
+      import.meta.dirname,
+      '../data/local_data/cctv_camera_models/cctv_camera_models.json',
+    ),
   });
   t.mock.method(globalThis, 'fetch', async (url) => {
     if (String(url) !== KING_COUNTY_CAMERAS_URL)
@@ -229,17 +235,27 @@ test('King County model and manufacturer survive the /api/cctv/sources boundary 
   ]);
   assert.equal(served.get('kingcounty-56').model, 'Q6135-LE');
   assert.equal(served.get('kingcounty-56').manufacturer, 'Axis');
+  // The dataset join also travels: the row that confirmed this hardware and
+  // how the feed's own string reached it.
+  assert.equal(served.get('kingcounty-56').modelRef, 'axis-q6135-le');
+  assert.equal(served.get('kingcounty-56').modelMatch, 'exact');
   // Absent hardware is an explicit empty string on the wire, like
   // headingConfidence, so consumers never have to probe for the key.
   assert.equal(served.get('kingcounty-90').model, '');
   assert.equal(served.get('kingcounty-90').manufacturer, '');
+  assert.equal(served.get('kingcounty-90').modelRef, '');
+  assert.equal(served.get('kingcounty-90').modelMatch, '');
 
   const cameras = browserCatalog().buildCatalogFromSources(body.sources);
   const byId = new Map(cameras.map((camera) => [camera.id, camera]));
   assert.equal(byId.get('kingcounty-56').model, 'Q6135-LE');
   assert.equal(byId.get('kingcounty-56').manufacturer, 'Axis');
+  assert.equal(byId.get('kingcounty-56').modelRef, 'axis-q6135-le');
+  assert.equal(byId.get('kingcounty-56').modelMatch, 'exact');
   assert.equal(byId.get('kingcounty-90').model, '');
   assert.equal(byId.get('kingcounty-90').manufacturer, '');
+  assert.equal(byId.get('kingcounty-90').modelRef, '');
+  assert.equal(byId.get('kingcounty-90').modelMatch, '');
 });
 
 test('King County loader honors the max-sources cap', async (t) => {

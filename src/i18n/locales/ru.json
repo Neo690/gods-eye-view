@@ -2870,6 +2870,8 @@
   },
   "FOV {value}° (DATASHEET)": "ОБЗОР {value}° (ПО ПАСПОРТУ)",
   "SPEC FOV {span}° (CAPABILITY)": "ОБЗОР ПО ПАСПОРТУ {span}° (ВОЗМОЖНОСТИ)",
+  "MODEL {ref} (DATASET EXACT)": "МОДЕЛЬ {ref} (НАБОР ДАННЫХ: ТОЧНО)",
+  "MODEL {ref} (DATASET SERIES)": "МОДЕЛЬ {ref} (НАБОР ДАННЫХ: СЕРИЯ)",
   "{spec} · SPECS: CCTV-DATABASE.COM": "{spec} · ХАРАКТЕРИСТИКИ: CCTV-DATABASE.COM",
   "Canada only · ECCC AQHI network": "Только Канада · сеть AQHI ECCC",
   "{count} stations reporting": {

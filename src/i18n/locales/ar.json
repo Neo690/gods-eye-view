@@ -577,6 +577,8 @@
   "FOV {value}° (DATASHEET)": "FOV {value}° (ورقة بيانات)",
   "FOV {value}°": "FOV {value}°",
   "SPEC FOV {span}° (CAPABILITY)": "FOV مواصفات {span}° (القدرة)",
+  "MODEL {ref} (DATASET EXACT)": "الطراز {ref} (قاعدة البيانات: مطابقة تامة)",
+  "MODEL {ref} (DATASET SERIES)": "الطراز {ref} (قاعدة البيانات: سلسلة)",
   "COVERAGE {value}km²": "التغطية {value}كم²",
   "OVERLAP {count} cams": "تداخل {count} كاميرات",
   "ISOLATED VIEW": "عرض معزول",

@@ -4,6 +4,7 @@ import {
   horizontalFovRangeDeg,
   fixedHorizontalFovDeg,
 } from './modelSpecs.js';
+import { datasetModelRef } from './modelReference.js';
 
 /**
  * Applies datasheet enrichment to a camera in place: when it names a known
@@ -212,6 +213,8 @@ export function createCatalog({ state: layerState, services, parts, source }) {
       const poseSource =
         source.poseSource === 'curated' ? 'curated' : seed?.poseSource || null;
 
+      const datasetRef = datasetModelRef(source);
+
       const camera = {
         id,
         name: String(source.name || seed?.name || id),
@@ -248,6 +251,12 @@ export function createCatalog({ state: layerState, services, parts, source }) {
         poseSource,
         model: String(source.model || ''),
         manufacturer: String(source.manufacturer || ''),
+        // Dataset-source confirmation from the server's catalog join
+        // (server/providers/cctv/cameraDb.js): the dataset row that backs this
+        // camera's `model`, if any. Validated, so a malformed pair reads as
+        // no confirmation at all.
+        modelRef: datasetRef?.ref || '',
+        modelMatch: datasetRef?.match || '',
       };
       applyModelEnrichment(
         camera,

@@ -7,6 +7,7 @@ import {
   specFovCapabilityToken,
   isDatasheetFov,
 } from './modelSpecs.js';
+import { datasetModelRef, modelRefToken } from './modelReference.js';
 
 export function createPresentation({
   state: layerState,
@@ -82,6 +83,14 @@ export function createPresentation({
         : t('SRC {value}', {
             value: String(active.camera.feedType || 'image').toUpperCase(),
           }),
+      // Dataset-backed hardware identity, shown beside the source token: the
+      // row the catalog join matched, and whether the feed's own string named
+      // it exactly or only by series number.
+      modelRefToken(active.camera, (ref, match) =>
+        match === 'series'
+          ? t('MODEL {ref} (DATASET SERIES)', { ref })
+          : t('MODEL {ref} (DATASET EXACT)', { ref }),
+      ),
       t('{value} CONTEXT', { value: viewBand.toUpperCase() }),
       // Identified hardware: append the model's datasheet specs + attribution.
       active.camera.spec
@@ -107,6 +116,7 @@ export function createPresentation({
       activeId || parts.selection.getActiveRecord()?.camera.id || null;
     const camera = record.camera;
     const health = layerState._healthById.get(camera.id) || null;
+    const modelReference = datasetModelRef(camera);
     const isActive = camera.id === resolvedActiveId;
     const refreshMs = isActive
       ? ACTIVE_FRAME_REFRESH_MS
@@ -150,6 +160,9 @@ export function createPresentation({
       sourceStatus: health?.status || 'unknown',
       sourceMessage: health?.message || '',
       sourceLabel: health?.label || camera.provider || '',
+      // Dataset-backed hardware identity (catalog.js / modelReference.js).
+      modelRef: modelReference?.ref || '',
+      modelMatch: modelReference?.match || '',
       credit: camera.credit || '',
       calibration: {
         ...parts.calibration.normalizeCalibration(camera.calibration),

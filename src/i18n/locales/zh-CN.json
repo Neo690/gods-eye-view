@@ -536,6 +536,8 @@
   "FOV {value}° (DATASHEET)": "FOV {value}°（规格书）",
   "FOV {value}°": "FOV {value}°",
   "SPEC FOV {span}° (CAPABILITY)": "规格 FOV {span}°（可调范围）",
+  "MODEL {ref} (DATASET EXACT)": "型号 {ref}（数据集·精确）",
+  "MODEL {ref} (DATASET SERIES)": "型号 {ref}（数据集·系列）",
   "COVERAGE {value}km²": "覆盖 {value}km²",
   "OVERLAP {count} cams": "重叠 {count} 个摄像头",
   "ISOLATED VIEW": "独立视角",

@@ -2811,6 +2811,8 @@
   },
   "FOV {value}° (DATASHEET)": "FOV {value}° (FICHA TÉCNICA)",
   "SPEC FOV {span}° (CAPABILITY)": "FOV DE FICHA {span}° (CAPACIDAD)",
+  "MODEL {ref} (DATASET EXACT)": "MODELO {ref} (CONJUNTO DE DATOS · EXACTO)",
+  "MODEL {ref} (DATASET SERIES)": "MODELO {ref} (CONJUNTO DE DATOS · SERIE)",
   "{spec} · SPECS: CCTV-DATABASE.COM": "{spec} · ESPECIFICACIONES: CCTV-DATABASE.COM",
   "Canada only · ECCC AQHI network": "Solo Canadá · red AQHI de ECCC",
   "{count} stations reporting": {

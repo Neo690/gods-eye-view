@@ -539,6 +539,8 @@
   "FOV {value}° (DATASHEET)": "CHAMP {value}° (FICHE TECHNIQUE)",
   "FOV {value}°": "CHAMP {value}°",
   "SPEC FOV {span}° (CAPABILITY)": "CHAMP SPÉC {span}° (CAPACITÉ)",
+  "MODEL {ref} (DATASET EXACT)": "MODÈLE {ref} (JEU DE DONNÉES · EXACT)",
+  "MODEL {ref} (DATASET SERIES)": "MODÈLE {ref} (JEU DE DONNÉES · SÉRIE)",
   "COVERAGE {value}km²": "COUVERTURE {value}km²",
   "OVERLAP {count} cams": "RECOUVREMENT {count} caméras",
   "ISOLATED VIEW": "VUE ISOLÉE",
