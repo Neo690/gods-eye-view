@@ -350,6 +350,16 @@ export const DATA_CREDITS = [
       'Georgia Department of Transportation',
   },
   {
+    key: 'madrid-cctv',
+    html:
+      // Opt-in: the camera list and positions are open data, the frames are the
+      // city's own traffic images (see DATA_SOURCES.md).
+      'Traffic cameras (Madrid, when enabled): ' +
+      '<a href="https://datos.madrid.es/dataset/202088-0-trafico-camaras" target="_blank" rel="noopener">Ayuntamiento de Madrid</a> — ' +
+      'datos.madrid.es, license ' +
+      '<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>',
+  },
+  {
     key: 'florida-cctv',
     html:
       'Traffic cameras (Florida): FL511, Florida Department of Transportation. ' +

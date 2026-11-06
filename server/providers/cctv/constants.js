@@ -588,6 +588,31 @@ export const TRAFFICWATCHNI_ANCHORS = [
   { lat: 54.9966, lon: -7.3086 }, // Derry
 ];
 
+/** Madrid city traffic cameras (Ayuntamiento de Madrid, CC BY 4.0). The
+ * catalog is the KML the open-data entry 202088 resolves to: one Placemark per
+ * camera carrying its number, its name, its position, and an escaped HTML
+ * snippet whose <img> is the current frame on Informo. The documented entry
+ * (`datos.madrid.es/egob/catalogo/202088-0-trafico-camaras.kml`) answers with
+ * two redirects to this file, and every catalog fetch in this module refuses
+ * redirects, so the resolved URL is the endpoint. */
+export const MADRID_CAMERAS_URL =
+  'https://informo.madrid.es/informo/tmadrid/CCTV.kml';
+/** Frames live on the city's own Informo host, one JPEG per camera number in
+ * `/cameras/`; the directory is the pin, so a same-host redirect cannot walk
+ * out of it. */
+export const MADRID_IMAGE_ORIGIN = 'https://informo.madrid.es/cameras/';
+export const DEFAULT_MADRID_MAX_SOURCES = 400;
+/** Hard ceiling on the KML body. The live catalog is ~240 KB; this only stops
+ * an upstream that streams an unbounded body from being buffered without
+ * limit. */
+export const MADRID_MAX_CATALOG_BYTES = 2 * 1024 * 1024;
+/** Prioritization anchors: the city core at Puerta del Sol and the northern
+ * hub at Plaza de Castilla, where the KML's own ordering starts. */
+export const MADRID_ANCHORS = [
+  { lat: 40.4168, lon: -3.7038 }, // Puerta del Sol
+  { lat: 40.4661, lon: -3.6893 }, // Plaza de Castilla
+];
+
 /** Camera CATALOGS change rarely; 15 min keeps multi-megabyte upstream list refetches (Austin rows.json + 4 Caltrans districts + TfL + Ontario 511) infrequent. Frames are fetched per-request and are unaffected. */
 export const CCTV_SOURCE_CACHE_MS = 15 * 60 * 1000;
 /** Per-provider catalog-fetch timeout. Bounds the worst-case refresh so one

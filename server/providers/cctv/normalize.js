@@ -437,6 +437,18 @@ export function isLikelyCataloniaCoordinate(lat, lon) {
   );
 }
 
+/** Madrid municipality, with slack for the M-40 ring and the cameras the city
+ * runs just past it (observed extent 40.33..40.52 N, −3.78..−3.55 E). */
+export function isLikelyMadridCoordinate(lat, lon) {
+  return (
+    isPlausibleLatLon(lat, lon) &&
+    lat >= 40.28 &&
+    lat <= 40.6 &&
+    lon >= -3.85 &&
+    lon <= -3.48
+  );
+}
+
 /**
  * Decode numeric HTML character references, decimal ("&#237;") and hex
  * ("&#xED;") alike, the entity form the Catalonia feed uses for accented

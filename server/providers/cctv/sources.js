@@ -74,6 +74,11 @@ import {
   GEORGIA_IMAGE_HOST_ALIASES,
   DEFAULT_GEORGIA_MAX_SOURCES,
   GEORGIA_ANCHORS,
+  MADRID_CAMERAS_URL,
+  MADRID_IMAGE_ORIGIN,
+  DEFAULT_MADRID_MAX_SOURCES,
+  MADRID_MAX_CATALOG_BYTES,
+  MADRID_ANCHORS,
   CATALONIA_CAMERAS_URL,
   CATALONIA_MAX_CATALOG_BYTES,
   CATALONIA_IMAGE_HOSTS,
@@ -157,6 +162,7 @@ import {
   isLikelyCalgaryCoordinate,
   isLikelyFloridaCoordinate,
   isLikelyCataloniaCoordinate,
+  isLikelyMadridCoordinate,
   decodeNumericEntities,
   isLikelyNycCoordinate,
   isLikelyHongKongCoordinate,
@@ -4149,6 +4155,166 @@ export async function loadGeorgiaSourcesFromOpenData(
   } catch (error) {
     console.warn(
       '[CCTV] Georgia camera download error:',
+      error?.message || error,
+    );
+    return [];
+  }
+}
+
+/**
+ * One Madrid KML Placemark → a camera source, or null when the record does not
+ * name a camera on the city's own image host.
+ *
+ * The KML is the file the city's own camera map loads. A Placemark carries the
+ * camera number in ExtendedData `Numero`, its name in `Nombre`, a Point in
+ * `lon,lat[,alt]` order, and a description that is an HTML-escaped snippet
+ * whose `<img>` is the current frame. Frame URLs carry a cache-buster
+ * (`?v=63085`); it is dropped so the registered URL stays stable, and only
+ * Informo's `/cameras/<name>.jpg` paths are accepted — a placemark naming any
+ * other host is not a Madrid camera frame.
+ *
+ * @param {string} placemark - The markup between one `<Placemark>` and its
+ *   closing tag.
+ * @returns {?object} Normalized camera source, or null.
+ */
+export function madridCameraToSource(placemark) {
+  const markup = String(placemark ?? '');
+  if (!markup) return null;
+  const numero = markup
+    .match(/<Data\s+name=["']Numero["']\s*>\s*<Value>([^<]*)<\/Value>/i)?.[1]
+    ?.trim();
+  if (!/^\d{4,6}$/.test(numero || '')) return null;
+
+  const point = markup.match(
+    /<coordinates>\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*(?:,[^<]*)?<\/coordinates>/i,
+  );
+  if (!point) return null;
+  const lon = toFiniteNumber(point[1]);
+  const lat = toFiniteNumber(point[2]);
+  if (!isLikelyMadridCoordinate(lat, lon)) return null;
+
+  const snippet = decodeNumericEntities(
+    markup.match(/<description>([\s\S]*?)<\/description>/i)?.[1] || '',
+  );
+  const src = snippet.match(/<img\s+[^>]*?src=["']?([^"'\s>]+)/i)?.[1];
+  if (!src) return null;
+  let frame;
+  try {
+    const parsed = new URL(src);
+    frame = `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return null;
+  }
+  const imageUrl = pinnedCameraUrl(frame, MADRID_IMAGE_ORIGIN);
+  if (
+    !imageUrl ||
+    !/^\/cameras\/[A-Za-z0-9_-]{1,40}\.(?:jpe?g|png)$/i.test(
+      new URL(imageUrl).pathname,
+    )
+  )
+    return null;
+
+  const id = `es-madrid-${numero}`;
+  const nombre = decodeNumericEntities(
+    markup.match(
+      /<Data\s+name=["']Nombre["']\s*>\s*<Value>([^<]*)<\/Value>/i,
+    )?.[1] || '',
+  );
+  return {
+    id,
+    name: nombre || `Madrid ${numero}`,
+    city: 'Madrid',
+    cityId: 'madrid',
+    provider: 'Ayuntamiento de Madrid',
+    lat,
+    lon,
+    // The KML publishes no bearing for its cameras.
+    headingDeg: fallbackHeadingFromId(id),
+    headingConfidence: 'low',
+    pitchDeg: -14,
+    fovDeg: 44,
+    rangeM: 145,
+    mountHeightM: 8,
+    feedType: 'image',
+    url: imageUrl,
+    snapshotUrl: imageUrl,
+    license: 'CC BY 4.0 — Ayuntamiento de Madrid (datos.madrid.es)',
+    credit: 'Ayuntamiento de Madrid',
+    sourceKind: 'madrid-open-data',
+  };
+}
+
+/**
+ * Fetch and parse the Madrid city traffic-camera KML (Ayuntamiento de Madrid,
+ * CC BY 4.0).
+ *
+ * One request to the resolved open-data resource; redirects are refused like
+ * every other catalog, so the documented entry's two hops are already resolved
+ * in MADRID_CAMERAS_URL. Placemarks are parsed into sources, deduplicated by
+ * camera number, and distance-prioritized to stay within
+ * CCTV_MADRID_MAX_SOURCES. A frame URL that is missing, off Informo, or not one
+ * of its camera JPEGs drops that placemark rather than registering a foreign
+ * origin.
+ *
+ * @param {{sourceRoot?: string}} [options] - Unused; the pack reads the network.
+ * @param {Record<string, string|undefined>} [env] - Environment to read.
+ * @returns {Promise<Array<object>>} Normalized camera sources, or [] on error.
+ */
+export async function loadMadridSourcesFromOpenData(
+  _options = {},
+  env = process.env,
+) {
+  try {
+    const endpoint = env.CCTV_MADRID_URL || MADRID_CAMERAS_URL;
+    const resp = await fetch(endpoint, {
+      headers: {
+        Accept:
+          'application/vnd.google-earth.kml+xml, application/xml;q=0.9, */*;q=0.8',
+      },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(CCTV_SOURCE_FETCH_TIMEOUT_MS),
+    });
+    if (resp.status >= 300 && resp.status < 400) {
+      console.warn(
+        '[CCTV] Madrid catalog redirected; redirects are not followed',
+      );
+      try {
+        await resp.body?.cancel();
+      } catch {
+        /* no-op */
+      }
+      return [];
+    }
+    if (!resp.ok) {
+      console.warn('[CCTV] Madrid camera download failed:', resp.status);
+      return [];
+    }
+    const body = await readResponseTextCapped(resp, MADRID_MAX_CATALOG_BYTES);
+    const cameras = [];
+    const seen = new Set();
+    for (const [, placemark] of body.matchAll(
+      /<Placemark(?:\s[^>]*)?>([\s\S]*?)<\/Placemark>/g,
+    )) {
+      const camera = madridCameraToSource(placemark);
+      if (!camera || seen.has(camera.id)) continue;
+      seen.add(camera.id);
+      cameras.push(camera);
+    }
+
+    const maxRaw = Number(
+      env.CCTV_MADRID_MAX_SOURCES || DEFAULT_MADRID_MAX_SOURCES,
+    );
+    const maxCount = Number.isFinite(maxRaw)
+      ? Math.max(8, Math.min(1000, Math.floor(maxRaw)))
+      : DEFAULT_MADRID_MAX_SOURCES;
+    const prioritized = prioritizeSources(cameras, maxCount, MADRID_ANCHORS);
+    console.log(
+      `[CCTV] Loaded Madrid camera sources: ${cameras.length} (using nearest ${prioritized.length})`,
+    );
+    return prioritized;
+  } catch (error) {
+    console.warn(
+      '[CCTV] Madrid camera download error:',
       error?.message || error,
     );
     return [];

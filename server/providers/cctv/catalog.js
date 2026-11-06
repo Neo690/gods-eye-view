@@ -31,6 +31,7 @@ import {
   loadFloridaSourcesFromOpenData,
   loadAlbertaSourcesFromOpenData,
   loadGeorgiaSourcesFromOpenData,
+  loadMadridSourcesFromOpenData,
 } from './sources.js';
 
 /** Env kill switch: unset or anything but "0" means enabled. */
@@ -177,6 +178,15 @@ const LIVE_PACKS = [
     name: 'taiwan',
     enabled: () => envEnabled('CCTV_TAIWAN_ENABLED'),
     load: loadTaiwanSources,
+  },
+  {
+    // Opt-in while the pack's frame use is reviewed: the camera list and the
+    // positions are open data, but the city's camera images are published for
+    // viewing the traffic situation, so the operator turns the pack on rather
+    // than having a fresh install reach Informo unasked (see DATA_SOURCES.md).
+    name: 'madrid',
+    enabled: () => envOptIn('CCTV_MADRID_ENABLED'),
+    load: loadMadridSourcesFromOpenData,
   },
 ];
 /**
