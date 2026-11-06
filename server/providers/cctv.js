@@ -260,6 +260,8 @@ export function cctvProxy({ sourceRoot = process.cwd() } = {}) {
               poseSource: source.poseSource,
               model: source.model || '',
               manufacturer: source.manufacturer || '',
+              modelRef: source.modelRef || '',
+              modelMatch: source.modelMatch || '',
               license: source.license,
               credit: source.credit || '',
               code: source.code || '',

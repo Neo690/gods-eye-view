@@ -3,6 +3,7 @@ import path from 'node:path';
 import { DEFAULT_CCTV_SOURCE_FILE, CCTV_SOURCE_CACHE_MS } from './constants.js';
 import { allocateSourceCap, resolveCatalogCap } from './cap.js';
 import { loadGroundHeights, joinGroundHeights } from './groundHeights.js';
+import { loadCameraModels, joinCameraModels } from './cameraDb.js';
 import { cameraRegion, normalizeSourceItem } from './normalize.js';
 import { loadLithuaniaSources } from './lithuania.js';
 import { loadTaiwanSources } from './taiwan.js';
@@ -344,10 +345,17 @@ export function createCctvCatalog({ sourceRoot = process.cwd() } = {}) {
     // Shipped ground heights (src/data/local_data/cctv_ground_heights/, produced by
     // scripts/precompute-cctv-heights.mjs) ride along on the served source so
     // the client can place a camera and its monitor plane with zero sampling.
-    const capped = joinGroundHeights(
+    let capped = joinGroundHeights(
       allocation.sources,
       loadGroundHeights(sourceRoot),
     );
+    // Shipped camera-model index (src/data/local_data/cctv_camera_models/,
+    // produced by scripts/build-cctv-camera-models.mjs, CC0
+    // ch-bas/cctv-camera-database) fills a missing `manufacturer` and attaches
+    // `modelRef`/`modelMatch` where a feed's own hardware `model` string names
+    // one row of the dataset unambiguously. Feeds that publish no `model`
+    // (most packs) are untouched, and nothing here contacts the dataset repo.
+    capped = joinCameraModels(capped, loadCameraModels(sourceRoot));
     const trimmed = allocation.packs.filter((pack) => pack.kept < pack.offered);
     // Each pack's own nearest-first cap and the shared catalog cap both trim.
     const trimmedPacks = packs
