@@ -61,6 +61,7 @@ export class PanelChrome {
     readInitialShare,
     readScrollRestoreOwner,
     readDisplayScrollTop,
+    readSharedCollapsed = () => undefined,
   }) {
     Object.assign(this, elements, operations, {
       readHud,
@@ -69,6 +70,7 @@ export class PanelChrome {
       readInitialShare,
       readScrollRestoreOwner,
       readDisplayScrollTop,
+      readSharedCollapsed,
     });
     this._disposed = false;
     this._lifetime = new UiLifetime();
@@ -299,6 +301,9 @@ export class PanelChrome {
   }
 
   _collapsePanelOnEscape(event, panelId) {
+    // In a phone sheet, Escape closes the sheet (mobileShell.js), not a panel.
+    if (globalThis.document?.body?.hasAttribute?.('data-mobile-sheet'))
+      return false;
     return collapsePanelOnEscape(event, {
       panel: document.getElementById(panelId),
       onChange: (collapsed, options) =>
@@ -400,7 +405,10 @@ export class PanelChrome {
       disclosure: panel.querySelector(`[data-dock-toggle-target="${panelId}"]`),
       openDelayMs,
       closeDelayMs,
-      isActive: () => !this._disposed,
+      // A phone sheet holds its trays open; the tab bar closes them.
+      isActive: () =>
+        !this._disposed &&
+        !globalThis.document?.body?.hasAttribute?.('data-mobile-sheet'),
       onChange: (collapsed, options) =>
         this.setPanelCollapsed(panelId, collapsed, options),
       onEscape: (event) => this._collapsePanelOnEscape(event, panelId),
@@ -531,7 +539,11 @@ export class PanelChrome {
         panelEl.classList.contains('cyber-accordion-collapsed')
           ? false
           : panelEl.classList.contains('collapsed');
-      const entry = { id: spec.id, collapsed };
+      // A panel the phone shell only borrowed for a sheet shares its own state.
+      const entry = {
+        id: spec.id,
+        collapsed: this.readSharedCollapsed(spec.id) ?? collapsed,
+      };
       if (spec.pinnable)
         entry.pinned = panelEl.classList.contains('dock-pinned');
       specs.push(entry);
@@ -595,7 +607,9 @@ export class PanelChrome {
       !restore &&
       !nextCollapsed &&
       document.documentElement?.dataset.uiTheme === 'cyber' &&
-      panelEl.parentElement === this._rightPanelStack
+      panelEl.parentElement === this._rightPanelStack &&
+      // Phone sheets show several rail panels at once.
+      !document.body?.classList?.contains('mobile-shell')
     ) {
       for (const peer of this._rightPanelStack.children) {
         if (

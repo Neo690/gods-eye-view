@@ -38,6 +38,7 @@ import { firePerimetersProxy } from './firePerimeters.js';
 import { gnssIntegrityProxy } from './gnssIntegrity.js';
 import { radiationProxy } from './radiation.js';
 import { spaceWeatherProxy } from './spaceWeather.js';
+import { ghostMapsProxy } from './ghostMaps.js';
 import { cycloneProxy } from './cyclones.js';
 import { windProxy } from './wind.js';
 import { iotSensorsProxy } from './iotSensors.js';
@@ -114,6 +115,7 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     gnssIntegrityProxy(),
     radiationProxy(),
     spaceWeatherProxy(),
+    ghostMapsProxy(),
     keySetupEndpoint(),
   ];
 }

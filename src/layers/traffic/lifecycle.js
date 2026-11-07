@@ -12,7 +12,6 @@ export function createLifecycle({
   parts,
   source,
 }) {
-  const { holdContinuousRender, releaseContinuousRender } = services.render;
   const { resetFlowTileCache } = source;
 
   const methods = {
@@ -108,7 +107,7 @@ export function createLifecycle({
       layerState._enabled = true;
       layerState._surfaceFrameRemover = observeTrafficSurface(viewer.scene);
       if (layerState._roadMode !== 'tomtom') source.prefetch?.();
-      holdContinuousRender('traffic'); // per-frame animator (perf wave 2)
+      parts.animation.syncRenderDemand();
       layerState._lastAnimTime = 0;
       layerState._pointCollection.show = true;
 
@@ -169,7 +168,7 @@ export function createLifecycle({
     disable(viewer) {
       layerState._enabled = false;
       services.credits?.hideOsmCredit?.(layerState._viewer, 'traffic');
-      releaseContinuousRender('traffic');
+      parts.animation.syncRenderDemand();
       clearTimeout(layerState._fetchTimeout);
       clearInterval(layerState._enableKickTimer);
       layerState._enableKickTimer = null;
