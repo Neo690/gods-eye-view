@@ -56,6 +56,7 @@ const PANEL_GROUPS = [
     label: msg('Cameras'),
     ids: [
       'cctv',
+      'camera-advisories',
       'plate-reader',
       'face-privacy',
       'recent-imagery',

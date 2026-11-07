@@ -437,6 +437,18 @@ export function isLikelyCataloniaCoordinate(lat, lon) {
   );
 }
 
+/** Illinois, with slack for the Gateway layer's border cameras (observed
+ * extent 37.78..42.49 N, −91.42..−87.52 E). */
+export function isLikelyIllinoisCoordinate(lat, lon) {
+  return (
+    isPlausibleLatLon(lat, lon) &&
+    lat >= 37.6 &&
+    lat <= 42.6 &&
+    lon >= -91.6 &&
+    lon <= -87.4
+  );
+}
+
 /** Madrid municipality, with slack for the M-40 ring and the cameras the city
  * runs just past it (observed extent 40.33..40.52 N, −3.78..−3.55 E). */
 export function isLikelyMadridCoordinate(lat, lon) {

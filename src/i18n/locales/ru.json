@@ -3330,5 +3330,19 @@
   "iOS": "iOS",
   "Windows": "Windows",
   "FOLLOW CAMERA": "СЛЕДИТЬ ЗА КАМЕРОЙ",
-  "Drift the view to the Sentinel as it patrols; paused while you drag or zoom": "Плавно ведёт вид за стражем во время патруля; пауза при перетаскивании или масштабировании"
+  "Drift the view to the Sentinel as it patrols; paused while you drag or zoom": "Плавно ведёт вид за стражем во время патруля; пауза при перетаскивании или масштабировании",
+  "Camera Advisories": "Уведомления безопасности камер",
+  "A published advisory names this product line; the installed firmware was not observed.": "Опубликованное уведомление относится к этой линейке продуктов; установленная прошивка не наблюдалась.",
+  "{flagged} cameras with published advisories · {identified} with identified hardware": "{flagged} камер с опубликованными уведомлениями · {identified} с определённым оборудованием",
+  "{count} matching advisories · {brandOnly} brand-level only": "{count} совпадающих уведомлений · {brandOnly} только на уровне бренда",
+  "firmware not observed · no device contacted": "прошивка не наблюдалась · ни одно устройство не опрашивалось",
+  "{count} brands not queried": "{count} брендов не опрошено",
+  "stale answer": "устаревший ответ",
+  "Camera-advisory feed unavailable": "Лента уведомлений о камерах недоступна",
+  "No advisory answer yet": "Ответа об уведомлениях пока нет",
+  "Advisory source unavailable: {source}": "Источник уведомлений недоступен: {source}",
+  "Cameras with published advisories": "Камеры с опубликованными уведомлениями",
+  "Camera-advisory feed rate limited (HTTP 429)": "Лента уведомлений о камерах ограничена (HTTP 429)",
+  "Camera-advisory feed disabled on this server (HTTP 503)": "Лента уведомлений о камерах отключена на этом сервере (HTTP 503)",
+  "Malformed camera-advisory response": "Некорректный ответ ленты уведомлений о камерах"
 }

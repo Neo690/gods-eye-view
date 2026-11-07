@@ -3468,5 +3468,19 @@
   "iOS": "iOS",
   "Windows": "Windows",
   "FOLLOW CAMERA": "تتبع الكاميرا",
-  "Drift the view to the Sentinel as it patrols; paused while you drag or zoom": "يعود بالعرض بلطف إلى المراقبة أثناء دوريتها؛ يتوقف أثناء السحب أو التكبير"
+  "Drift the view to the Sentinel as it patrols; paused while you drag or zoom": "يعود بالعرض بلطف إلى المراقبة أثناء دوريتها؛ يتوقف أثناء السحب أو التكبير",
+  "Camera Advisories": "نشرات أمن الكاميرات",
+  "A published advisory names this product line; the installed firmware was not observed.": "تنطبق نشرة منشورة على هذه السلسلة من المنتجات؛ لم تُلاحظ النسخة الثابتة المثبّتة.",
+  "{flagged} cameras with published advisories · {identified} with identified hardware": "{flagged} كاميرا لديها نشرات منشورة · {identified} بجهاز محدَّد",
+  "{count} matching advisories · {brandOnly} brand-level only": "{count} نشرة مطابقة · {brandOnly} على مستوى العلامة فقط",
+  "firmware not observed · no device contacted": "لم تُلاحظ النسخة الثابتة · لم يُتصل بأي جهاز",
+  "{count} brands not queried": "{count} علامات لم تُستعلم",
+  "stale answer": "إجابة قديمة",
+  "Camera-advisory feed unavailable": "مصدر نشرات الكاميرات غير متاح",
+  "No advisory answer yet": "لا توجد إجابة عن النشرات بعد",
+  "Advisory source unavailable: {source}": "مصدر النشرات غير متاح: {source}",
+  "Cameras with published advisories": "كاميرات لديها نشرات منشورة",
+  "Camera-advisory feed rate limited (HTTP 429)": "مصدر نشرات الكاميرات محدود (HTTP 429)",
+  "Camera-advisory feed disabled on this server (HTTP 503)": "مصدر نشرات الكاميرات معطّل على هذا الخادم (HTTP 503)",
+  "Malformed camera-advisory response": "استجابة نشرات الكاميرات غير صالحة"
 }

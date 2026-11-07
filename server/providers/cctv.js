@@ -704,5 +704,11 @@ export function cctvProxy({ sourceRoot = process.cwd() } = {}) {
      * module's state.
      */
     readSnapshot,
+    /**
+     * The merged catalogue this server serves, for routes that join metadata
+     * (camera advisories) rather than fetch pixels. Read-only: the cache, the
+     * caps and the pack trim notes stay this module's property.
+     */
+    getSources: getCctvSources,
   };
 }

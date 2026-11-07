@@ -3261,5 +3261,19 @@
   "Global disasters source unavailable": "Source « catastrophes mondiales » indisponible",
   "{title} · {when}": "{title} · {when}",
   "FOLLOW CAMERA": "SUIVRE LA CAMÉRA",
-  "Drift the view to the Sentinel as it patrols; paused while you drag or zoom": "Emmène la vue doucement vers la sentinelle pendant sa patrouille ; en pause pendant votre manipulation ou zoom"
+  "Drift the view to the Sentinel as it patrols; paused while you drag or zoom": "Emmène la vue doucement vers la sentinelle pendant sa patrouille ; en pause pendant votre manipulation ou zoom",
+  "Camera Advisories": "Avis de sécurité caméras",
+  "A published advisory names this product line; the installed firmware was not observed.": "Un avis publié nomme cette gamme de produits ; le micrologiciel installé n’a pas été observé.",
+  "{flagged} cameras with published advisories · {identified} with identified hardware": "{flagged} caméras avec avis publiés · {identified} avec matériel identifié",
+  "{count} matching advisories · {brandOnly} brand-level only": "{count} avis correspondants · {brandOnly} au niveau marque uniquement",
+  "firmware not observed · no device contacted": "micrologiciel non observé · aucun appareil contacté",
+  "{count} brands not queried": "{count} marques non interrogées",
+  "stale answer": "réponse périmée",
+  "Camera-advisory feed unavailable": "Flux d’avis caméras indisponible",
+  "No advisory answer yet": "Aucune réponse d’avis pour l’instant",
+  "Advisory source unavailable: {source}": "Source d’avis indisponible : {source}",
+  "Cameras with published advisories": "Caméras avec avis publiés",
+  "Camera-advisory feed rate limited (HTTP 429)": "Flux d’avis caméras limité (HTTP 429)",
+  "Camera-advisory feed disabled on this server (HTTP 503)": "Flux d’avis caméras désactivé sur ce serveur (HTTP 503)",
+  "Malformed camera-advisory response": "Réponse d’avis caméras mal formée"
 }

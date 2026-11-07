@@ -11,6 +11,7 @@ import { createApplicationFlights } from './layers/flights.js';
 import { createApplicationMilitary } from './layers/militaryFlights.js';
 import { createApplicationVessels } from './layers/aisLiveVessels.js';
 import { createApplicationCctv } from './layers/cctv.js';
+import { createApplicationCameraAdvisories } from './layers/cameraAdvisories.js';
 import { createApplicationPlateReader } from './layers/alprReader.js';
 import { createApplicationFacePrivacy } from './layers/facePrivacy.js';
 import { createApplicationRadio } from './layers/radio.js';
@@ -173,6 +174,7 @@ export function createApplicationCatalog({
         createApplicationLaunches({ source: sources.launches, satellites }),
         createApplicationTraffic({ source: sources.traffic, surface }),
         cctv,
+        createApplicationCameraAdvisories(),
         createApplicationPlateReader({
           source: sources['plate-reader'],
           camera: cctv,

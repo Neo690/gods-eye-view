@@ -27,6 +27,7 @@ export const LAYER_NAME_KEYS = Object.freeze({
   'rocket-launches': msg('Space Missions (30d)'),
   traffic: msg('Street Traffic'),
   cctv: msg('CCTV'),
+  'camera-advisories': msg('Camera Advisories'),
   'plate-reader': msg('Plate Reader'),
   'face-privacy': msg('Face Privacy'),
   radio: msg('Radio'),

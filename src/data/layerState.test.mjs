@@ -202,8 +202,8 @@ function encode(state) {
 
 test('production registry is exact, canonical, and rejects incomplete contracts', async () => {
   assert.equal(validateLayerStateRegistry(), true);
-  assert.equal(REGISTERED_LAYER_IDS.length, 46);
-  assert.equal(new Set(REGISTERED_LAYER_IDS).size, 46);
+  assert.equal(REGISTERED_LAYER_IDS.length, 47);
+  assert.equal(new Set(REGISTERED_LAYER_IDS).size, 47);
   assert.ok(REGISTERED_LAYER_IDS.includes('transit'));
   assert.ok(REGISTERED_LAYER_IDS.includes('radiation'));
   assert.deepEqual(REGISTERED_LAYER_IDS, [...REGISTERED_LAYER_IDS].sort());
@@ -243,21 +243,22 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   for (const [id, token] of Object.entries(LEGACY_LAYER_STATE_TOKENS)) {
     assert.equal(LAYER_STATE_TOKEN_RESERVATIONS[id], token);
   }
-  assert.equal(nextLayerStateToken(), '0a');
+  assert.equal(nextLayerStateToken(), '0b');
   // 6 and 7 belong to Radio Sites and Connected Objects, 8 to the mapped
   // railway stations and 9 to the transport-activity layer; every digit is
   // owned, so the allocator works through the base-36 pairs, where 00 is the
   // solar-storm layer, 01 the orbit-change layer, 02 the satellite-watch
   // layer, 03 the fishing-effort layer, 04 the plate reader, 05 the
   // face-privacy layer, 06 the operator-node monitor, 07 the EMSC quake
-  // network, 08 the AI Sentinel and 09 the global disasters tier.
+  // network, 08 the AI Sentinel, 09 the global disasters tier and 0a the
+  // camera-advisories layer.
   assert.equal(
     nextLayerStateToken({
       ...LAYER_STATE_TOKEN_RESERVATIONS,
       alpha: '8',
       bravo: '9',
     }),
-    '0a',
+    '0b',
   );
   const digitsExhausted = {
     ...LAYER_STATE_TOKEN_RESERVATIONS,
@@ -265,11 +266,8 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
       [...'56789'].map((digit) => [`prior-${digit}`, digit]),
     ),
   };
-  assert.equal(nextLayerStateToken(digitsExhausted), '0a');
-  assert.equal(
-    nextLayerStateToken({ ...digitsExhausted, used: '0a' }),
-    '0b',
-  );
+  assert.equal(nextLayerStateToken(digitsExhausted), '0b');
+  assert.equal(nextLayerStateToken({ ...digitsExhausted, used: '0b' }), '0c');
   assert.equal(
     nextLayerStateToken({
       ...digitsExhausted,
@@ -315,8 +313,8 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   assert.equal(
     validateLayerStateAllocations(LAYER_STATE_TOKEN_RESERVATIONS, {
       ...LAYER_STATE_TOKEN_RESERVATIONS,
-      future: '0a',
-      next: '0b',
+      future: '0b',
+      next: '0c',
     }),
     true,
   );
@@ -324,9 +322,9 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
     () =>
       validateLayerStateAllocations(LAYER_STATE_TOKEN_RESERVATIONS, {
         ...LAYER_STATE_TOKEN_RESERVATIONS,
-        future: '0b',
+        future: '0c',
       }),
-    /next free token 0a/,
+    /next free token 0b/,
   );
   // Hand the last digit back, which is what a ledger with one digit still
   // free looks like now that every real one is owned.
@@ -335,7 +333,7 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   assert.equal(
     validateLayerStateAllocations(beforeLastDigit, {
       ...beforeLastDigit,
-      futurePair: '0a',
+      futurePair: '0b',
       futureDigit: '9',
     }),
     true,
@@ -343,8 +341,8 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   assert.equal(
     validateLayerStateAllocations(digitsExhausted, {
       ...digitsExhausted,
-      pairB: '0b',
-      pairA: '0a',
+      pairB: '0c',
+      pairA: '0b',
     }),
     true,
   );
@@ -354,7 +352,7 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
         { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '5' },
         { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '5', competing: '5' },
       ),
-    /next free token 0a/,
+    /next free token 0b/,
   );
   assert.throws(
     () => validateLayerStateAllocations({ future: '00' }, { future: '01' }),
@@ -511,7 +509,14 @@ test('unknown enabled-layer tokens reject the payload instead of becoming an emp
 
 test('malformed enabled-layer lists reject the entire payload', () => {
   const unclaimed = nextLayerStateToken();
-  for (const value of ['.c', 'c.', 'c..e', 'c.c', unclaimed, `c.${unclaimed}`]) {
+  for (const value of [
+    '.c',
+    'c.',
+    'c..e',
+    'c.c',
+    unclaimed,
+    `c.${unclaimed}`,
+  ]) {
     assert.equal(
       decodeLayerStateParams(new URLSearchParams(`v=2&l=${value}`)),
       null,

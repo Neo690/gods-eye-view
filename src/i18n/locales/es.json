@@ -3261,5 +3261,19 @@
   "iOS": "iOS",
   "Windows": "Windows",
   "FOLLOW CAMERA": "SEGUIR LA CÁMARA",
-  "Drift the view to the Sentinel as it patrols; paused while you drag or zoom": "Arrastra la vista suavemente hacia la centinela mientras patrulla; en pausa mientras arrastras o haces zoom"
+  "Drift the view to the Sentinel as it patrols; paused while you drag or zoom": "Arrastra la vista suavemente hacia la centinela mientras patrulla; en pausa mientras arrastras o haces zoom",
+  "Camera Advisories": "Avisos de seguridad de cámaras",
+  "A published advisory names this product line; the installed firmware was not observed.": "Un aviso publicado nombra esta línea de productos; no se observó el firmware instalado.",
+  "{flagged} cameras with published advisories · {identified} with identified hardware": "{flagged} cámaras con avisos publicados · {identified} con hardware identificado",
+  "{count} matching advisories · {brandOnly} brand-level only": "{count} avisos coincidentes · {brandOnly} solo a nivel de marca",
+  "firmware not observed · no device contacted": "firmware no observado · ningún dispositivo contactado",
+  "{count} brands not queried": "{count} marcas no consultadas",
+  "stale answer": "respuesta desactualizada",
+  "Camera-advisory feed unavailable": "Fuente de avisos de cámaras no disponible",
+  "No advisory answer yet": "Aún no hay respuesta de avisos",
+  "Advisory source unavailable: {source}": "Fuente de avisos no disponible: {source}",
+  "Cameras with published advisories": "Cámaras con avisos publicados",
+  "Camera-advisory feed rate limited (HTTP 429)": "Fuente de avisos de cámaras limitada (HTTP 429)",
+  "Camera-advisory feed disabled on this server (HTTP 503)": "Fuente de avisos de cámaras desactivada en este servidor (HTTP 503)",
+  "Malformed camera-advisory response": "Respuesta de avisos de cámaras mal formada"
 }

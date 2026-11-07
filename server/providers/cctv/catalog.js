@@ -32,6 +32,7 @@ import {
   loadAlbertaSourcesFromOpenData,
   loadGeorgiaSourcesFromOpenData,
   loadMadridSourcesFromOpenData,
+  loadIllinoisSourcesFromOpenData,
 } from './sources.js';
 
 /** Env kill switch: unset or anything but "0" means enabled. */
@@ -187,6 +188,14 @@ const LIVE_PACKS = [
     name: 'madrid',
     enabled: () => envOptIn('CCTV_MADRID_ENABLED'),
     load: loadMadridSourcesFromOpenData,
+  },
+  {
+    // Opt-in: the layer declares CC BY-SA 2.0, whose ShareAlike condition goes
+    // beyond the attribution-only packs, so an operator turns it on rather than
+    // a fresh install redistributing the frames (see DATA_SOURCES.md).
+    name: 'illinois',
+    enabled: () => envOptIn('CCTV_ILLINOIS_ENABLED'),
+    load: loadIllinoisSourcesFromOpenData,
   },
 ];
 /**

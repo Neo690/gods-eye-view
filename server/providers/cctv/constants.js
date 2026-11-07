@@ -613,6 +613,36 @@ export const MADRID_ANCHORS = [
   { lat: 40.4661, lon: -3.6893 }, // Plaza de Castilla
 ];
 
+/** Illinois Gateway / Travel Midwest cameras (Illinois DOT). The ArcGIS layer
+ * is IDOT's own (`IDOTAdmin`), declares CC BY-SA 2.0 in its item licence, and
+ * carries one feature per camera view: position, location, view direction, and
+ * a snapshot URL. Two hosts appear in `SnapShot` — IDOT's programme host
+ * (`cctv.travelmidwest.com`, registered here) and Lake County PASSAGE's own
+ * site (`www.lakecountypassage.com`), a partner agency's host whose terms are
+ * outside the IDOT layer's licence declaration and which this pack therefore
+ * does not register. */
+export const ILLINOIS_CAMERAS_URL =
+  'https://services2.arcgis.com/aIrBD8yn1TDTEXoz/arcgis/rest/services/TrafficCamerasTM_Public/FeatureServer/0/query';
+export const ILLINOIS_IMAGE_ORIGIN =
+  'https://cctv.travelmidwest.com/snapshots/';
+export const DEFAULT_ILLINOIS_MAX_SOURCES = 400;
+/** The layer pages at 1,000 features; the live catalog is ~3,800. */
+export const ILLINOIS_PAGE_SIZE = 1000;
+export const ILLINOIS_MAX_CATALOG_PAGES = 5;
+/** Hard ceiling per page (~1.1 MB live). */
+export const ILLINOIS_MAX_CATALOG_BYTES = 4 * 1024 * 1024;
+/** Fields the loader asks for: everything a camera needs, nothing else. */
+export const ILLINOIS_CAMERA_FIELDS =
+  'OBJECTID,CameraLocation,CameraDirection,SnapShot,TooOld,y,x';
+/** Prioritization anchors: Chicago, Springfield, Peoria, Rockford, Urbana. */
+export const ILLINOIS_ANCHORS = [
+  { lat: 41.8781, lon: -87.6298 }, // Chicago
+  { lat: 39.798, lon: -89.644 }, // Springfield
+  { lat: 40.6936, lon: -89.589 }, // Peoria
+  { lat: 42.2711, lon: -89.094 }, // Rockford
+  { lat: 40.1106, lon: -88.2073 }, // Urbana
+];
+
 /** Camera CATALOGS change rarely; 15 min keeps multi-megabyte upstream list refetches (Austin rows.json + 4 Caltrans districts + TfL + Ontario 511) infrequent. Frames are fetched per-request and are unaffected. */
 export const CCTV_SOURCE_CACHE_MS = 15 * 60 * 1000;
 /** Per-provider catalog-fetch timeout. Bounds the worst-case refresh so one

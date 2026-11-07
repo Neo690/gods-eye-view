@@ -442,6 +442,17 @@ const layers = [
     noQuery: 'use control_cctv',
   },
   {
+    id: 'camera-advisories',
+    aliases: [
+      'camera advisories',
+      'camera security',
+      'camera vulnerabilities',
+      'cisa advisories',
+    ],
+    context: false,
+    noQuery: 'advisory matches are presented in the layer panel',
+  },
+  {
     id: 'alpr-cameras',
     aliases: [
       'flock cameras',

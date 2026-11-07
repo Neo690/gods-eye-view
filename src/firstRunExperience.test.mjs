@@ -1003,11 +1003,12 @@ test('the voice TOOL SCHEMA matches the pinned contract — the mission mapping 
   // seismic network extends the manifest with its own aliases and field
   // hints. The five localized layers (emsc-seismic, global-disasters,
   // ai-agent, space-weather, fishing-effort) add fr/es/ru/zh-CN/ar spoken
-  // alias hints to their descriptions.
-  assert.equal(block.length, 32322, 'serialized tool schema length drifted');
+  // alias hints to their descriptions. Camera advisories extends the manifest
+  // with its own aliases and noQuery hint.
+  assert.equal(block.length, 32415, 'serialized tool schema length drifted');
   assert.equal(
     crypto.createHash('sha256').update(block).digest('hex'),
-    'af0dc67cdb57fb3e2c15373123cba044b80e106f1fc3476ac2c943eae296dba7',
+    'c81726aabe181547e7994f7add9d9fb5ec6a8fa7871f8834b99d327e22557f10',
     'the first-run missions must ride EXISTING tools: no schema edit, no cache bust',
   );
   const instructions = fs.readFileSync(

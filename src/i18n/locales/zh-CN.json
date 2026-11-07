@@ -3123,5 +3123,19 @@
   "iOS": "iOS",
   "Windows": "Windows",
   "FOLLOW CAMERA": "跟随镜头",
-  "Drift the view to the Sentinel as it patrols; paused while you drag or zoom": "巡逻时缓慢保持画面跟随哨兵；拖动或缩放时暂停"
+  "Drift the view to the Sentinel as it patrols; paused while you drag or zoom": "巡逻时缓慢保持画面跟随哨兵；拖动或缩放时暂停",
+  "Camera Advisories": "相机安全公告",
+  "A published advisory names this product line; the installed firmware was not observed.": "已发布的公告针对该产品系列；未观测到已安装的固件。",
+  "{flagged} cameras with published advisories · {identified} with identified hardware": "{flagged} 台相机有已发布公告 · {identified} 台硬件已识别",
+  "{count} matching advisories · {brandOnly} brand-level only": "{count} 条匹配公告 · {brandOnly} 条仅到品牌层级",
+  "firmware not observed · no device contacted": "固件未观测 · 未接触任何设备",
+  "{count} brands not queried": "{count} 个品牌未查询",
+  "stale answer": "过期的回答",
+  "Camera-advisory feed unavailable": "相机公告源不可用",
+  "No advisory answer yet": "尚无公告回答",
+  "Advisory source unavailable: {source}": "公告源不可用：{source}",
+  "Cameras with published advisories": "有已发布公告的相机",
+  "Camera-advisory feed rate limited (HTTP 429)": "相机公告源受限（HTTP 429）",
+  "Camera-advisory feed disabled on this server (HTTP 503)": "此服务器已禁用相机公告源（HTTP 503）",
+  "Malformed camera-advisory response": "相机公告响应格式错误"
 }

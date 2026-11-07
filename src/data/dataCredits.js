@@ -360,6 +360,15 @@ export const DATA_CREDITS = [
       '<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>',
   },
   {
+    key: 'illinois-cctv',
+    html:
+      // Opt-in: the layer's own licence adds ShareAlike to attribution (see
+      // DATA_SOURCES.md); partner frames on other hosts are not proxied.
+      'Traffic cameras (Illinois, when enabled): ' +
+      '<a href="https://travelmidwest.com/" target="_blank" rel="noopener">Illinois DOT Gateway / Travel Midwest</a>, license ' +
+      '<a href="https://creativecommons.org/licenses/by-sa/2.0/" target="_blank" rel="noopener">CC BY-SA 2.0</a>',
+  },
+  {
     key: 'florida-cctv',
     html:
       'Traffic cameras (Florida): FL511, Florida Department of Transportation. ' +
@@ -413,6 +422,13 @@ export const DATA_CREDITS = [
     html:
       'Traffic cameras (Toronto): contains information licensed under the ' +
       '<a href="https://www.toronto.ca/city-government/data-research-maps/open-data/open-data-licence/" target="_blank" rel="noopener">Open Government Licence – Toronto</a>',
+  },
+  {
+    key: 'camera-advisories',
+    html:
+      'Camera security advisories: ' +
+      '<a href="https://www.cisa.gov/topics/industrial-control-systems" target="_blank" rel="noopener">CISA</a> ICS advisories (TLP:WHITE, US Government work) and ' +
+      '<a href="https://nvd.nist.gov/" target="_blank" rel="noopener">NVD</a> CVE records. Published metadata only — no camera was contacted, and no installed firmware was observed',
   },
   {
     key: 'mapillary',

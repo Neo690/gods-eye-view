@@ -48,8 +48,9 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // space weather, fishing effort) so the Realtime model can route speech
     // in those languages to the right layer id; the prompt budget follows
     // with headroom. Russian, zh-CN and Arabic spoken names now lead the
-    // hint for the same layers the same way.
-    '4b1bce6173d313b3b18a1e65509db72f394cebd03548d834e6df870106b7166b',
+    // hint for the same layers the same way. Camera advisories extends the
+    // manifest with its own aliases and noQuery hint.
+    '785d9613d6c78d08ad74d7ac5ba9e85ddc881c7b53f2b52563f43e8964abe581',
   );
 });
 

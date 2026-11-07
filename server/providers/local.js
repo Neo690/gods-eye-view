@@ -14,6 +14,7 @@ import { regionalBriefProxy } from './regional/briefing.js';
 import { geocodeProxy } from './regional/place.js';
 import { weatherEffectsProxy } from './regional/weather-effects.js';
 import { cctvProxy } from './cctv.js';
+import { cameraAdvisoriesProxy } from './cameraAdvisories.js';
 import { alprProxy } from './alpr.js';
 import { faceProxy } from './face.js';
 import { defaultSourceRoot } from './common/source-root.js';
@@ -80,6 +81,9 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     geocodeProxy(),
     weatherEffectsProxy(),
     cctv,
+    // Joined to the same catalogue, and to public advisory metadata only: this
+    // route never opens a camera's own stream or frame URL.
+    cameraAdvisoriesProxy({ getCatalog: cctv.getSources }),
     alprProxy({ cctv, warm: true }),
     // Same conversation with the same catalogue: the face route reads only
     // cameras this server already serves, like the plate reader above it.
