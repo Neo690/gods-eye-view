@@ -1,0 +1,33 @@
+# xtool's project file, read by `xtool dev` / `xtool install` from this
+# directory. It is the counterpart of `project.yml` for the XcodeGen route:
+# same sources, same bundle identifier, no signing material.
+#
+# `xtool.yml`, not `.xtool.yml`: that is the name the tool looks for.
+#
+# What xtool fills in on its own, so this file does not repeat it: the app's
+# CFBundleIdentifier (from `bundleID`), CFBundleExecutable and CFBundleName
+# (from the product), CFBundleVersion, MinimumOSVersion (from Package.swift's
+# platform), CFBundleSupportedPlatforms and UIRequiredDeviceCapabilities.
+# Anything this file's `infoPath` sets wins over those defaults.
+
+version: 1
+
+# The identifier the shell has always shipped: profiles, the CI export and the
+# install path all name it.
+bundleID: com.godseye.view
+
+# Must match the executable product in `Package.swift`.
+product: GodsEyeView
+
+# The Xcode plist carries `$(...)` build settings that only Xcode expands
+# (CFBundleExecutable, CFBundleIdentifier, UISceneDelegateClassName). xtool
+# merges the plist verbatim, so it would install a bundle whose executable is
+# literally `$(EXECUTABLE_NAME)`. This file holds the hand-written keys only.
+infoPath: Info.xtool.plist
+
+# Copied into `GodsEyeView.app/www` — a directory entry is packed as a folder
+# reference, which is what `BundleAssets` expects (`bundle.resourceURL` + `www`).
+# Run `npm run ios:payload` before `xtool dev`, or the folder is the empty
+# placeholder.
+resources:
+  - GodsEyeView/www

@@ -45,6 +45,7 @@ import { createApplicationCellTowers } from './layers/cellTowers.js';
 import { createApplicationIotSensors } from './layers/iotSensors.js';
 import { createApplicationNetmon } from './layers/netmon.js';
 import { createPrivateWifiLayer } from '../layers/privateWifi/index.js';
+import { createApplicationGhostMaps } from './layers/ghostMaps.js';
 import { createApplicationCables } from './layers/submarineCables.js';
 import { createApplicationStreetLevel } from './layers/streetLevel.js';
 import { createInfrastructureLayers } from '../data/infrastructure.js';
@@ -164,6 +165,7 @@ export function createApplicationCatalog({
         createApplicationIotSensors(),
         createApplicationNetmon(),
         createPrivateWifiLayer(),
+        createApplicationGhostMaps({ source: sources['s2-ghostmaps'] }),
         createApplicationAlpr({ surface, source: sources.alpr }),
         createApplicationStreetLevel({
           surface,

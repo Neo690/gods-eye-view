@@ -92,7 +92,14 @@ function drawFrame(ctx, frame, total) {
   // Hem of light: the wide, faint halo first, clamped to the sprite box so
   // the widest stroke never climbs past the canvas edge.
   const hemRadius = Math.min(pulse.haloRadius * 1.2, centre - 2);
-  const hem = ctx.createRadialGradient(centre, centre, 0, centre, centre, hemRadius);
+  const hem = ctx.createRadialGradient(
+    centre,
+    centre,
+    0,
+    centre,
+    centre,
+    hemRadius,
+  );
   hem.addColorStop(0, tint(pulse.haloAlpha));
   hem.addColorStop(0.55, tint(pulse.haloAlpha * 0.4));
   hem.addColorStop(1, tint(0));
@@ -102,7 +109,14 @@ function drawFrame(ctx, frame, total) {
   ctx.fill();
 
   // Tight glow hugging the nucleus.
-  const tight = ctx.createRadialGradient(centre, centre, 0, centre, centre, pulse.haloRadius);
+  const tight = ctx.createRadialGradient(
+    centre,
+    centre,
+    0,
+    centre,
+    centre,
+    pulse.haloRadius,
+  );
   tight.addColorStop(0, tint(Math.min(1, pulse.haloAlpha * 1.8)));
   tight.addColorStop(0.7, tint(pulse.haloAlpha));
   tight.addColorStop(1, tint(0));
@@ -112,7 +126,14 @@ function drawFrame(ctx, frame, total) {
   ctx.fill();
 
   // Nucleus: a soft white core with a tinted rim.
-  const core = ctx.createRadialGradient(centre + pulse.highlightOffset * sx, centre + pulse.highlightOffset * sy, 0, centre, centre, pulse.coreRadius);
+  const core = ctx.createRadialGradient(
+    centre + pulse.highlightOffset * sx,
+    centre + pulse.highlightOffset * sy,
+    0,
+    centre,
+    centre,
+    pulse.coreRadius,
+  );
   core.addColorStop(0, 'rgba(255, 255, 255, 0.98)');
   core.addColorStop(0.7, tint(0.92));
   core.addColorStop(1, tint(0.75));
@@ -127,7 +148,9 @@ function drawFrame(ctx, frame, total) {
 
 /** Parse one hex CSS colour into an `[r, g, b]` triplet, or null. */
 function toRgbTriplet(css) {
-  const match = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(css ?? '').trim());
+  const match = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(
+    String(css ?? '').trim(),
+  );
   if (!match) return null;
   return [1, 2, 3].map((i) => Number.parseInt(match[i], 16));
 }

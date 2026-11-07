@@ -202,8 +202,8 @@ function encode(state) {
 
 test('production registry is exact, canonical, and rejects incomplete contracts', async () => {
   assert.equal(validateLayerStateRegistry(), true);
-  assert.equal(REGISTERED_LAYER_IDS.length, 47);
-  assert.equal(new Set(REGISTERED_LAYER_IDS).size, 47);
+  assert.equal(REGISTERED_LAYER_IDS.length, 48);
+  assert.equal(new Set(REGISTERED_LAYER_IDS).size, 48);
   assert.ok(REGISTERED_LAYER_IDS.includes('transit'));
   assert.ok(REGISTERED_LAYER_IDS.includes('radiation'));
   assert.deepEqual(REGISTERED_LAYER_IDS, [...REGISTERED_LAYER_IDS].sort());
@@ -243,31 +243,30 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   for (const [id, token] of Object.entries(LEGACY_LAYER_STATE_TOKENS)) {
     assert.equal(LAYER_STATE_TOKEN_RESERVATIONS[id], token);
   }
-  assert.equal(nextLayerStateToken(), '0b');
+  assert.equal(nextLayerStateToken(), '0c');
   // 6 and 7 belong to Radio Sites and Connected Objects, 8 to the mapped
   // railway stations and 9 to the transport-activity layer; every digit is
   // owned, so the allocator works through the base-36 pairs, where 00 is the
   // solar-storm layer, 01 the orbit-change layer, 02 the satellite-watch
   // layer, 03 the fishing-effort layer, 04 the plate reader, 05 the
   // face-privacy layer, 06 the operator-node monitor, 07 the EMSC quake
-  // network, 08 the AI Sentinel, 09 the global disasters tier and 0a the
-  // camera-advisories layer.
+  // network, 08 the AI Sentinel, 09 the global disasters tier, 0a the
+  // camera-advisories layer and 0b the S2 GhostMaps layer.
   assert.equal(
     nextLayerStateToken({
       ...LAYER_STATE_TOKEN_RESERVATIONS,
-      alpha: '8',
-      bravo: '9',
+      alpha: '9',
     }),
-    '0b',
+    '0c',
   );
   const digitsExhausted = {
     ...LAYER_STATE_TOKEN_RESERVATIONS,
     ...Object.fromEntries(
-      [...'56789'].map((digit) => [`prior-${digit}`, digit]),
+      [...'9'].map((digit) => [`prior-${digit}`, digit]),
     ),
   };
-  assert.equal(nextLayerStateToken(digitsExhausted), '0b');
-  assert.equal(nextLayerStateToken({ ...digitsExhausted, used: '0b' }), '0c');
+  assert.equal(nextLayerStateToken(digitsExhausted), '0c');
+  assert.equal(nextLayerStateToken({ ...digitsExhausted, used: '0c' }), '0d');
   assert.equal(
     nextLayerStateToken({
       ...digitsExhausted,
@@ -313,8 +312,8 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   assert.equal(
     validateLayerStateAllocations(LAYER_STATE_TOKEN_RESERVATIONS, {
       ...LAYER_STATE_TOKEN_RESERVATIONS,
-      future: '0b',
-      next: '0c',
+      future: '0c',
+      next: '0d',
     }),
     true,
   );
@@ -322,37 +321,39 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
     () =>
       validateLayerStateAllocations(LAYER_STATE_TOKEN_RESERVATIONS, {
         ...LAYER_STATE_TOKEN_RESERVATIONS,
-        future: '0c',
+        future: '0d',
       }),
-    /next free token 0b/,
+    /next free token 0c/,
   );
   // Hand the last digit back, which is what a ledger with one digit still
   // free looks like now that every real one is owned.
   const beforeLastDigit = { ...LAYER_STATE_TOKEN_RESERVATIONS };
   delete beforeLastDigit['israeli-transport'];
+  delete beforeLastDigit['s2-ghostmaps'];
   assert.equal(
     validateLayerStateAllocations(beforeLastDigit, {
       ...beforeLastDigit,
       futurePair: '0b',
       futureDigit: '9',
+      futurePairSpare: '0c',
     }),
     true,
   );
   assert.equal(
     validateLayerStateAllocations(digitsExhausted, {
       ...digitsExhausted,
-      pairB: '0c',
-      pairA: '0b',
+      pairA: '0c',
+      pairB: '0d',
     }),
     true,
   );
   assert.throws(
     () =>
       validateLayerStateAllocations(
-        { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '5' },
-        { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '5', competing: '5' },
+        { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '6' },
+        { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '6', competing: '6' },
       ),
-    /next free token 0b/,
+    /next free token 0c/,
   );
   assert.throws(
     () => validateLayerStateAllocations({ future: '00' }, { future: '01' }),
@@ -2873,4 +2874,136 @@ test('explicit provider switches reach durable state without adopting unrelated 
   } finally {
     coordinator.destroy();
   }
+});
+
+function enabledLayerParam(sink) {
+  return new URLSearchParams(encode(sink.provider())).get('l');
+}
+
+test('Clear All drops a saved layer a context mode had already switched off', async () => {
+  const manager = productionManager();
+  const storage = memoryStorage();
+  const sink = shareSink();
+  const coordinator = new LayerStateCoordinator(manager, sink, { storage });
+  await coordinator.start();
+  await manager.setEnabled('earthquakes', true, { origin: 'user' });
+  await manager.setEnabled('flights', true, { origin: 'user' });
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, [
+    'earthquakes',
+    'flights',
+  ]);
+  // Context isolation is a temporary, passive takeover: the saved choice stays.
+  await manager.setEnabled('earthquakes', false, { origin: 'programmatic' });
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, [
+    'earthquakes',
+    'flights',
+  ]);
+
+  const updatesBefore = sink.updates;
+  const result = await manager.clearSelectedLayers({ origin: 'user' });
+  assert.deepEqual(result.targetIds, ['flights']);
+  assert.ok(sink.updates > updatesBefore, 'the URL is told to refresh');
+  assert.deepEqual([...manager.getEnabledLayerIds()], []);
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, []);
+  assert.equal(enabledLayerParam(sink), '', 'the URL carries no layers');
+  assert.deepEqual(
+    parseStoredLayerState(storage.getItem(LAYER_STATE_STORAGE_KEY))
+      .enabledLayerIds,
+    [],
+    'a reload restores nothing',
+  );
+  coordinator.destroy();
+});
+
+test('Clear All drops a saved layer a dependency release superseded mid-batch', async () => {
+  let manager;
+  manager = productionManager({
+    // Contacts-style owner: its own teardown releases a borrowed dependency
+    // without awaiting it, which supersedes Clear All's turn for that layer.
+    'military-awareness': {
+      disable() {
+        void manager.setEnabled('flights', false, { origin: 'programmatic' });
+        return true;
+      },
+    },
+  });
+  const storage = memoryStorage();
+  const sink = shareSink();
+  const coordinator = new LayerStateCoordinator(manager, sink, { storage });
+  await coordinator.start();
+  await manager.setEnabled('earthquakes', true, { origin: 'user' });
+  await manager.setEnabled('flights', true, { origin: 'user' });
+  await manager.setEnabled('military-awareness', true, { origin: 'user' });
+
+  const result = await manager.clearSelectedLayers({ origin: 'user' });
+  assert.equal(
+    result.items.find((item) => item.id === 'flights')?.superseded,
+    true,
+    'the fixture reproduces the superseded flights turn',
+  );
+  assert.deepEqual([...manager.getEnabledLayerIds()], []);
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, []);
+  assert.equal(enabledLayerParam(sink), '');
+  coordinator.destroy();
+});
+
+test('Clear All keeps a layer a newer explicit request turned back on', async () => {
+  const manager = productionManager();
+  const sink = shareSink();
+  const coordinator = new LayerStateCoordinator(manager, sink, {
+    storage: memoryStorage(),
+  });
+  await coordinator.start();
+  await manager.setEnabled('earthquakes', true, { origin: 'user' });
+  await manager.setEnabled('flights', true, { origin: 'user' });
+  const clearing = manager.clearSelectedLayers({ origin: 'user' });
+  // A direct request issued during the batch owns its layer.
+  const reenable = manager.setEnabled('earthquakes', true, { origin: 'user' });
+  await Promise.all([clearing, reenable]);
+  assert.deepEqual([...manager.getEnabledLayerIds()], ['earthquakes']);
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, [
+    'earthquakes',
+  ]);
+  assert.equal(enabledLayerParam(sink), 'e');
+  coordinator.destroy();
+});
+
+test('a passive clear never rewrites saved layers', async () => {
+  const manager = productionManager();
+  const storage = memoryStorage();
+  const coordinator = new LayerStateCoordinator(manager, shareSink(), {
+    storage,
+  });
+  await coordinator.start();
+  await manager.setEnabled('flights', true, { origin: 'user' });
+  await manager.setEnabled('flights', false, { origin: 'programmatic' });
+  const writes = storage.writes.length;
+  await manager.clearSelectedLayers({ origin: 'programmatic' });
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, ['flights']);
+  assert.equal(storage.writes.length, writes);
+  coordinator.destroy();
+});
+
+test('Clear All cancels a saved restore still waiting to start', async () => {
+  const gate = deferred();
+  const manager = productionManager();
+  const sink = shareSink();
+  const coordinator = new LayerStateCoordinator(manager, sink, {
+    storage: memoryStorage(),
+    restoreGate: gate.promise,
+  });
+  const params = new URLSearchParams('v=2&l=e.f');
+  const restore = coordinator.start({
+    shareLayerState: decodeLayerStateParams(params),
+  });
+  await manager.clearSelectedLayers({ origin: 'user' });
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, []);
+  gate.resolve();
+  const results = await restore;
+  for (const id of ['earthquakes', 'flights']) {
+    assert.equal(results.find((result) => result.layerId === id).succeeded, false);
+  }
+  assert.deepEqual([...manager.getEnabledLayerIds()], []);
+  assert.equal(enabledLayerParam(sink), '');
+  coordinator.destroy();
 });
