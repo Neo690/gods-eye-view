@@ -4,9 +4,12 @@ import test from 'node:test';
 import { StyleManager } from './applicationShell.js';
 import { ContextControls } from './contextControls.js';
 import {
+  MOBILE_SHELL_MEDIA_QUERY,
+  MOBILE_SHELL_OFF_QUERY,
   MOBILE_SHEET_PANELS,
   MOBILE_TABS,
   initMobileShell,
+  mobileShellMediaQuery,
   nextSheet,
   sheetForPanelId,
 } from './mobileShell.js';
@@ -114,8 +117,11 @@ function fixture({
   mobile = true,
   expanded = [],
   onTabOpened = () => {},
+  locationSearch = '',
 } = {}) {
   const document = new EventTarget();
+  if (locationSearch)
+    document.defaultView = { location: { search: locationSearch } };
   document.ids = new Map();
   document.createElement = (tag) => element(tag, document);
   document.getElementById = (id) => document.ids.get(id) ?? null;
@@ -162,6 +168,8 @@ function fixture({
   media.matches = mobile;
   const calls = [];
   const frames = [];
+  /** Every query handed to the matchMedia stub, in order. */
+  const queries = [];
   let closedCount = 0;
   let observed = null;
   class FakeMutationObserver {
@@ -176,7 +184,10 @@ function fixture({
   const shell = initMobileShell({
     documentRef: document,
     onTabOpened,
-    matchMedia: () => media,
+    matchMedia: (query) => {
+      queries.push(query);
+      return media;
+    },
     MutationObserverImpl: FakeMutationObserver,
     ResizeObserverImpl: null,
     requestFrame: (callback) => frames.push(callback),
@@ -216,6 +227,7 @@ function fixture({
     document,
     shell,
     calls,
+    queries,
     runFrames,
     closedCount: () => closedCount,
     press,
@@ -227,6 +239,40 @@ function fixture({
     collapsed,
   };
 }
+
+test('in this fork the tab shell is opt-in: the default phone keeps its console', () => {
+  // The shell is handed a query that never matches whenever the document
+  // carries no `?mobile=` parameter, so a width below the breakpoint keeps
+  // the pre-tab-shell arrangement (full HUD, dock row, no bottom tab bar).
+  // The fixture records what matchMedia is called with; a never-matching
+  // query reads exactly like the desktop stub, so the shell itself stays off.
+  const default_ = fixture({
+    mobile: false,
+    locationSearch: '?v=2&hud=tactical',
+  });
+  assert.equal(default_.queries[0], MOBILE_SHELL_OFF_QUERY);
+  assert.equal(
+    default_.document.body.classList.contains('mobile-shell'),
+    false,
+  );
+
+  // Any `?mobile=` parameter opts back into the tab shell, which then behaves
+  // as upstream: the media query is the real one and the shell can match.
+  const optedIn = fixture({ locationSearch: '?mobile=1' });
+  assert.deepEqual(
+    optedIn.queries[0],
+    MOBILE_SHELL_MEDIA_QUERY,
+  );
+  assert.equal(
+    optedIn.document.body.classList.contains('mobile-shell'),
+    true,
+  );
+
+  // The helper answers for both spellings and falls off nothing.
+  assert.equal(mobileShellMediaQuery(''), MOBILE_SHELL_OFF_QUERY);
+  assert.equal(mobileShellMediaQuery('?mobile'), MOBILE_SHELL_MEDIA_QUERY);
+  assert.equal(mobileShellMediaQuery('?layer=1'), MOBILE_SHELL_OFF_QUERY);
+});
 
 test('every tab names a sheet and every sheet panel maps back to its sheet', () => {
   assert.deepEqual(

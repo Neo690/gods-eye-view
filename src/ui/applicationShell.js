@@ -1060,7 +1060,9 @@ export class StyleManager extends ShellFacade {
 
   /**
    * Phone layout: a bottom tab bar presenting one panel sheet at a time
-   * (src/ui/mobileShell.js). Inactive above 720px.
+   * (src/ui/mobileShell.js). Inactive above 720px, and opt-in below it in this
+   * fork: only a `?mobile=` search parameter turns the tab shell on, the
+   * default phone arrangement stays the compact console of mobile-compact.css.
    * @returns {void}
    */
   _initMobileShell() {

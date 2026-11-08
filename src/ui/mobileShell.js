@@ -9,12 +9,41 @@
  * treated as the user's own panel choice.
  *
  * Adapted from the phone tab-shell proposed in public PR #203 by blearymoth.
+ *
+ * This fork keeps the pre-tab-shell phone console (full HUD, dock row and the
+ * compact sheets of mobile-compact.css) as the default arrangement — the shell
+ * is opt-in: add a `?mobile=` search parameter to the URL to use it. The media
+ * query handed to matchMedia reflects that choice, so the shell simply never
+ * matches without it.
  */
 
 import { EXCLUSIVE_SURFACE_CLASSES } from '../exclusiveSurfaces.js';
 import { msg, t } from '../i18n/index.js';
 
 export const MOBILE_SHELL_MEDIA_QUERY = '(max-width: 720px)';
+
+/**
+ * A query that can never match, handed to matchMedia while the shell is
+ * opt-out, so the wiring (listeners, tab bar) exists but stays dormant.
+ */
+export const MOBILE_SHELL_OFF_QUERY = '(max-width: 0px)';
+
+/**
+ * The query the shell should listen to for this document.
+ *
+ * @param {string} [search] The document location's search string; defaults to
+ *   the real `globalThis.location`, which node tests and shell-less fixtures
+ *   do not set — they read as opt-out.
+ * @returns {string} The real shell query when `?mobile=` is present in the
+ *   search, the never-matching query otherwise.
+ */
+export function mobileShellMediaQuery(
+  search = globalThis.location?.search ?? '',
+) {
+  return new URLSearchParams(search).has('mobile')
+    ? MOBILE_SHELL_MEDIA_QUERY
+    : MOBILE_SHELL_OFF_QUERY;
+}
 export const MOBILE_SHELL_CLASS = 'mobile-shell';
 export const MOBILE_SHEET_ATTR = 'data-mobile-sheet';
 
@@ -332,7 +361,9 @@ export function initMobileShell({
 
   const media =
     typeof matchMedia === 'function'
-      ? matchMedia(MOBILE_SHELL_MEDIA_QUERY)
+      ? matchMedia(
+          mobileShellMediaQuery(documentRef.defaultView?.location?.search),
+        )
       : null;
   onMedia(Boolean(media?.matches));
   const onChange = (event) => onMedia(event.matches);
