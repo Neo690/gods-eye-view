@@ -688,6 +688,23 @@
     vertical-align: -4px !important;
   }
 
+  /* Cesium's own widget credit bar overflows a narrow phone: wordmark,
+     "Upgrade for commercial use" and the required "Attribution des données"
+     link measure 451px on a 360px viewport, so the attribution link itself
+     ran off-screen. The 10px gutters the map already keeps hold the bar and
+     its inline-block credits wrap; every credit stays legible, none clipped.
+     The wordmark shrinks by the same 28→18 step the cluster fix above uses,
+     so line one keeps the head of the strip instead of eating it. */
+  .cesium-widget-credits {
+    max-width: calc(100vw - 20px);
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .cesium-widget-credits img {
+    height: 18px;
+    width: auto;
+  }
+
   /* The globe now shares the strip under the credit band with the provider
      chooser — the same line, the other corner. At 70px it sat on the last
      words of the attribution, which may not be covered. */
@@ -908,13 +925,16 @@
      takes the mirror of the language globe's slot instead — same band, same
      compact control, other corner — and shows only the provider's own name.
 
-     `left` is measured from the mic column: this file pins that column at
-     92px and the dock centres it, so the field lands 10px off the screen
-     edge at every phone width without a magic viewport number. It sits in
-     the strip under the credit band, which is the one row on the map that is
-     already clear — the logo above it may not be covered. */
+     The field's containing block is #gev-voice-control, which the dock
+     centres, so calc(50% - 50vw …) cancels its own offset and `left`
+     is measured straight from the screen edge: the field lands 10px off
+     the edge at every phone width without a magic viewport number. (The
+     bare `56px - 50vw` here once dropped the 50% term; on a 360px phone
+     that answered -124px and slid the whole chooser off-screen.) It sits
+     in the strip under the credit band, which is the one row on the map
+     that is already clear — the logo above it may not be covered. */
   #command-dock .gev-voice-provider-field {
-    left: calc(56px - 50vw);
+    left: calc(50% - 50vw + 10px);
     right: auto;
     /* 100% is the mic column (54px, the dock's own height) measured up from
        the dock's bottom, so the control hangs just off the dock's top edge —
