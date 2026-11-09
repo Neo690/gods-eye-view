@@ -540,9 +540,12 @@
 
   /* The readouts keep their own colour, one step up from the 60% the desktop
      uses, and every line gets a hard dark rim: a halo alone is readable on a
-     night city and disappears on a white roof. */
+     night city and disappears on a white roof. The wrapper carries two
+     corners now - the MGRS one and the imaging-scale one - and the merged
+     window reads one colour only if the rule names both of them. */
   #intel-hud .hud-top-left *,
-  #intel-hud .hud-bottom-left * {
+  #intel-hud .hud-bottom-left *,
+  #intel-hud .hud-bottom-right * {
     color: rgba(0, 255, 255, 0.9);
     /* A 1px rim, not a 7px smear: five stacked lines of blurred shadow pooled
        into a grey slab behind the block. */
