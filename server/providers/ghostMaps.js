@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -31,14 +32,54 @@ const MAX_SUBSCRIBERS = 64;
 const MAX_REF_BYTES = 64 * 1024;
 const MAX_TREE_BYTES = 16 * 1024 * 1024;
 const MAX_COMMIT_BYTES = 2 * 1024 * 1024;
+const MAX_HTML_BYTES = 2 * 1024 * 1024;
+const HTML_TIMEOUT_MS = 20_000;
+const MAX_HTML_TREE_PAGES = 64;
 const USER_AGENT = 'gods-eye-view-ghostmaps/1.0';
 const REPO_PATH = `${GHOSTMAPS_REPO.owner}/${GHOSTMAPS_REPO.name}`;
+
+// Directories that cannot hold a curated product. The HTML fallback walks
+// GitHub's tree pages, so skipping archives keeps a rate-limited check cheap.
+const HTML_TREE_SKIP =
+  /(^|\/)(?:\.github|0_archive|archive|basedata|reference material)(?:\/|$)|^Global Centers of Gravity(?:\/|$)/i;
 
 /** Poll interval from GHOSTMAPS_POLL_SECONDS, bounded below at 5 s. */
 export function ghostMapsPollMs(raw = process.env.GHOSTMAPS_POLL_SECONDS) {
   const seconds = Number(raw);
   if (!raw || !Number.isFinite(seconds)) return DEFAULT_POLL_MS;
   return Math.max(MIN_POLL_MS, Math.round(seconds * 1000));
+}
+
+/**
+ * Read the file list GitHub embeds in a rendered tree page.
+ * @param {string} html
+ * @param {string} [sha] Expected commit; a page for another commit is refused.
+ * @returns {{items: Array<{name: string, path: string, contentType: string}>}}
+ */
+export function parseGhostMapsTreePage(html, sha) {
+  const match =
+    /<script type="application\/json" data-target="react-app\.embeddedData">([\s\S]*?)<\/script>/.exec(
+      String(html || ''),
+    );
+  if (!match) throw new Error('GhostMaps tree page malformed');
+  let payload;
+  try {
+    payload = JSON.parse(match[1])?.payload?.codeViewTreeRoute;
+  } catch {
+    throw new Error('GhostMaps tree page malformed');
+  }
+  const currentOid = payload?.refInfo?.currentOid ?? payload?.currentOid;
+  if (sha && currentOid !== sha) throw new Error('GhostMaps tree page moved');
+  const items = payload?.tree?.items;
+  if (!Array.isArray(items)) throw new Error('GhostMaps tree page malformed');
+  return {
+    items: items.filter(
+      (item) =>
+        item &&
+        typeof item.path === 'string' &&
+        (item.contentType === 'file' || item.contentType === 'directory'),
+    ),
+  };
 }
 
 /**
@@ -77,6 +118,99 @@ export function createGhostMapsWatcher({
     'User-Agent': USER_AGENT,
     ...(useToken && token() ? { Authorization: `Bearer ${token()}` } : {}),
   });
+
+  function contentVersion(seed) {
+    return createHash('sha1').update(seed).digest('hex');
+  }
+
+  /** Read one GitHub tree page's embedded file list, pinned to `sha`. */
+  async function readHtmlTreePage(sha, dirPath) {
+    const encoded = dirPath
+      ? `/${dirPath.split('/').map(encodeURIComponent).join('/')}`
+      : '';
+    const response = await get(
+      `https://github.com/${REPO_PATH}/tree/${sha}${encoded}`,
+      { 'User-Agent': USER_AGENT },
+      HTML_TIMEOUT_MS,
+    );
+    const html = await readResponseTextCapped(response, MAX_HTML_BYTES);
+    return parseGhostMapsTreePage(html, sha);
+  }
+
+  /**
+   * The full KMZ path list from GitHub's rendered tree pages. This is the
+   * anonymous fallback for a datacenter IP that GitHub's REST API rate-limits;
+   * the pages are pinned to the commit so a moving branch cannot mix editions.
+   */
+  async function readHtmlTree(sha) {
+    const queue = [''];
+    const seen = new Set();
+    const entries = [];
+    while (queue.length && seen.size < MAX_HTML_TREE_PAGES) {
+      const dir = queue.shift();
+      if (seen.has(dir) || HTML_TREE_SKIP.test(`${dir}/`)) continue;
+      seen.add(dir);
+      const page = await readHtmlTreePage(sha, dir);
+      for (const item of page.items) {
+        if (item?.contentType === 'directory') {
+          if (!HTML_TREE_SKIP.test(`${item.path}/`)) queue.push(item.path);
+        } else if (
+          item?.contentType === 'file' &&
+          typeof item.path === 'string' &&
+          /\.kmz$/i.test(item.path)
+        ) {
+          // Size and version are filled from each selected file's HEAD below.
+          entries.push({
+            path: item.path,
+            type: 'blob',
+            sha: contentVersion(`path:${item.path}`),
+            size: 1,
+          });
+        }
+      }
+    }
+    if (queue.length)
+      warn('[ghostmaps] HTML tree walk reached its page budget');
+    return entries;
+  }
+
+  async function readHtmlCommit(sha) {
+    const rows = buildGhostMapsCatalog(await readHtmlTree(sha));
+    const products = [];
+    for (const row of rows) {
+      try {
+        const response = await fetchImpl(ghostMapsRawUrl(sha, row.path), {
+          method: 'HEAD',
+          headers: { 'User-Agent': USER_AGENT },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+        const size = Number(response.headers.get('content-length'));
+        if (!response.ok) {
+          await response.body?.cancel().catch(() => {});
+          throw Object.assign(new Error(`HTTP ${response.status}`), {
+            status: response.status,
+          });
+        }
+        if (
+          !Number.isFinite(size) ||
+          size <= 0 ||
+          size > GHOSTMAPS_MAX_FILE_BYTES
+        )
+          continue;
+        products.push({
+          ...row,
+          size,
+          version: contentVersion(
+            response.headers.get('etag') || `${sha}:${row.path}`,
+          ),
+        });
+      } catch (error) {
+        warn(`[ghostmaps] could not size ${row.fileName}: ${error.message}`);
+      }
+    }
+    return { products, committedAt: null, message: null };
+  }
 
   /**
    * GitHub answers 401/403 for a stale or under-scoped token. The repository
@@ -129,7 +263,7 @@ export function createGhostMapsWatcher({
     return sha;
   }
 
-  async function readCommit(sha) {
+  async function readApiCommit(sha) {
     const api = `https://api.github.com/repos/${REPO_PATH}`;
     const tree = await readApi(
       `${api}/git/trees/${sha}?recursive=1`,
@@ -149,6 +283,23 @@ export function createGhostMapsWatcher({
       // The commit date is decoration; the tree is what matters.
     }
     return { products: buildGhostMapsCatalog(tree.tree), committedAt, message };
+  }
+
+  async function readCommit(sha) {
+    try {
+      return await readApiCommit(sha);
+    } catch (apiError) {
+      warn(
+        `[ghostmaps] GitHub API read failed (${apiError.message}); using the HTML tree`,
+      );
+      try {
+        return await readHtmlCommit(sha);
+      } catch (htmlError) {
+        throw new Error(
+          `${apiError.message}; HTML fallback: ${htmlError.message}`,
+        );
+      }
+    }
   }
 
   async function loadDisk() {

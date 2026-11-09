@@ -245,6 +245,125 @@ test('an unchanged head clears an upstream outage and announces recovery once', 
     watcher.stop();
   }));
 
+function treePage(commit, items) {
+  return `<script type="application/json" data-target="react-app.embeddedData">${JSON.stringify(
+    {
+      payload: {
+        codeViewTreeRoute: { refInfo: { currentOid: commit }, tree: { items } },
+      },
+    },
+  )}</script>`;
+}
+
+test('a rate-limited GitHub API falls back to the commit-pinned HTML tree', () =>
+  withCache(async (cacheDir) => {
+    const { repo, fetchImpl: github } = fakeGitHub();
+    const commit = repo.head;
+    const cipDir =
+      'ArcGIS Data for ATAK (KMZs)/Common Intelligence Picture/Master Database';
+    const cipFile = `${cipDir}/S2Underground_Common_Intelligence_Picture_November_5_2026_Export_1.kmz`;
+    const pages = new Map([
+      [
+        '',
+        [
+          {
+            name: 'ArcGIS Data for ATAK (KMZs)',
+            path: 'ArcGIS Data for ATAK (KMZs)',
+            contentType: 'directory',
+          },
+          { name: 'README.md', path: 'README.md', contentType: 'file' },
+        ],
+      ],
+      [
+        'ArcGIS Data for ATAK (KMZs)',
+        [
+          {
+            name: 'Common Intelligence Picture',
+            path: 'ArcGIS Data for ATAK (KMZs)/Common Intelligence Picture',
+            contentType: 'directory',
+          },
+        ],
+      ],
+      [
+        'ArcGIS Data for ATAK (KMZs)/Common Intelligence Picture',
+        [
+          {
+            name: 'Master Database',
+            path: cipDir,
+            contentType: 'directory',
+          },
+        ],
+      ],
+      [
+        cipDir,
+        [
+          {
+            name: cipFile.split('/').at(-1),
+            path: cipFile,
+            contentType: 'file',
+          },
+        ],
+      ],
+    ]);
+    const requests = [];
+    const watcher = createGhostMapsWatcher({
+      cacheDir,
+      token: () => '',
+      fetchImpl: async (url, options = {}) => {
+        requests.push(url);
+        if (url.startsWith('https://api.github.com/'))
+          return new Response('rate limited', { status: 403 });
+        if (url.startsWith('https://github.com/') && !url.includes('.git/')) {
+          const marker = `/tree/${commit}`;
+          const dir = decodeURIComponent(
+            url.slice(url.indexOf(marker) + marker.length).replace(/^\//, ''),
+          );
+          const items = pages.get(dir);
+          if (!items) return new Response('missing', { status: 404 });
+          const html = treePage(commit, items);
+          return new Response(html, {
+            status: 200,
+            headers: {
+              'content-type': 'text/html',
+              'content-length': String(Buffer.byteLength(html)),
+            },
+          });
+        }
+        if (options.method === 'HEAD')
+          return new Response(null, {
+            status: 200,
+            headers: { 'content-length': '1234', etag: '"abc"' },
+          });
+        return github(url, options);
+      },
+      log: () => {},
+      warn: () => {},
+    });
+    assert.equal(
+      await watcher.checkNow(),
+      true,
+      JSON.stringify(watcher.catalog()),
+    );
+    const catalog = watcher.catalog();
+    assert.equal(catalog.error, null);
+    assert.deepEqual(
+      catalog.products.map((product) => product.id),
+      ['cip'],
+    );
+    assert.equal(catalog.products[0].size, 1234);
+    assert.match(catalog.products[0].version, /^[0-9a-f]{40}$/);
+    assert.notEqual(catalog.products[0].version, commit);
+    assert.ok(
+      requests.some((url) =>
+        url.startsWith(
+          `https://raw.githubusercontent.com/${'s2underground/GhostMaps'}/${commit}/`,
+        ),
+      ),
+    );
+    await warmDefaults(watcher);
+    watcher.stop();
+  }));
+
 test('a rejected GitHub token falls back to the public anonymous read', () =>
   withCache(async (cacheDir) => {
     const { fetchImpl } = fakeGitHub();
