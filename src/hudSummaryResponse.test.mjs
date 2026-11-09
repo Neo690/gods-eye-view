@@ -126,8 +126,10 @@ test('does not hide real provider and HTTP failures', () => {
 
 test('the installed keyless HUD route stays successful after the voice quota is exhausted', async () => {
   const previousKey = process.env.OPENAI_API_KEY;
+  const previousGeminiKey = process.env.GEMINI_API_KEY;
   const previousLimit = process.env.GEV_RATELIMIT_OPENAI_PER_MIN;
   process.env.OPENAI_API_KEY = '';
+  process.env.GEMINI_API_KEY = '';
   process.env.GEV_RATELIMIT_OPENAI_PER_MIN = '1';
   try {
     const routes = installOpenAiRoutes();
@@ -155,6 +157,8 @@ test('the installed keyless HUD route stays successful after the voice quota is 
   } finally {
     if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = previousKey;
+    if (previousGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousGeminiKey;
     if (previousLimit === undefined)
       delete process.env.GEV_RATELIMIT_OPENAI_PER_MIN;
     else process.env.GEV_RATELIMIT_OPENAI_PER_MIN = previousLimit;
