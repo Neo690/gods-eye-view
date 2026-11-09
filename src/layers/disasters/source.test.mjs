@@ -177,6 +177,62 @@ function effisPayload() {
   };
 }
 
+test('a browser-refused GDACS read is relayed through the app upstream', async () => {
+  const calls = [];
+  const source = createGlobalDisastersSource({
+    now: () => NOW,
+    fetchImpl: (url) => {
+      calls.push(String(url));
+      // The GDACS host stopped sending CORS headers: the page's
+      // browser-direct read is rejected exactly like this ("Failed to
+      // fetch"), on every origin, browser and shell alike.
+      if (String(url).startsWith('https://www.gdacs.org'))
+        return Promise.reject(new TypeError('Failed to fetch'));
+      if (String(url).startsWith('/api/upstream?url='))
+        return ok(gdacsPage(2));
+      if (String(url).includes('/api/copernicus-ems')) return ok(emsPayload());
+      if (String(url).includes('copernicus.eu/effis'))
+        return ok(effisPayload());
+      throw new Error(`unexpected ${url}`);
+    },
+  });
+  const rows = await source.getSnapshot();
+  assert.equal(rows.filter((row) => row.kind === 'event').length, 2);
+  // The direct read is still attempted first, then the relay carries the
+  // encoded GDACS page URL.
+  assert.match(calls[0], /^https:\/\/www\.gdacs\.org/);
+  assert.match(calls[1], /^\/api\/upstream\?url=/);
+});
+
+test('when the direct read answers, the relay is not called', async () => {
+  const calls = [];
+  const source = createGlobalDisastersSource({
+    now: () => NOW,
+    fetchImpl: (url) => {
+      calls.push(String(url));
+      if (String(url).includes('gdacs.org')) return ok(gdacsPage(1));
+      if (String(url).includes('/api/copernicus-ems')) return ok(emsPayload());
+      if (String(url).includes('copernicus.eu/effis'))
+        return ok(effisPayload());
+      throw new Error(`unexpected ${url}`);
+    },
+  });
+  const rows = await source.getSnapshot();
+  assert.equal(rows.filter((row) => row.kind === 'event').length, 1);
+  assert.equal(
+    calls.some((url) => url.startsWith('/api/upstream')),
+    false,
+  );
+});
+
+test('a relay read that also fails still fails the snapshot like the direct one', async () => {
+  const source = createGlobalDisastersSource({
+    now: () => NOW,
+    fetchImpl: () => Promise.reject(new TypeError('Failed to fetch')),
+  });
+  await assert.rejects(source.getSnapshot(), /Failed to fetch/);
+});
+
 test('complement failures thin the layer but never fail the snapshot and the EMS body is validated', async () => {
   const source = createGlobalDisastersSource({
     now: () => NOW,

@@ -76,6 +76,9 @@ final class LiveApi {
     "api.tomtom.com",
     "api.adsb.lol",
     "services3.arcgis.com",
+    // GDACS current events (no CORS header any more; the disasters layer
+    // fetches its pages through /api/upstream).
+    "www.gdacs.org",
     // NHC cyclone status and its published forecast GIS layers.
     "www.nhc.noaa.gov",
     "mapservices.weather.noaa.gov",

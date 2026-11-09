@@ -259,9 +259,27 @@ test('the floor lookup is pinned by origin and path, not by its points query', (
   );
   assert.equal(
     UPSTREAM_EXTRA_ROUTES.length,
-    3,
+    4,
     'the pinned routes, deliberately — never a wildcard',
   );
+});
+
+test('the GDACS route is the SEARCH path on its host, and nothing else there', () => {
+  const allowed = allowedUpstreamUrls();
+  assert.ok(
+    relayTarget(
+      'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventType=EQ;FL&pageNumber=3',
+      allowed,
+    ),
+    'a paging query moves freely, the path does not',
+  );
+  for (const raw of [
+    'https://www.gdacs.org/gdacsapi/api/events/geteventlist/MORE',
+    'https://www.gdacs.org/gdacsapi/events/geteventlist/SEARCH',
+    'https://gdacs.org/gdacsapi/api/events/geteventlist/SEARCH',
+    'http://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH',
+  ])
+    assert.equal(relayTarget(raw, allowed), null, raw);
 });
 
 test('the OpenFreeMap routes are the versioned tile path, and nothing else there', () => {

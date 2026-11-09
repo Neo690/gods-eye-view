@@ -4,7 +4,10 @@ import {
   normalizeGdacsEventList,
 } from './records.js';
 
-/** The upstream GDACS events API (no key, CORS-open, GeoJSON pages). */
+/** The upstream GDACS events API (no key, GeoJSON pages). The read was
+ * written against a CORS-open API; gdacs.org stopped sending the CORS header,
+ * so a browser-direct read is refused everywhere — the page fetch falls back
+ * onto the app's own relay (see readGdacsPage below). */
 const GDACS_BASE_URL =
   'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH';
 
@@ -63,6 +66,39 @@ export function buildEffisWfsUrl({
   return `${base}?${params}`;
 }
 
+/** The app's own byte relay for a cross-origin read the browser refuses.
+ * Served on desktop and preview by server/providers/upstream.js (the route is
+ * pinned to the GDACS host there) and inside the Android shell by LiveApi
+ * (www.gdacs.org in its fixed host list). */
+export const UPSTREAM_API_PATH = '/api/upstream';
+
+/** Relay a browser-refused cross-origin read through the app's own upstream. */
+export function buildUpstreamUrl(target) {
+  return `${UPSTREAM_API_PATH}?url=${encodeURIComponent(target)}`;
+}
+
+/**
+ * Read one GDACS page. The browser-direct attempt stays first: the snapshot is
+ * sync-healthy where the API still sends CORS headers. Where it does not, the
+ * fetch itself rejects ("Failed to fetch"), and that is the one failure the
+ * relay answers: appassets origins with the shell, the served console with the
+ * Node server.
+ */
+export async function readGdacsPage(
+  url,
+  { signal, fetchImpl = (...args) => globalThis.fetch(...args) } = {},
+) {
+  let response;
+  try {
+    response = await fetchImpl(url, { signal });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    response = await fetchImpl(buildUpstreamUrl(url), { signal });
+  }
+  if (!response.ok) throw new Error(`GDACS HTTP ${response.status}`);
+  return response.json();
+}
+
 /**
  * Request and validate complete feed snapshots before replacing the display.
  *
@@ -94,10 +130,7 @@ export function createGlobalDisastersSource({
     const rows = [];
     for (let pageNumber = 1; rows.length < gdacsMaxEvents; pageNumber++) {
       const url = buildGdacsQueryUrl({ pageNumber });
-      const response = await fetchImpl(url, { signal });
-      if (!response.ok) throw new Error(`GDACS HTTP ${response.status}`);
-      signal?.throwIfAborted();
-      const payload = await response.json();
+      const payload = await readGdacsPage(url, { signal, fetchImpl });
       signal?.throwIfAborted();
       const normalized = normalizeGdacsEventList(payload, { now: now() });
       if (!normalized) throw new Error('Malformed GDACS response');

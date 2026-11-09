@@ -62,6 +62,17 @@ const EXTRA_ROUTES = Object.freeze([
     origin: 'https://tiles.openfreemap.org',
     pattern: /^\/planet\/[0-9A-Za-z_]+\/\d{1,5}\/\d{1,5}\/\d{1,5}\.pbf$/,
   }),
+  /**
+   * The GDACS current-events pages the Global disasters layer reads. The
+   * upstream stopped sending CORS headers, so the layer's browser-direct read
+   * falls back onto this relay; the route is pinned by origin and the iid
+   * SEARCH path — only the paging query moves (see src/layers/disasters/
+   * source.js readGdacsPage).
+   */
+  Object.freeze({
+    origin: 'https://www.gdacs.org',
+    pathname: '/gdacsapi/api/events/geteventlist/SEARCH',
+  }),
 ]);
 
 const TIMEOUT_MS = 15_000;
