@@ -113,13 +113,17 @@ function offsetOf(el) {
 test('the two windows are the ones the phone shows', () => {
   assert.deepEqual(
     HUD_WINDOW_DRAG_SPECS.map((spec) => spec.id),
-    ['top-left', 'bottom-left'],
+    ['top-left', 'telemetry'],
   );
   assert.equal(HUD_WINDOW_DRAG_MEDIA, '(max-width: 720px)');
-  // A renamed class would silently stop a window from being movable.
+  // A renamed class would silently stop a window from being movable. The
+  // classification window is a corner; the telemetry window is the merged
+  // wrapper (MGRS + imaging scale), so its class stands alone in the markup.
   const markup = readFileSync(path.join(ROOT, 'src/hud.js'), 'utf8');
-  for (const spec of HUD_WINDOW_DRAG_SPECS)
-    assert.match(markup, new RegExp(`hud-corner ${spec.selector.slice(1)}`));
+  for (const spec of HUD_WINDOW_DRAG_SPECS) {
+    const className = spec.selector.slice(1);
+    assert.match(markup, new RegExp(`class="(?:hud-corner )?${className}"`));
+  }
 });
 
 test('the transform is the one thing the stylesheet carries', () => {
@@ -156,12 +160,12 @@ test('a stored offset is put back where it was left', () => {
 });
 
 test('a stored offset cannot park a window off the screen', () => {
-  const bottomLeft = fakeWindow({ left: 76, top: 493, width: 208, height: 38 });
-  const doc = fakeDocument({ '.hud-bottom-left': bottomLeft });
-  const storage = fakeStorage({ 'bottom-left': { x: -400, y: 900 } });
+  const telemetry = fakeWindow({ left: 76, top: 493, width: 208, height: 38 });
+  const doc = fakeDocument({ '.hud-bottom-center': telemetry });
+  const storage = fakeStorage({ telemetry: { x: -400, y: 900 } });
   const control = createHudWindowDrag({ document: doc, storage });
-  assert.deepEqual(offsetOf(bottomLeft), { x: '-72px', y: '185px' });
-  assert.deepEqual(storage.read()['bottom-left'], { x: -72, y: 185 });
+  assert.deepEqual(offsetOf(telemetry), { x: '-72px', y: '185px' });
+  assert.deepEqual(storage.read().telemetry, { x: -72, y: 185 });
   control.destroy();
 });
 
@@ -177,19 +181,19 @@ test('a desktop keeps its corner anchors, stored or not', () => {
 });
 
 test('a drag moves the window and the position survives the session', () => {
-  const bottomLeft = fakeWindow({ left: 76, top: 447, width: 208, height: 38 });
-  const doc = fakeDocument({ '.hud-bottom-left': bottomLeft });
+  const telemetry = fakeWindow({ left: 76, top: 447, width: 208, height: 38 });
+  const doc = fakeDocument({ '.hud-bottom-center': telemetry });
   const storage = fakeStorage();
   const control = createHudWindowDrag({ document: doc, storage });
 
-  bottomLeft.emit('pointerdown', { clientX: 100, clientY: 460, pointerType: 'touch', button: 0 });
+  telemetry.emit('pointerdown', { clientX: 100, clientY: 460, pointerType: 'touch', button: 0 });
   doc.listeners.get('pointermove')({ clientX: 130, clientY: 500, preventDefault() {} });
-  assert.deepEqual(offsetOf(bottomLeft), { x: '30px', y: '40px' });
-  assert.equal(bottomLeft.dataset.hudDragging, 'true');
+  assert.deepEqual(offsetOf(telemetry), { x: '30px', y: '40px' });
+  assert.equal(telemetry.dataset.hudDragging, 'true');
 
   doc.listeners.get('pointerup')({ clientX: 130, clientY: 500 });
-  assert.deepEqual(storage.read(), { 'bottom-left': { x: 30, y: 40 } });
-  assert.equal(bottomLeft.dataset.hudDragging, undefined);
+  assert.deepEqual(storage.read(), { telemetry: { x: 30, y: 40 } });
+  assert.equal(telemetry.dataset.hudDragging, undefined);
   control.destroy();
 });
 

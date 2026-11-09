@@ -25,10 +25,15 @@ export const HUD_WINDOW_DRAG_STORAGE_KEY = 'gev.hud-window-offsets.v1';
 /** The breakpoint the offsets apply at; above it the windows keep their corners. */
 export const HUD_WINDOW_DRAG_MEDIA = '(max-width: 720px)';
 
-/** One entry per movable window, in the order they are reported. */
+/** One entry per movable window, in the order they are reported.
+ *
+ * The telemetry window is the merged wrapper on a phone (`mobile-compact.css`
+ * folds MGRS + imaging scale + traffic into `.hud-bottom-center`), so it is
+ * the wrapper that moves — dragging it carries both READ blocks together,
+ * which is the merge. */
 export const HUD_WINDOW_DRAG_SPECS = Object.freeze([
   Object.freeze({ id: 'top-left', selector: '.hud-top-left' }),
-  Object.freeze({ id: 'bottom-left', selector: '.hud-bottom-left' }),
+  Object.freeze({ id: 'telemetry', selector: '.hud-bottom-center' }),
 ]);
 
 /** A press has to travel this far before it counts as a drag, not a tap. */
