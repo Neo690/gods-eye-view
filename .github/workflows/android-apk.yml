@@ -165,7 +165,19 @@ jobs:
             echo "Live data server: none (set the GEV_API_BASE repository variable to enable the live layers)"
           fi
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease
+          # gradle-wrapper's distribution is itself served from a GitHub
+          # release asset (services.gradle.org redirects to github.com/
+          # gradle/gradle-distributions/releases/download/...), so the same
+          # bursty unauthenticated 504s stall the first build too. Retry with
+          # pauses: a wrapper that got its distribution once stops needing it.
+          for attempt in 1 2 3 4; do
+            if ./gradlew --no-daemon assembleRelease; then
+              exit 0
+            fi
+            echo "gradle build failed on attempt $attempt"
+            sleep 60
+          done
+          exit 1
 
       - name: Verify the APK is signed
         run: |
