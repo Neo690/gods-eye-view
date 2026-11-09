@@ -245,6 +245,35 @@ test('an unchanged head clears an upstream outage and announces recovery once', 
     watcher.stop();
   }));
 
+test('a rejected GitHub token falls back to the public anonymous read', () =>
+  withCache(async (cacheDir) => {
+    const { fetchImpl } = fakeGitHub();
+    let authenticated = 0;
+    const watcher = createGhostMapsWatcher({
+      cacheDir,
+      token: () => 'stale-token',
+      fetchImpl: async (url, options = {}) => {
+        if (options.headers?.Authorization) {
+          authenticated += 1;
+          return new Response('forbidden', { status: 403 });
+        }
+        return fetchImpl(url, options);
+      },
+      log: () => {},
+      warn: () => {},
+    });
+    assert.equal(await watcher.checkNow(), true);
+    const catalog = watcher.catalog();
+    assert.equal(catalog.error, null);
+    assert.deepEqual(
+      catalog.products.map((product) => product.id),
+      ['cip', 'kinetic-30d'],
+    );
+    assert.equal(authenticated, 2, 'tree and commit retry without the token');
+    await warmDefaults(watcher);
+    watcher.stop();
+  }));
+
 test('poll interval is configurable with a 5 s floor', () => {
   assert.equal(ghostMapsPollMs(undefined), 15000);
   assert.equal(ghostMapsPollMs('30'), 30000);

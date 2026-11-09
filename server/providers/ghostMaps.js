@@ -72,11 +72,35 @@ export function createGhostMapsWatcher({
   const listeners = new Set();
   const downloads = new Map();
 
-  const apiHeaders = () => ({
+  const apiHeaders = (useToken = true) => ({
     Accept: 'application/vnd.github+json',
     'User-Agent': USER_AGENT,
-    ...(token() ? { Authorization: `Bearer ${token()}` } : {}),
+    ...(useToken && token() ? { Authorization: `Bearer ${token()}` } : {}),
   });
+
+  /**
+   * GitHub answers 401/403 for a stale or under-scoped token. The repository
+   * is public, so retry once without the credential before failing the check;
+   * a rate-limited anonymous request still reports its own HTTP 403.
+   */
+  async function readApi(url, maxBytes) {
+    try {
+      return await readResponseJsonCapped(
+        await get(url, apiHeaders()),
+        maxBytes,
+      );
+    } catch (error) {
+      if (!token() || (error.status !== 401 && error.status !== 403))
+        throw error;
+      warn(
+        `[ghostmaps] authenticated read failed (HTTP ${error.status}); retrying anonymously`,
+      );
+      return readResponseJsonCapped(
+        await get(url, apiHeaders(false)),
+        maxBytes,
+      );
+    }
+  }
 
   async function get(url, headers, timeoutMs = TIMEOUT_MS) {
     const response = await fetchImpl(url, {
@@ -107,8 +131,8 @@ export function createGhostMapsWatcher({
 
   async function readCommit(sha) {
     const api = `https://api.github.com/repos/${REPO_PATH}`;
-    const tree = await readResponseJsonCapped(
-      await get(`${api}/git/trees/${sha}?recursive=1`, apiHeaders()),
+    const tree = await readApi(
+      `${api}/git/trees/${sha}?recursive=1`,
       MAX_TREE_BYTES,
     );
     if (!Array.isArray(tree?.tree)) throw new Error('GhostMaps tree malformed');
@@ -116,10 +140,7 @@ export function createGhostMapsWatcher({
     let committedAt = null;
     let message = null;
     try {
-      const commit = await readResponseJsonCapped(
-        await get(`${api}/commits/${sha}`, apiHeaders()),
-        MAX_COMMIT_BYTES,
-      );
+      const commit = await readApi(`${api}/commits/${sha}`, MAX_COMMIT_BYTES);
       committedAt = Date.parse(commit?.commit?.committer?.date) || null;
       message = String(commit?.commit?.message || '')
         .split('\n')[0]
