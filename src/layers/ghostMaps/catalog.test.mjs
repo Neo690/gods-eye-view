@@ -106,6 +106,24 @@ test('each product keeps its newest edition by date, then edition number', () =>
   );
 });
 
+test('the renamed 30-day export still fills the kinetic-30d product', () => {
+  const rows = buildGhostMapsCatalog([
+    blob(
+      `${ARCGIS}Common Intelligence Picture/30-Day Pulls/S2Underground_Common_Intelligence_Picture_Last_30_Days.kmz`,
+      233810,
+    ),
+  ]);
+  assert.deepEqual(
+    rows.map(({ id }) => id),
+    ['kinetic-30d'],
+  );
+  assert.equal(
+    rows[0].fileName,
+    'S2Underground_Common_Intelligence_Picture_Last_30_Days.kmz',
+  );
+  assert.equal(rows[0].defaultOn, true);
+});
+
 test('latest drop is the newest dated incident file outside curated, archived and base data', () => {
   const rows = buildGhostMapsCatalog([
     blob(`${INCIDENTS}Reno Wildfires August 24, 2026.kmz`),

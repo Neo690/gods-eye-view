@@ -36,8 +36,12 @@ export const GHOSTMAPS_PRODUCTS = Object.freeze([
     // i18n-ignore: catalog data; the panel shows its own translated label
     title: 'Kinetic Activity (30 days)',
     defaultOn: true,
+    // S2 renamed the 30-day export from `Kinetic_Activities_Last_30_Days.kmz`
+    // to `S2Underground_Common_Intelligence_Picture_Last_30_Days.kmz`. The
+    // folder holds exactly one direct KMZ, so match the folder rather than
+    // pinning a file name that upstream is free to change again.
     pattern: new RegExp(
-      `^${escape(ARCGIS)}Common Intelligence Picture/30-Day Pulls/Kinetic[^/]*\\.kmz$`,
+      `^${escape(ARCGIS)}Common Intelligence Picture/30-Day Pulls/[^/]+\\.kmz$`,
       'i',
     ),
   }),
