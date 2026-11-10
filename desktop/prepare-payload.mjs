@@ -59,6 +59,10 @@ const SKIP_TOP_LEVEL = new Set([
 // Patterns applied at any depth. Credentials are the point: an installer must
 // never carry one, wherever it sits in the tree.
 const SKIP_ANYWHERE = [
+  // The ANFR extract's build input (66 MB of zipped archives). The server reads
+  // only `data/anfr/cell-towers.json.gz`, which does ship: without it the Radio
+  // Sites layer answers "anfr_not_built" in the installed app.
+  /^data\/anfr\/anfr-archive\.zip$/i,
   /^\.env(?:\.|$)/i,
   /^pinokio\/ENVIRONMENT$/,
   /^pinokio\/\.installed$/,
