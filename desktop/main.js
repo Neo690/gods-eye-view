@@ -30,6 +30,13 @@ const VERIFY = process.argv.includes('--verify');
 const LOG_DIR = path.join(app.getPath('userData'), 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'main.log');
 
+// The window frame already names the app in its title bar, and the scene draws
+// the same name as its own wordmark a few pixels lower: two titles stacked in
+// the top-left corner. The frame stays — it is what moves and closes the
+// window — and the page's copy is hidden, the way the phone shell already
+// hides its wordmark. The browser build, which has no frame, keeps it.
+const DESKTOP_CHROME_CSS = '#title-bar { display: none !important; }';
+
 function log(message) {
   const line = `[${new Date().toISOString()}] ${message}`;
   // eslint-disable-next-line no-console
@@ -54,6 +61,10 @@ function createWindow(error) {
     backgroundColor: '#05080f',
     title: "God's Eye View",
     icon: path.join(__dirname, 'assets', 'icon.png'),
+    // Windows already draws "God's Eye View" in the title bar; the app menu's
+    // top-level label would repeat it directly underneath. Hide the menu bar
+    // until Alt asks for it, the way a native Windows app does.
+    autoHideMenuBar: true,
     show: false,
     webPreferences: {
       nodeIntegration: false,
@@ -77,6 +88,10 @@ function createWindow(error) {
       )
       .catch(() => {});
   } else {
+    // Re-applied on every load (F5 included): insertCSS belongs to one document.
+    mainWindow.webContents.on('dom-ready', () => {
+      mainWindow.webContents.insertCSS(DESKTOP_CHROME_CSS).catch(() => {});
+    });
     mainWindow.loadURL(APP_URL).catch(() => {});
     mainWindow.webContents.on('did-fail-load', () => {
       log(`loading ${APP_URL} failed — retrying in 3s`);
@@ -90,7 +105,8 @@ function createWindow(error) {
   // The console's own external links (update downloads, provider key pages)
   // belong to the system browser, not to a second Electron window that has no
   // server or keys: any popup target off the local origin opens outside.
-  const isAppOrigin = (url) => url.startsWith('http://127.0.0.1:') || url.startsWith('http://localhost:');
+  const isAppOrigin = (url) =>
+    url.startsWith('http://127.0.0.1:') || url.startsWith('http://localhost:');
   const openExternally = (url) => {
     if (isAppOrigin(String(url || ''))) return { action: 'allow' };
     shell.openExternal(String(url || '')).catch(() => {});
