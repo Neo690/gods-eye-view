@@ -3,10 +3,13 @@
 // The tour already flies to an alert and opens its detailed card, which is
 // silent — the operator watching the globe has to read. This module says the
 // same headline out loud when the tour reaches it:
-//   - it uses the device's own synthesiser (`speechSynthesis`), so it costs
-//     nothing, needs no key and no server, and speaks the operator's language
-//     through the installed engine. The Gemini voice in this app is a live
-//     microphone session, not a text-to-speech endpoint; it is not used here,
+//   - it uses the device's own synthesiser, so it costs nothing, needs no key
+//     and no server, and speaks the operator's language through the installed
+//     engine. On the phone the page's `speechSynthesis` does not exist inside
+//     a WebView, so the Android shell's `GodsEyeNative.speak` bridge is used
+//     there; in a browser the Web Speech API answers instead. The Gemini voice
+//     in this app is a live microphone session, not a text-to-speech
+//     endpoint; it is not used here,
 //   - one sentence per alert, and a new alert cancels the previous sentence:
 //     the tour moves on, so the old headline is stale rather than queued,
 //   - a muted voice, an empty line, a missing synthesiser or a synthesiser
@@ -26,6 +29,10 @@ export const MAX_ALERT_SPEECH_CHARS = 180;
  *   document is ready still finds it.
  * @param {Function} [options.utterance] `SpeechSynthesisUtterance` seam.
  * @param {() => string} [options.locale] the language to speak in.
+ * @param {{speak?: Function, stopSpeaking?: Function}} [options.device]
+ *   native bridge seam (`GodsEyeNative`). Android's WebView ships no
+ *   `speechSynthesis` at all, so the phone's own engine is the only path that
+ *   reaches the speaker there; it wins whenever it exists.
  * @returns {{announce: (text: string) => boolean, setEnabled: Function,
  *   isEnabled: () => boolean, stop: Function, destroy: Function}}
  */
@@ -33,18 +40,26 @@ export function createAlertVoice({
   speech = undefined,
   utterance = undefined,
   locale = () => 'en',
+  device = undefined,
 } = {}) {
   let enabled = true;
   let destroyed = false;
 
   const synthesizer = () =>
     speech ?? globalThis.speechSynthesis ?? globalThis.window?.speechSynthesis;
+  const native = () =>
+    device ?? globalThis.GodsEyeNative ?? globalThis.window?.GodsEyeNative;
   const Utterance = () =>
     utterance ??
     globalThis.SpeechSynthesisUtterance ??
     globalThis.window?.SpeechSynthesisUtterance;
 
   function stop() {
+    try {
+      native()?.stopSpeaking?.();
+    } catch {
+      // A bridge torn down with its activity cannot take a cancellation.
+    }
     try {
       synthesizer()?.cancel?.();
     } catch {
@@ -65,6 +80,16 @@ export function createAlertVoice({
       .trim()
       .slice(0, MAX_ALERT_SPEECH_CHARS);
     if (!line) return false;
+    const bridge = native();
+    if (typeof bridge?.speak === 'function') {
+      try {
+        bridge.stopSpeaking?.();
+        bridge.speak(line, String(locale?.() || 'en'));
+        return true;
+      } catch {
+        return false;
+      }
+    }
     const engine = synthesizer();
     const UtteranceClass = Utterance();
     if (

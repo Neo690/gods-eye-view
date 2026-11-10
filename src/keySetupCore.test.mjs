@@ -128,7 +128,7 @@ test('only the keys this store holds are offered for removal, whole entries only
   // a key the app merely ships as a built-in default cannot.
   const env = {
     OPENAI_API_KEY: 'sk-saved',
-    WINDY_API_KEY: 'built-in-default',
+    TOMTOM_API_KEY: 'built-in-default',
     OPENSKY_CLIENT_ID: 'half-a-pair',
   };
   const status = markStoredKeyManagement(keySetupStatus(env), {
@@ -140,7 +140,7 @@ test('only the keys this store holds are offered for removal, whole entries only
   );
   assert.equal(managed.openai, 'file', 'saved here → removable');
   assert.equal(
-    managed.windy,
+    managed.tomtom,
     null,
     'a built-in default is replaceable, not deletable',
   );

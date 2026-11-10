@@ -645,12 +645,6 @@ const layers = [
     noQuery: 'heat cells from AIS effort; the layer panel carries the totals',
   },
   {
-    id: 'windy-weather',
-    aliases: ['local weather', 'windy', 'point forecast'],
-    context: false,
-    noQuery: 'one point forecast for the map centre; no records',
-  },
-  {
     id: 'private-wifi',
     aliases: ['private wifi', 'wardrive', 'imported wifi'],
     context: false,

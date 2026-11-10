@@ -4,7 +4,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as Cesium from 'cesium';
-import { AI_AGENT_LAYER_ID, createAiAgentLayer } from './index.js';
+import {
+  AI_AGENT_LAYER_ID,
+  ALERT_READ_BASE_MS,
+  ALERT_READ_MAX_MS,
+  alertReadMs,
+  createAiAgentLayer,
+} from './index.js';
 import {
   angularDistance,
   destinationPoint,
@@ -1023,10 +1029,12 @@ test('the tour can be held and picked up where it stopped', async () => {
     'the card is still readable while held',
   );
 
-  // Resuming keeps the scan's remaining time instead of restarting it.
+  // Resuming keeps the scan's remaining time instead of restarting it. A
+  // headline of this length holds the card ~10.8 s (alertReadMs), so the walk
+  // gives it a full reading window.
   pauseChip().onClick();
   assert.equal(layer.getStats().paused, false);
-  for (let i = 0; i < 40 && cleared.length === 0; i++) {
+  for (let i = 0; i < 80 && cleared.length === 0; i++) {
     clock += 250;
     viewer.scene.preUpdate.raiseEvent();
   }
@@ -1170,5 +1178,108 @@ test('the layer refuses a second init and never claims a count it lacks', () => 
   assert.ok(stats.emptyHint.includes('Sentinel'));
   layer.enable();
   layer.disable();
+  layer.destroy();
+});
+
+test('alert reading time follows the headline, with a floor and a ceiling', () => {
+  assert.equal(alertReadMs(''), ALERT_READ_BASE_MS);
+  const short = alertReadMs('Vandalism');
+  const long = alertReadMs('MassStabbing · 11 killed, 40 wounded in the market');
+  assert.ok(long > short, 'a longer headline is held longer');
+  assert.equal(alertReadMs('x'.repeat(400)), ALERT_READ_MAX_MS);
+});
+
+test('a new GhostMaps edition does not replay the alerts already read', async () => {
+  const doc = fakeDocument();
+  let clock = 4_000_000;
+  const viewer = {
+    camera: {
+      positionCartographic: { latitude: 0, longitude: 0, height: 2_000_000 },
+      flyTo() {},
+      cancelFlight() {},
+    },
+    scene: { preUpdate: new Cesium.Event() },
+  };
+  const alerts = [
+    {
+      id: 'cip:1',
+      name: 'MassStabbing',
+      lonDeg: 0.2,
+      latDeg: 0.2,
+      score: 540,
+      severity: 'emergency',
+      summary: 'MassStabbing · 11 killed',
+    },
+    {
+      id: 'cip:2',
+      name: 'Shelling',
+      lonDeg: 0.4,
+      latDeg: 0.4,
+      score: 300,
+      severity: 'warn',
+      summary: 'Shelling · 4 wounded',
+    },
+    {
+      id: 'cip:3',
+      name: 'Vandalism',
+      lonDeg: 0.6,
+      latDeg: 0.6,
+      score: 20,
+      severity: 'info',
+      summary: 'Vandalism',
+    },
+  ];
+  const inspected = [];
+  let edition = 'edition-a';
+  const ghostMaps = {
+    getStats: () => ({ count: alerts.length, commit: edition }),
+    getSentinelAlerts: () => alerts,
+    inspectSentinelAlert: (id) => {
+      inspected.push(id);
+      return true;
+    },
+    clearSentinelInspection: () => true,
+  };
+  const layer = createAiAgentLayer({
+    docScope: doc,
+    now: () => clock,
+    fetchImpl: async () => ({ ok: false, status: 503, json: async () => ({}) }),
+  });
+  layer.attachDataManager({
+    getAll: () => [
+      {
+        id: 's2-ghostmaps',
+        name: 'S2 GhostMaps',
+        enabled: true,
+        stats: { count: alerts.length, error: null },
+      },
+    ],
+    layers: new Map([['s2-ghostmaps', { enabled: true, module: ghostMaps }]]),
+  });
+  layer.init(viewer);
+  layer.enable();
+  const walk = (ticks) => {
+    for (let i = 0; i < ticks; i++) {
+      clock += 250;
+      viewer.scene.preUpdate.raiseEvent();
+    }
+  };
+  walk(40);
+  assert.equal(inspected[0], 'cip:1');
+
+  // The source publishes a new edition while the first alert is being read:
+  // the visited book must survive it, or the tour restarts at cip:1 forever.
+  edition = 'edition-b';
+  walk(220);
+  assert.deepEqual(
+    inspected.slice(0, 2),
+    ['cip:1', 'cip:2'],
+    'the tour resumes at the next alert, not the same one',
+  );
+  assert.equal(
+    inspected.filter((id) => id === 'cip:1').length,
+    1,
+    'the first alert is read once, not replayed',
+  );
   layer.destroy();
 });

@@ -50,6 +50,21 @@ const CARD_HOST_OPTIONS = Object.freeze({
   moving: false,
 });
 const MAX_CARD_LINES = 12;
+/**
+ * Alert geometry floats this far above the ellipsoid instead of being draped
+ * on the rendered surface. Ground clamping and polygon classification ask the
+ * Google photoreal tileset for the terrain height under every vertex, and that
+ * height query is a GPU pick: a thousand alerts made a single frame — or a
+ * single tap — take seconds on a phone. At the altitudes this layer is read
+ * from (hundreds of kilometres) 500 m of parallax is sub-pixel, and the pins
+ * already draw over the ground (`disableDepthTestDistance`), so nothing is
+ * hidden by dropping the drape.
+ */
+const ALERT_ALTITUDE_M = 500;
+const alertPositions = (coords) =>
+  Cesium.Cartesian3.fromDegreesArrayHeights(
+    coords.flatMap(([lon, lat]) => [lon, lat, ALERT_ALTITUDE_M]),
+  );
 
 /** Panel names for the catalog's product ids (the catalog sends English). */
 const PRODUCT_LABELS = Object.freeze({
@@ -249,7 +264,9 @@ export function createGhostMapsLayer({
           const id = `${PICK_PREFIX}${key}:${part}`;
           if (geometry.type === 'point') {
             const position = Cesium.Cartesian3.fromDegrees(
-              ...geometry.position,
+              geometry.position[0],
+              geometry.position[1],
+              ALERT_ALTITUDE_M,
             );
             const entity = dataSource.entities.add({
               id,
@@ -265,10 +282,11 @@ export function createGhostMapsLayer({
                   style.icon && style.iconColor
                     ? cesiumColor(style.iconColor)
                     : undefined,
-                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                heightReference: Cesium.HeightReference.NONE,
                 verticalOrigin: Cesium.VerticalOrigin.CENTER,
-                // Ground-clamped icons would sink into terrain and 3D tiles; the
-                // horizon cull hides the far side instead (see `_horizon`).
+                // The horizon cull hides the far side (see `_horizon`), and
+                // drawing over the ground keeps the pin legible without the
+                // per-vertex terrain pick that clamping cost.
                 disableDepthTestDistance: Number.POSITIVE_INFINITY,
               },
             });
@@ -285,17 +303,14 @@ export function createGhostMapsLayer({
             dataSource.entities.add({
               id,
               polyline: {
-                positions: Cesium.Cartesian3.fromDegreesArray(
-                  geometry.positions.flat(),
-                ),
+                positions: alertPositions(geometry.positions),
                 width: Math.min(8, Math.max(1.5, style.lineWidth ?? 2)),
                 material: cesiumColor(style.lineColor, color),
-                clampToGround: true,
+                clampToGround: false,
               },
             });
           } else {
-            const ring = (points) =>
-              Cesium.Cartesian3.fromDegreesArray(points.flat());
+            const ring = (points) => alertPositions(points);
             dataSource.entities.add({
               id,
               polygon: {
@@ -313,7 +328,7 @@ export function createGhostMapsLayer({
                         color,
                         style.polyColor ? undefined : 0.25,
                       ),
-                classificationType: Cesium.ClassificationType.BOTH,
+                height: ALERT_ALTITUDE_M,
               },
             });
             if (style.outline !== false)
@@ -323,7 +338,7 @@ export function createGhostMapsLayer({
                   positions: ring([...geometry.outer, geometry.outer[0]]),
                   width: Math.min(6, Math.max(1.5, style.lineWidth ?? 2)),
                   material: cesiumColor(style.lineColor, color),
-                  clampToGround: true,
+                  clampToGround: false,
                 },
               });
           }

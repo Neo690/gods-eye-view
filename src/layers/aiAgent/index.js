@@ -92,8 +92,26 @@ const ALERT_TOUR_FLIGHT_MS = 2500;
 const ALERT_TOUR_PULLBACK_HEIGHT_M = 6_000_000;
 const ALERT_TOUR_PULLBACK_FLIGHT_MS = 1200;
 const ALERT_TOUR_PULLBACK_MS = 2000;
-/** A detailed card needs longer than a generic scan to be read. */
-const ALERT_READ_MS = 7000;
+/** A detailed card needs longer than a generic scan to be read. The tour
+ *  waits for the headline to be read AND spoken: a fixed seven seconds cut
+ *  the voice off mid-sentence, so the reading time follows the text. */
+export const ALERT_READ_BASE_MS = 9000;
+export const ALERT_READ_PER_CHAR_MS = 80;
+export const ALERT_READ_MAX_MS = 22000;
+
+/**
+ * How long one alert stays on screen: enough to read its headline and hear
+ * the sentence, longer for longer headlines, capped so the tour still moves.
+ * @param {string} text The spoken/displayed headline.
+ * @returns {number} Milliseconds to hold the card open.
+ */
+export function alertReadMs(text) {
+  const chars = String(text ?? '').trim().length;
+  return Math.min(
+    ALERT_READ_MAX_MS,
+    ALERT_READ_BASE_MS + chars * ALERT_READ_PER_CHAR_MS,
+  );
+}
 
 /** Alerts are toured briskly: the card carries the detail, the walk is
  *  theatre. Eight times cruise keeps a cross-globe hop under ten seconds; the
@@ -142,7 +160,6 @@ export function createAiAgentLayer({
   // Alerts already scanned in this edition. A new GhostMaps commit (or a
   // changed feature count) starts the tour over from the most severe one.
   const visitedAlerts = new Set();
-  let alertEpoch = null;
   // The card this layer opened, so a manual GhostMaps click is never closed
   // by the tour moving on or by the layer being switched off.
   let activeAlertId = null;
@@ -212,30 +229,26 @@ export function createAiAgentLayer({
     return typeof module.getSentinelAlerts === 'function' ? module : null;
   }
 
-  /** The module's edition signature: a reload invalidates the visited book. */
-  function alertEdition(module) {
-    const stats = module.getStats?.() || {};
-    return `${stats.commit || ''}:${stats.count || 0}`;
-  }
-
   /**
    * The next GhostMaps alert the tour has not read, most severe first. The
-   * layer did the ranking; this only keeps the visited book and drops it when
-   * a new edition lands.
+   * layer did the ranking; this only keeps the visited book. A new edition
+   * keeps the book too: it prunes alerts that disappeared instead of starting
+   * over from the same first headline every time the source polls. The book
+   * lives as long as the layer does, so re-enabling the tour resumes it.
    */
   function ghostMapsAlertTarget() {
     const module = ghostMapsModule();
     if (!module) return null;
-    const edition = alertEdition(module);
-    if (edition !== alertEpoch) {
-      alertEpoch = edition;
-      visitedAlerts.clear();
-    }
     let alerts = [];
     try {
       alerts = module.getSentinelAlerts() || [];
     } catch {
       return null; // a throwing reader is the same as no reader
+    }
+    if (visitedAlerts.size) {
+      const live = new Set(alerts.map((alert) => String(alert.id)));
+      for (const id of [...visitedAlerts])
+        if (!live.has(id)) visitedAlerts.delete(id);
     }
     const next = alerts.find((alert) => !visitedAlerts.has(String(alert.id)));
     if (!next) return null;
@@ -587,7 +600,10 @@ export function createAiAgentLayer({
       if (!step.arrived) return;
       phase = 'scan';
       scanUntil =
-        now + (target.kind === 'ghostmaps-alert' ? ALERT_READ_MS : SCAN_MS);
+        now +
+        (target.kind === 'ghostmaps-alert'
+          ? alertReadMs(target.summary || target.label)
+          : SCAN_MS);
       spider.scanning = true;
       spider.note = translateKnown(target.label);
       spider.severity = target.severity;
@@ -785,9 +801,8 @@ export function createAiAgentLayer({
     enable() {
       if (destroyed) return false;
       enabled = true;
-      // A fresh enable starts the alert tour from the most severe again.
-      visitedAlerts.clear();
-      alertEpoch = null;
+      // The tour resumes where it stopped: the visited book survives a
+      // disable/enable, so the same severe headlines do not replay first.
       tourPaused = false;
       pausedAt = 0;
       spider.visible = true;
@@ -806,8 +821,6 @@ export function createAiAgentLayer({
       // A sentence about an alert the tour abandoned is stale.
       voice?.stop?.();
       clearAlertTour();
-      visitedAlerts.clear();
-      alertEpoch = null;
       spider.visible = false;
       spider.scanning = false;
       spider.note = '';

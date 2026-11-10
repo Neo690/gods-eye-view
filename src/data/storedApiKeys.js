@@ -4,7 +4,6 @@ const STORAGE_KEY = 'gev:provider-api-keys';
 
 const DEFAULT_KEYS = Object.freeze({
   AISSTREAM_API_KEY: 'b13504076b28b22035291257176edc65cd0ed6c4',
-  WINDY_API_KEY: '3Z8AiagNSo2KgCDX3qZcwqRKqLpQcv9I',
   TOMTOM_API_KEY: 'wXoT3pXh2bF9KKdGBJ6U0R3tH7m8x4wQ',
 });
 

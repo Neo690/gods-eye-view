@@ -11,6 +11,7 @@ import android.provider.Settings;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
+import android.speech.tts.TextToSpeech;
 import android.widget.Toast;
 import android.graphics.Color;
 import android.net.Uri;
@@ -75,6 +76,12 @@ public class MainActivity extends Activity {
   private boolean dictationLanguageDropped = false;
   private String pendingLocationOrigin;
   private ApiForwarder apiForwarder;
+  /** The phone's own synthesiser for the Sentinel's spoken alerts; WebView
+   *  ships no speechSynthesis, so the announcement has to come from here. */
+  private TextToSpeech speaker;
+  private boolean speakerReady = false;
+  private String pendingSpeech = null;
+  private String pendingSpeechLocale = "";
 
   @SuppressLint("SetJavaScriptEnabled")
   @Override
@@ -192,6 +199,12 @@ public class MainActivity extends Activity {
 
   @Override
   protected void onDestroy() {
+    if (speaker != null) {
+      speaker.stop();
+      speaker.shutdown();
+      speaker = null;
+      speakerReady = false;
+    }
     if (dictation != null) {
       dictation.cancel();
       dictation.destroy();
@@ -203,6 +216,50 @@ public class MainActivity extends Activity {
       webView = null;
     }
     super.onDestroy();
+  }
+
+  /** Create the platform synthesiser once; a line queued before it is ready
+   *  is spoken on the initialisation callback instead of being dropped. */
+  private TextToSpeech speaker() {
+    if (speaker != null) return speaker;
+    speaker = new TextToSpeech(this, status -> {
+      speakerReady = status == TextToSpeech.SUCCESS;
+      if (!speakerReady) {
+        Log.w(TAG, "No text-to-speech engine (status " + status + ")");
+        pendingSpeech = null;
+        return;
+      }
+      if (pendingSpeech != null) {
+        String queued = pendingSpeech;
+        String locale = pendingSpeechLocale;
+        pendingSpeech = null;
+        pendingSpeechLocale = "";
+        speakNow(queued, locale);
+      }
+    });
+    return speaker;
+  }
+
+  /** Speak one line, falling back to the phone's language when the requested
+   *  one has no installed voice. */
+  private void speakNow(String text, String locale) {
+    TextToSpeech engine = speaker;
+    if (!speakerReady || engine == null) return;
+    Locale target =
+      locale == null || locale.trim().isEmpty()
+        ? Locale.getDefault()
+        : Locale.forLanguageTag(locale.trim().replace('_', '-'));
+    int available = engine.isLanguageAvailable(target);
+    if (
+      available == TextToSpeech.LANG_MISSING_DATA ||
+      available == TextToSpeech.LANG_NOT_SUPPORTED
+    ) {
+      target = Locale.getDefault();
+    }
+    engine.setLanguage(target);
+    Bundle params = new Bundle();
+    params.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1f);
+    engine.speak(text, TextToSpeech.QUEUE_FLUSH, params, "gev-sentinel");
   }
 
   private boolean hasMic() {
@@ -824,6 +881,36 @@ public class MainActivity extends Activity {
         }
       });
       return true;
+    }
+
+    /**
+     * Reads one Sentinel headline through the phone's synthesiser. The page
+     * has no speechSynthesis inside a WebView, so this is the only path that
+     * actually reaches the speaker. Returns whether the line was accepted.
+     */
+    @JavascriptInterface
+    public boolean speak(String text, String locale) {
+      String line = text == null ? "" : text.trim();
+      if (line.isEmpty()) return false;
+      runOnUiThread(() -> {
+        speaker();
+        if (!speakerReady) {
+          pendingSpeech = line;
+          pendingSpeechLocale = locale == null ? "" : locale;
+          return;
+        }
+        speakNow(line, locale);
+      });
+      return true;
+    }
+
+    /** Silences a headline the tour moved past. */
+    @JavascriptInterface
+    public void stopSpeaking() {
+      runOnUiThread(() -> {
+        pendingSpeech = null;
+        if (speaker != null) speaker.stop();
+      });
     }
 
     @JavascriptInterface

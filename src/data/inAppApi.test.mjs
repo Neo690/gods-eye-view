@@ -818,11 +818,11 @@ test('the in-app shell serves the key registry with the desktop removal control,
     assert.equal(byId.openai.managed, 'file', 'a key saved here is removable');
     assert.equal(byId.openai.set, true);
     assert.equal(
-      byId.windy.managed,
+      byId.tomtom.managed,
       null,
       'a shipped default is not removable',
     );
-    assert.equal(byId.windy.set, true, 'though it still reads as configured');
+    assert.equal(byId.tomtom.set, true, 'though it still reads as configured');
     assert.equal(
       byId['google-maps'].managed,
       null,

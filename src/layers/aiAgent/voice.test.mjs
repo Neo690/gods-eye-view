@@ -44,6 +44,36 @@ test('an alert is said aloud once, in the operator language, after cancelling th
   assert.equal(engine.spoken.length, 2);
 });
 
+test('the phone bridge speaks when a WebView has no speechSynthesis', () => {
+  const engine = fakeEngine();
+  const spoken = [];
+  let stops = 0;
+  const device = {
+    speak(text, lang) {
+      spoken.push({ text, lang });
+      return true;
+    },
+    stopSpeaking() {
+      stops += 1;
+    },
+  };
+  const voice = createAlertVoice({
+    speech: engine,
+    utterance: FakeUtterance,
+    device,
+    locale: () => 'fr-FR',
+  });
+  assert.equal(voice.announce('MassStabbing · 11 tués'), true);
+  assert.deepEqual(spoken, [
+    { text: 'MassStabbing · 11 tués', lang: 'fr-FR' },
+  ]);
+  assert.equal(engine.spoken.length, 0, 'the page engine is not consulted');
+  voice.setEnabled(false);
+  assert.equal(stops >= 2, true, 'muting stops the phone engine too');
+  assert.equal(voice.announce('Vandalism'), false);
+  assert.equal(spoken.length, 1);
+});
+
 test('a muted voice says nothing and silences the sentence in progress', () => {
   const engine = fakeEngine();
   const voice = createAlertVoice({ speech: engine, utterance: FakeUtterance });

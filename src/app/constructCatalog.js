@@ -2,7 +2,6 @@ import { resolveCatalogSources } from './sourceComposition.js';
 import { createWeatherClock } from '../layers/weather/clock.js';
 import { createWeatherLayer } from '../layers/weather/index.js';
 import { createCyclonesLayer } from '../layers/cyclones/index.js';
-import { createWindyWeatherLayer } from '../layers/windy/index.js';
 import { createWindLayer } from '../layers/wind/index.js';
 import { createLayerCatalog } from './catalog.js';
 import { LAYER_STATE_REGISTRY } from '../data/layerState.js';
@@ -60,7 +59,6 @@ import { createBhoteKoshiLocatorLayer } from '../data/bhoteKoshiLocator.js';
  */
 export const LOCAL_ONLY_LAYER_METADATA = Object.freeze([
   Object.freeze({ id: 'local-adsb', disposition: 'local-only' }),
-  Object.freeze({ id: 'windy-weather', disposition: 'local-only' }),
   // An imported wardrive is one operator's own file: a share link must never
   // imply that the recipient has it, and it must never be restored for them.
   Object.freeze({ id: 'private-wifi', disposition: 'local-only' }),
@@ -218,7 +216,6 @@ export function createApplicationCatalog({
           clock: weatherClock,
         }),
         createCyclonesLayer({ feed: sources.cyclones }),
-        createWindyWeatherLayer({ feed: sources['windy-weather'] }),
         ...createInfrastructureLayers(localGeoJsonServices),
         createApplicationIsraeliTransport(),
         createApplicationCables({ source: sources.cables }),
