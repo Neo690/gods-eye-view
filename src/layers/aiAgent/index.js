@@ -60,6 +60,7 @@ import { requestFindingBrief, BRIEF_MIN_INTERVAL_MS } from './brief.js';
 import { createSpiderCameraFollow } from './follow.js';
 import { createAlertVoice } from './voice.js';
 import { createAlertAnswerer, readAskIntent } from './ask.js';
+import { createAlertPlaces } from './place.js';
 import { createAskMic } from './askMic.js';
 import { dictationMessage } from '../../ui/dictation.js';
 
@@ -214,7 +215,12 @@ export function createAiAgentLayer({
   let askMode = false;
   let askMic = null;
   let askAnswer = '';
-  const answerer = createAlertAnswerer();
+  // Country and coordinates for each answer. The country pack is decoded when
+  // ASK mode is switched on, so the answer itself stays synchronous.
+  const places = createAlertPlaces();
+  const answerer = createAlertAnswerer({
+    place: (alert) => places.describe(alert),
+  });
 
   /** Put one sentence on the card's answer line; a refusal is read, not said. */
   function showAskMessage(text) {
@@ -252,8 +258,12 @@ export function createAiAgentLayer({
     if (on === askMode) return;
     askMode = on;
     askAnswer = '';
-    if (askMode) voice?.stop?.();
-    else askMic?.cancel?.();
+    if (askMode) {
+      voice?.stop?.();
+      // Decode the offline country pack now, while the operator is still
+      // reaching for the microphone; the first answer already names a country.
+      places.warm();
+    } else askMic?.cancel?.();
     avatar?.setAskMode(askMode);
     notifyRow();
   }

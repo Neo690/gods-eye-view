@@ -84,8 +84,22 @@ jobs:
           node-version: 24.14.0
           cache: npm
 
+      # The ffmpeg-static post-install fetches its binary from a GitHub release
+      # page, and the unauthenticated `/releases/download/` path 504s in
+      # bursts. Retry over fresh `node_modules` with a pause, as the Android
+      # workflow does, instead of losing the build to an intermittent download.
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            if npm install --no-audit --no-fund; then
+              exit 0
+            fi
+            rm -rf node_modules
+            echo "npm install failed on attempt $attempt"
+            sleep 30
+          done
+          exit 1
 
       # The client-side map credentials only. Everything else is server-side and
       # must not be inlined into a bundle that ships inside a public app.
@@ -162,8 +176,22 @@ jobs:
           node-version: 24.14.0
           cache: npm
 
+      # The ffmpeg-static post-install fetches its binary from a GitHub release
+      # page, and the unauthenticated `/releases/download/` path 504s in
+      # bursts. Retry over fresh `node_modules` with a pause, as the Android
+      # workflow does, instead of losing the build to an intermittent download.
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            if npm install --no-audit --no-fund; then
+              exit 0
+            fi
+            rm -rf node_modules
+            echo "npm install failed on attempt $attempt"
+            sleep 30
+          done
+          exit 1
 
       - name: Build the web bundle
         env:

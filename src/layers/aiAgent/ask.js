@@ -129,13 +129,25 @@ export function readAskIntent(text) {
   return null;
 }
 
-/** One alert as a spoken sentence: headline first, then where it is. */
-function describeAlert(alert) {
+/**
+ * One alert as a spoken sentence: headline, folder, then the place the layer
+ * resolved for it (country and coordinates). A place reader that throws costs
+ * the location, never the answer.
+ */
+function describeAlert(alert, place) {
   const summary = String(alert?.summary || alert?.name || '').trim();
   const folder = String(alert?.folder || '').trim();
   const parts = [summary || t('Report')];
   if (folder && !summary.toLowerCase().includes(folder.toLowerCase())) {
     parts.push(folder);
+  }
+  if (typeof place === 'function') {
+    try {
+      const where = String(place(alert) ?? '').trim();
+      if (where) parts.push(where);
+    } catch {
+      // A place reader without data leaves the sentence as it was.
+    }
   }
   return parts.filter(Boolean).join(' · ');
 }
@@ -143,9 +155,14 @@ function describeAlert(alert) {
 /**
  * The alert answerer. Keeps only what "next" and "repeat" need, so the layer
  * can hold one of these for its whole life.
+ *
+ * @param {object} [options]
+ * @param {(alert: object) => string} [options.place] where an alert is, if the
+ *   layer resolved it; omitted in the layer-less tests and whenever the
+ *   offline country pack is not ready.
  * @returns {{answer: Function, reset: Function}}
  */
-export function createAlertAnswerer() {
+export function createAlertAnswerer({ place = null } = {}) {
   let lastText = '';
   let cursorId = null;
 
@@ -211,7 +228,7 @@ export function createAlertAnswerer() {
       }
       const alert = rows[index];
       const alertId = String(alert?.id ?? '');
-      const detail = describeAlert(alert);
+      const detail = describeAlert(alert, place);
       cursorId = alertId;
       // Two literals, not one ternary: the i18n extractor only sees a
       // message in the first argument itself.

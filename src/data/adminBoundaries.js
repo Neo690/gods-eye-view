@@ -335,6 +335,7 @@ const loadCountries = createRetryableLoader(async () => {
   packLoads.countries += 1;
   const pack = await loadBundledJson(PACKS.countries.url);
   const index = new Map();
+  const entries = [];
   for (const feature of pack.features || []) {
     const entry = {
       kind: 'country',
@@ -344,11 +345,142 @@ const loadCountries = createRetryableLoader(async () => {
       country: normalizeAdminName(feature.country),
       iso2: feature.iso2?.toLowerCase(),
     };
+    entries.push(entry);
     for (const name of [feature.name, ...(feature.alt || [])])
       addKey(index, normalizeAdminName(name), entry, 0);
   }
-  return { index };
+  return { index, entries };
 });
+
+let countryLocator = null;
+let countryLocatorLoad = null;
+
+/**
+ * A point this close to a coast still belongs to the country behind it: the
+ * pack is simplified by up to 0.02° (~2.2 km), so a waterfront address can
+ * land just outside the drawn shoreline. Points farther out (open sea) get no
+ * country rather than the nearest one.
+ */
+const NEAR_COAST_KM = 5;
+const KM_PER_DEG = 111.32;
+
+/** Planar km from a point to one ring; fine at the few-km scale used here. */
+function ringDistanceKm(ring, lat, lon, lonScale) {
+  let best = Infinity;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [x1, y1] = ring[j];
+    const [x2, y2] = ring[i];
+    const px = (lon - x1) * lonScale;
+    const py = lat - y1;
+    const dx = (x2 - x1) * lonScale;
+    const dy = y2 - y1;
+    const length = dx * dx + dy * dy;
+    let t = length ? (px * dx + py * dy) / length : 0;
+    t = Math.max(0, Math.min(1, t));
+    const distance = Math.hypot(px - t * dx, py - t * dy) * KM_PER_DEG;
+    if (distance < best) best = distance;
+  }
+  return best;
+}
+
+/** Km from a point to the nearest edge of a unit (holes included). */
+function polygonsDistanceKm(polygons, lat, lon) {
+  const lonScale = Math.cos(toRad(Math.max(-89.9, Math.min(89.9, lat))));
+  let best = Infinity;
+  for (const [outer, ...holes] of polygons) {
+    for (const ring of [outer, ...holes]) {
+      const distance = ringDistanceKm(ring, lat, lon, lonScale);
+      if (distance < best) best = distance;
+    }
+  }
+  return best;
+}
+
+/**
+ * One country of the bundled admin-0 pack contains the point. The polygon test
+ * is exact, and the smallest containing unit wins so an enclave (Lesotho in
+ * South Africa, San Marino in Italy) is never reported as its neighbour. A
+ * point on the far side of the antimeridian is tested at lon ± 360, because
+ * rings are stored unwrapped. A waterfront point the simplified shoreline
+ * leaves just outside still resolves to the country within NEAR_COAST_KM.
+ *
+ * @param {Array<object>} entries
+ * @returns {(lat: number, lon: number) => ?{name: string, iso2: string}}
+ */
+function countryLocatorFrom(entries) {
+  return (lat, lon) => {
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    let best = null;
+    for (const entry of entries) {
+      const geometry = geometryOf(entry);
+      const [west, south, east, north] = geometry.bbox;
+      if (lat < south || lat > north) continue;
+      let contains = false;
+      for (const shift of [0, 360, -360]) {
+        const x = lon + shift;
+        if (x < west || x > east) continue;
+        if (polygonsContain(geometry.polygons, lat, x)) {
+          contains = true;
+          break;
+        }
+      }
+      if (!contains) continue;
+      if (!best || geometry.areaKm2 < best.geometry.areaKm2)
+        best = { entry, geometry };
+    }
+    if (!best) {
+      // Nothing contains it: accept the closest coast, but only a coast close
+      // enough to be this point's own. The bbox is padded by the same margin.
+      const padDeg = NEAR_COAST_KM / KM_PER_DEG;
+      let nearestKm = NEAR_COAST_KM;
+      for (const entry of entries) {
+        const geometry = geometryOf(entry);
+        const [west, south, east, north] = geometry.bbox;
+        if (lat < south - padDeg || lat > north + padDeg) continue;
+        for (const shift of [0, 360, -360]) {
+          const x = lon + shift;
+          if (x < west - padDeg || x > east + padDeg) continue;
+          const distance = polygonsDistanceKm(geometry.polygons, lat, x);
+          if (distance <= nearestKm) {
+            nearestKm = distance;
+            best = { entry, geometry };
+          }
+          break;
+        }
+      }
+    }
+    if (!best) return null;
+    return {
+      name: String(best.entry.feature.name || ''),
+      iso2: String(best.entry.feature.iso2 || ''),
+    };
+  };
+}
+
+/**
+ * Prepare the offline reverse lookup — the country under a point. Loads and
+ * decodes the admin-0 pack once; later calls share the same locator. Callers
+ * that answer in a sentence (ASK mode) warm this before the first question and
+ * keep the returned function rather than paying for the decode twice.
+ *
+ * @returns {Promise<(lat: number, lon: number) => ?{name: string, iso2: string}>}
+ */
+export function loadCountryLocator() {
+  if (countryLocator) return Promise.resolve(countryLocator);
+  if (!countryLocatorLoad) {
+    countryLocatorLoad = loadCountries()
+      .then(({ entries }) => {
+        for (const entry of entries) geometryOf(entry);
+        countryLocator = countryLocatorFrom(entries);
+        return countryLocator;
+      })
+      .catch((error) => {
+        countryLocatorLoad = null;
+        throw error;
+      });
+  }
+  return countryLocatorLoad;
+}
 
 async function countryCandidates(parsed) {
   if (!['any', 'country'].includes(parsed.kind)) return [];

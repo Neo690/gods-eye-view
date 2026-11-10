@@ -1417,7 +1417,9 @@ test('ASK mode hears a held question and answers it from the loaded alerts', () 
   mic.handlers.onTranscript('the most severe');
   assert.equal(
     layer.getStats().askAnswer,
-    'Most severe: MassStabbing · 11 killed · Syria',
+    // The alert sits in open water, so the answer has coordinates only — the
+    // country pack is warmed by switching the mode on, never waited for.
+    'Most severe: MassStabbing · 11 killed · Syria · 0.200° N, 0.200° E',
   );
   assert.deepEqual(spoken, [layer.getStats().askAnswer]);
   assert.equal(answerLine.textContent, layer.getStats().askAnswer);

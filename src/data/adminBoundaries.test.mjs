@@ -7,6 +7,7 @@ import {
   decodeRing,
   findAdminArea,
   findAdminAreaAt,
+  loadCountryLocator,
   normalizeAdminName,
   packLoads,
   parseAdminQuery,
@@ -478,4 +479,23 @@ test('UK constituent countries retain their own identity and extent from any cam
     (await findAdminArea('County Durham, England', { near: AUSTIN })).country,
     'United Kingdom',
   );
+});
+
+test('the offline country locator names the country under a point', async () => {
+  const locate = await loadCountryLocator();
+  assert.equal(locate(48.8566, 2.3522)?.iso2, 'FR'); // Paris
+  assert.equal(locate(52.52, 13.405)?.iso2, 'DE'); // Berlin
+  // Lesotho is an enclave: the smallest containing unit wins over South Africa.
+  assert.equal(locate(-29.31, 27.48)?.iso2, 'LS');
+  // The pack's shoreline is simplified; a waterfront point just outside it
+  // still belongs to the country behind the coast.
+  assert.equal(locate(25.76, -80.19)?.iso2, 'US'); // Miami
+  assert.equal(locate(40.71, -74.01)?.iso2, 'US'); // Manhattan
+  // Rings are unwrapped, so a point across the antimeridian still resolves.
+  assert.equal(locate(66, -179.9)?.iso2, 'RU');
+  // Open water has no country rather than the nearest one.
+  assert.equal(locate(0, 0), null);
+  assert.equal(locate(Number.NaN, 0), null);
+  // One decode serves every later lookup.
+  assert.equal(await loadCountryLocator(), locate);
 });

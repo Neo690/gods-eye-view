@@ -134,6 +134,32 @@ test('repeat says the last answer, and has something to say before any question'
   });
 });
 
+test('an alert answer carries the place the layer resolved for it', () => {
+  const answerer = createAlertAnswerer({
+    place: (alert) =>
+      alert.id === 'cip:1' ? 'France · 48.857° N, 2.352° E' : '',
+  });
+  assert.equal(
+    answerer.answer(alerts, 'worst').text,
+    'Most severe: MassStabbing · 11 killed · Syria · France · 48.857° N, 2.352° E',
+  );
+  // "next" inherits the same place treatment; an empty place adds nothing.
+  assert.equal(
+    answerer.answer(alerts, 'next').text,
+    'Next: MissileStrike · 2 killed · Ukraine',
+  );
+  // A place reader that throws costs the location, never the answer.
+  const broken = createAlertAnswerer({
+    place: () => {
+      throw new Error('no pack');
+    },
+  });
+  assert.equal(
+    broken.answer(alerts, 'worst').text,
+    'Most severe: MassStabbing · 11 killed · Syria',
+  );
+});
+
 test('a question outside the four gets the menu, and an empty layer says so', () => {
   const answerer = createAlertAnswerer();
   const menu = answerer.answer(alerts, readAskIntent('bonjour'));

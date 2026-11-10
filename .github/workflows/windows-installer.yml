@@ -59,15 +59,43 @@ jobs:
       # `npm install` rather than `npm ci`, for the same reason the Android
       # workflow uses it: the artifact here is the installer, and the CI
       # workflow owns the reproducibility gate.
+      #
+      # The ffmpeg-static post-install fetches its binary from a GitHub release
+      # page, and that unauthenticated `/releases/download/` path 504s in
+      # bursts. Retry over fresh `node_modules` with a pause before giving up.
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        shell: pwsh
+        run: |
+          # A native command's non-zero exit must reach the loop, not stop the step.
+          $PSNativeCommandUseErrorActionPreference = $false
+          for ($attempt = 1; $attempt -le 4; $attempt++) {
+            npm install --no-audit --no-fund
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue }
+            Write-Host "npm install failed on attempt $attempt"
+            Start-Sleep -Seconds 30
+          }
+          exit 1
 
       # `working-directory` rather than `--prefix`: npm reads the package at the
       # working directory, and a prefix would make it install the repository it
       # is called from and record it as a dependency of desktop/.
+      # The shell's own install gets the same retry so a transient npm registry
+      # failure cannot lose the installer after the app dependencies arrived.
       - name: Install the shell's build dependencies
         working-directory: desktop
-        run: npm install --no-audit --no-fund
+        shell: pwsh
+        run: |
+          # A native command's non-zero exit must reach the loop, not stop the step.
+          $PSNativeCommandUseErrorActionPreference = $false
+          for ($attempt = 1; $attempt -le 4; $attempt++) {
+            npm install --no-audit --no-fund
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue }
+            Write-Host "npm install failed on attempt $attempt"
+            Start-Sleep -Seconds 30
+          }
+          exit 1
 
       - name: Build the client bundle
         env:

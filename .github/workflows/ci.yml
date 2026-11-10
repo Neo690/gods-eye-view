@@ -37,8 +37,23 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
+      # The ffmpeg-static post-install fetches its binary from a GitHub release
+      # page, and the unauthenticated `/releases/download/` path has been
+      # returning 504s in bursts since Nov 8 (community #212407). The failure is
+      # intermittent, so the locked install retries over fresh `node_modules`
+      # with a pause before the job is given up on.
       - name: Install locked dependencies
-        run: npm ci
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            if npm ci; then
+              exit 0
+            fi
+            rm -rf node_modules
+            echo "npm ci failed on attempt $attempt"
+            sleep 30
+          done
+          exit 1
 
       - name: Run setup policy checks
         run: npm run doctor -- --json
@@ -79,8 +94,20 @@ jobs:
           node-version: 24.14.0
           cache: npm
 
+      # Same retry as the verify job: the ffmpeg-static post-install downloads
+      # its binary from a GitHub release asset, which 504s in bursts.
       - name: Install locked dependencies and headless Chrome
-        run: npm ci
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            if npm ci; then
+              exit 0
+            fi
+            rm -rf node_modules
+            echo "npm ci failed on attempt $attempt"
+            sleep 30
+          done
+          exit 1
 
       - name: Build production bundle with a dummy Mapillary token
         env:
@@ -134,8 +161,22 @@ jobs:
           node-version: 24.14.0
           cache: npm
 
+      # This path runs `npm ci` itself, so it needs the same retry as the
+      # Ubuntu jobs: the install fails only while ffmpeg-static's download is
+      # being 504'd, and a fresh `node_modules` is enough to try again.
       - name: Run the Pinokio install path
-        run: node scripts/pinokio-install.mjs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            if node scripts/pinokio-install.mjs; then
+              exit 0
+            fi
+            rm -rf node_modules
+            echo "Pinokio install failed on attempt $attempt"
+            sleep 30
+          done
+          exit 1
 
       - name: Check adopted formatting
         run: npm run format:check
