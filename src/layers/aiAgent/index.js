@@ -10,7 +10,11 @@
 //     record of the chosen layer, scans it and reports what the layer holds,
 //   - when S2 GhostMaps is enabled its alerts take the tour in severity order:
 //     the view flies to each alert, its own report card opens, and the spider
-//     walks in to scan it before moving to the next one,
+//     walks in to scan it before moving to the next one, and says its headline
+//     aloud through the device voice. The layer row holds a VOICE chip that
+//     mutes the announcements and a PAUSE TOUR chip that freezes the tour
+//     where it stands — open card, camera and remaining reading time included —
+//     and resumes it from there,
 //   - the patrol is local and deterministic. Nothing here changes the
 //     operator's layers; the GhostMaps alert tour is the only camera motion,
 //   - a model is optional and only ever words a finding that matters
@@ -54,6 +58,7 @@ import {
 } from './patrol.js';
 import { requestFindingBrief, BRIEF_MIN_INTERVAL_MS } from './brief.js';
 import { createSpiderCameraFollow } from './follow.js';
+import { createAlertVoice } from './voice.js';
 
 export const AI_AGENT_LAYER_ID = 'ai-agent';
 
@@ -109,6 +114,8 @@ const ALERT_WALK_LIMITS = Object.freeze({
  * @param {object} [options.overlayHost] the world-overlay adapter (see
  *   `src/app/layers/overlayHost.js`); without one the inspection note stays
  *   silent rather than reaching across the package boundary.
+ * @param {object} [options.voice] spoken-alert seam (see voice.js); without
+ *   one the layer creates the device voice on init.
  * @returns {object} data-layer module (lifecycle contract).
  */
 export function createAiAgentLayer({
@@ -116,6 +123,7 @@ export function createAiAgentLayer({
   now: nowSource = Date.now,
   fetchImpl = undefined,
   overlayHost: noteOverlayHost = null,
+  voice: voiceSource = null,
 } = {}) {
   let document = docScope ?? globalThis.document;
   let manager = null;
@@ -166,7 +174,15 @@ export function createAiAgentLayer({
   // Opt-in gentle camera follow (see follow.js): off until the operator
   // ticks the layer's row chip, and never resurrected by a reload.
   let followEnabled = false;
+  // The operator's hold on the tour. A paused tour keeps its target, its open
+  // card and the time each phase had left, so resuming carries on rather than
+  // restarting the alert.
+  let tourPaused = false;
+  let pausedAt = 0;
   let rowControlsListener = null;
+  // The alert voice: on by default, muted from the layer row. Announcing is
+  // theatre on top of the card, never the operator's only copy of the news.
+  let voice = voiceSource;
   const notifyRow = () => rowControlsListener?.();
 
   const strId = (raw) => String(raw?.id ?? '');
@@ -389,6 +405,29 @@ export function createAiAgentLayer({
     );
   }
 
+  /**
+   * Hold the tour where it stands, or pick it up again.
+   *
+   * The phases run on wall-clock deadlines (scanUntil, pullbackUntil,
+   * restUntil), so a resume shifts each by the time spent paused: an alert
+   * that had two seconds of reading left still has two seconds left, instead
+   * of being cut short by the pause.
+   */
+  function setTourPaused(paused) {
+    if (destroyed || Boolean(paused) === tourPaused) return;
+    tourPaused = Boolean(paused);
+    if (tourPaused) {
+      pausedAt = nowSource();
+    } else {
+      const held = Math.max(0, nowSource() - pausedAt);
+      pausedAt = 0;
+      if (scanUntil) scanUntil += held;
+      if (pullbackUntil) pullbackUntil += held;
+      if (restUntil) restUntil += held;
+    }
+    notifyRow();
+  }
+
   /** Sit still when there is nowhere worth going. */
   function rest() {
     target = null;
@@ -455,6 +494,17 @@ export function createAiAgentLayer({
     });
   }
 
+  /**
+   * Say the alert the tour just reached. The card carries the full popup; the
+   * voice carries its headline, once, in the operator's language. A hidden
+   * page, a muted voice or a device without a synthesiser says nothing.
+   */
+  function announceAlert(candidate) {
+    if (!voice?.isEnabled?.()) return;
+    if (document?.hidden === true) return;
+    voice.announce(candidate.summary || candidate.label);
+  }
+
   /** The spider reached a GhostMaps alert: its card is open, so report it. */
   function reportAlert(candidate) {
     const layerName = translateKnown(candidate.label);
@@ -477,6 +527,7 @@ export function createAiAgentLayer({
       count: 1,
       severity: candidate.severity,
     });
+    announceAlert(candidate);
   }
 
   /** Close only this tour's card and stop its camera flight. */
@@ -506,6 +557,9 @@ export function createAiAgentLayer({
       pulsePhase += dtSec * PULSE_HZ;
       spider.frame = Math.floor(pulsePhase) % spriteFrames.length;
     }
+    // Held: the orb keeps breathing but the walk, the scan and the camera
+    // flights all wait. The open card stays for reading.
+    if (tourPaused) return;
     const now = nowSource();
     if (phase === 'rest') {
       if (now >= restUntil && !target && !selectTarget()) rest();
@@ -673,7 +727,7 @@ export function createAiAgentLayer({
    * event landed. Purely local — the operator's view does not move.
    */
   function divert(fresh) {
-    if (!fresh.length) return;
+    if (!fresh.length || tourPaused) return;
     // A GhostMaps alert owns the view and its card until the scan ends; a
     // feed-count wobble must not yank the operator away mid-alert.
     if (target?.kind === 'ghostmaps-alert' || phase === 'pullback') return;
@@ -714,6 +768,7 @@ export function createAiAgentLayer({
       if (document) avatar = createAvatarOverlay({ doc: document });
       spriteFrames = spiderSpriteFrames({ doc: document });
       body = createSpiderBody({ viewer, frames: spriteFrames, state: spider });
+      if (!voice) voice = createAlertVoice({ locale: () => getLocale() });
       follow = createSpiderCameraFollow({
         camera: viewer?.camera,
         canvas: viewer?.canvas ?? viewer?.scene?.canvas,
@@ -733,6 +788,8 @@ export function createAiAgentLayer({
       // A fresh enable starts the alert tour from the most severe again.
       visitedAlerts.clear();
       alertEpoch = null;
+      tourPaused = false;
+      pausedAt = 0;
       spider.visible = true;
       avatar?.setSleeping(false);
       // The tick stalls before the follow does its one gate read: a hidden
@@ -746,6 +803,8 @@ export function createAiAgentLayer({
 
     disable() {
       enabled = false;
+      // A sentence about an alert the tour abandoned is stale.
+      voice?.stop?.();
       clearAlertTour();
       visitedAlerts.clear();
       alertEpoch = null;
@@ -765,6 +824,9 @@ export function createAiAgentLayer({
       if (!enabled || destroyed) return false;
       watchCycle();
       avatar?.setState(severityNow());
+      // A paused tour still reads the roster (a broken feed is news), but it
+      // neither moves the camera nor picks the next alert.
+      if (tourPaused) return true;
       if (phase === 'pullback') return true;
       if (!target && nowSource() >= restUntil && !selectTarget()) rest();
       return true;
@@ -785,6 +847,8 @@ export function createAiAgentLayer({
       destroySpiderNoteOverlay(noteOverlayHost);
       follow?.destroy();
       follow = null;
+      voice?.destroy?.();
+      voice = null;
       rowControlsListener = null;
       try {
         avatar?.destroy();
@@ -799,13 +863,35 @@ export function createAiAgentLayer({
     },
 
     /**
-     * The Layers row's one control: an opt-in checkbox that asks the view to
-     * follow the sentinel gently. Re-read live on every render, so a stale
-     * chip can never flip the toggle the wrong way.
+     * The Layers row's controls: the alert voice, the tour's hold, and an
+     * opt-in checkbox that asks the view to follow the sentinel gently.
+     * Re-read live on every render, so a stale chip can never flip a toggle
+     * the wrong way.
      */
     getRowControls() {
       return {
         chips: [
+          {
+            id: 'voice',
+            label: t('VOICE'),
+            active: voice?.isEnabled?.() === true,
+            title: t('Read each GhostMaps alert aloud as the tour reaches it'),
+            onClick: () => {
+              voice?.setEnabled?.(voice.isEnabled() !== true);
+              notifyRow();
+            },
+          },
+          {
+            id: 'pause-tour',
+            label: tourPaused ? t('RESUME TOUR') : t('PAUSE TOUR'),
+            active: tourPaused,
+            title: tourPaused
+              ? t('Pick the tour up where it stopped')
+              : t(
+                  'Hold the tour: no camera flight, no next alert, the open card stays',
+                ),
+            onClick: () => setTourPaused(!tourPaused),
+          },
           {
             id: 'follow',
             label: t('FOLLOW CAMERA'),
@@ -854,6 +940,8 @@ export function createAiAgentLayer({
         targetKind: target?.kind ?? null,
         alert: target?.alertId ?? null,
         alertsVisited: visitedAlerts.size,
+        paused: tourPaused,
+        voice: voice?.isEnabled?.() === true,
       };
     },
   };

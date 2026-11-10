@@ -3412,5 +3412,10 @@
   "Food & drink": "Еда и напитки",
   "Shops": "Магазины",
   "Culture & leisure": "Культура и отдых",
-  "Services": "Услуги"
+  "Services": "Услуги",
+  "PAUSE TOUR": "ПАУЗА ОБХОДА",
+  "RESUME TOUR": "ПРОДОЛЖИТЬ ОБХОД",
+  "Pick the tour up where it stopped": "Продолжить обход с того места, где он остановился",
+  "Hold the tour: no camera flight, no next alert, the open card stays": "Приостановить обход: без полёта камеры и следующей тревоги, открытая карточка остаётся",
+  "Read each GhostMaps alert aloud as the tour reaches it": "Читать вслух каждую тревогу GhostMaps, когда обход до неё доходит"
 }

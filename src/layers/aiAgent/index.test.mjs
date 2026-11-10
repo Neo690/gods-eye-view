@@ -823,6 +823,18 @@ test('GhostMaps alerts are toured most severe first, with the card open', async 
       ['s2-ghostmaps', { enabled: true, module: ghostMaps }],
     ]),
   };
+  // The device synthesiser, as the page supplies it: this is the real wiring
+  // (voice.js) rather than a stub of the layer's own announcement path.
+  const spoken = [];
+  globalThis.speechSynthesis = {
+    speak: (utterance) => spoken.push(utterance),
+    cancel() {},
+  };
+  globalThis.SpeechSynthesisUtterance = class {
+    constructor(text) {
+      this.text = text;
+    }
+  };
   const layer = createAiAgentLayer({
     docScope: doc,
     now: () => clock,
@@ -846,6 +858,9 @@ test('GhostMaps alerts are toured most severe first, with the card open', async 
     viewer.scene.preUpdate.raiseEvent();
   }
   assert.equal(inspected[0], 'cip:1');
+  // The tour says the alert it just reached, once.
+  assert.equal(spoken.length, 1, 'the alert is said aloud');
+  assert.equal(spoken[0].text, 'MassStabbing · 11 killed');
   const feed = doc.body.children[0].querySelector('.gev-ai-agent-feed');
   assert.ok(
     feed.children.some((row) =>
@@ -853,6 +868,13 @@ test('GhostMaps alerts are toured most severe first, with the card open', async 
     ),
     'the alert detail reaches the report card',
   );
+  // The VOICE chip is on by default and mutes the announcements.
+  const voiceChip = () =>
+    layer.getRowControls().chips.find((chip) => chip.id === 'voice');
+  assert.equal(voiceChip().active, true, 'the voice starts on');
+  voiceChip().onClick();
+  assert.equal(layer.getStats().voice, false);
+  assert.equal(voiceChip().active, false);
   for (let i = 0; i < 80 && cleared.length === 0; i++) {
     clock += 250;
     viewer.scene.preUpdate.raiseEvent();
@@ -891,11 +913,130 @@ test('GhostMaps alerts are toured most severe first, with the card open', async 
     viewer.scene.preUpdate.raiseEvent();
   }
   assert.equal(inspected[1], 'cip:2');
+  assert.equal(spoken.length, 1, 'a muted voice says nothing');
+  delete globalThis.speechSynthesis;
+  delete globalThis.SpeechSynthesisUtterance;
   layer.disable();
   assert.ok(cancelled >= 1, 'disabling stops the alert flight');
   assert.equal(cleared.at(-1), 'cip:2', 'disable clears its open card');
   layer.destroy();
 });
+
+test('the tour can be held and picked up where it stopped', async () => {
+  const doc = fakeDocument();
+  let clock = 3_000_000;
+  const flights = [];
+  const viewer = {
+    camera: {
+      positionCartographic: {
+        latitude: 0,
+        longitude: 0,
+        height: 2_000_000,
+      },
+      flyTo(options) {
+        flights.push(options);
+      },
+      cancelFlight() {},
+    },
+    scene: { preUpdate: new Cesium.Event() },
+  };
+  const alerts = [
+    {
+      id: 'cip:1',
+      name: 'MassStabbing',
+      lonDeg: 0.2,
+      latDeg: 0.2,
+      score: 540,
+      severity: 'emergency',
+      summary: 'MassStabbing · 11 killed',
+    },
+  ];
+  const inspected = [];
+  const cleared = [];
+  const ghostMaps = {
+    getStats: () => ({ count: alerts.length, commit: 'edition-a' }),
+    getSentinelAlerts: () => alerts,
+    inspectSentinelAlert: (id) => {
+      inspected.push(id);
+      return true;
+    },
+    clearSentinelInspection: (id) => {
+      cleared.push(id);
+      return true;
+    },
+  };
+  const layer = createAiAgentLayer({
+    docScope: doc,
+    now: () => clock,
+    fetchImpl: async () => ({ ok: false, status: 503, json: async () => ({}) }),
+  });
+  layer.attachDataManager({
+    getAll: () => [
+      {
+        id: 's2-ghostmaps',
+        name: 'S2 GhostMaps',
+        enabled: true,
+        stats: { count: alerts.length, error: null },
+      },
+    ],
+    layers: new Map([['s2-ghostmaps', { enabled: true, module: ghostMaps }]]),
+  });
+  layer.init(viewer);
+  layer.enable();
+
+  // The row offers the hold, and the tour is running.
+  const pauseChip = () =>
+    layer.getRowControls().chips.find((chip) => chip.id === 'pause-tour');
+  assert.equal(pauseChip().active, false);
+  assert.equal(pauseChip().label, 'PAUSE TOUR');
+  assert.equal(layer.getStats().paused, false);
+
+  // Walk in and open the alert's card.
+  for (let i = 0; i < 40 && inspected.length === 0; i++) {
+    clock += 250;
+    viewer.scene.preUpdate.raiseEvent();
+  }
+  assert.equal(inspected[0], 'cip:1');
+  const held = {
+    latDeg: layer.getStats().latDeg,
+    lonDeg: layer.getStats().lonDeg,
+  };
+  const flightsAtPause = flights.length;
+
+  // A hold freezes the walk, the camera and the reading countdown.
+  pauseChip().onClick();
+  assert.equal(layer.getStats().paused, true);
+  assert.equal(pauseChip().active, true);
+  assert.equal(pauseChip().label, 'RESUME TOUR');
+  for (let i = 0; i < 80; i++) {
+    clock += 250;
+    viewer.scene.preUpdate.raiseEvent();
+  }
+  assert.equal(layer.getStats().latDeg, held.latDeg);
+  assert.equal(layer.getStats().lonDeg, held.lonDeg);
+  assert.equal(flights.length, flightsAtPause, 'a held tour takes no flight');
+  assert.deepEqual(cleared, [], 'a held card stays open past its read time');
+  assert.equal(layer.getStats().alert, 'cip:1');
+  const feed = doc.body.children[0].querySelector('.gev-ai-agent-feed');
+  assert.ok(
+    feed.children.some((row) => /MassStabbing · 11 killed/.test(row.textContent)),
+    'the card is still readable while held',
+  );
+
+  // Resuming keeps the scan's remaining time instead of restarting it.
+  pauseChip().onClick();
+  assert.equal(layer.getStats().paused, false);
+  for (let i = 0; i < 40 && cleared.length === 0; i++) {
+    clock += 250;
+    viewer.scene.preUpdate.raiseEvent();
+  }
+  assert.deepEqual(cleared, ['cip:1'], 'the scan ends once its time is spent');
+  assert.equal(layer.getStats().alertsVisited, 1);
+  assert.ok(flights.length > flightsAtPause, 'the pullback follows the scan');
+  layer.disable();
+  layer.destroy();
+});
+
 
 test('a feed that breaks diverts the spider and words one brief', async () => {
   const doc = fakeDocument();

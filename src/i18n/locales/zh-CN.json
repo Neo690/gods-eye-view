@@ -3199,5 +3199,10 @@
   "Food & drink": "餐饮",
   "Shops": "商店",
   "Culture & leisure": "文化与休闲",
-  "Services": "服务"
+  "Services": "服务",
+  "PAUSE TOUR": "暂停巡览",
+  "RESUME TOUR": "继续巡览",
+  "Pick the tour up where it stopped": "从暂停处继续巡览",
+  "Hold the tour: no camera flight, no next alert, the open card stays": "暂停巡览：不再移动镜头、不切换下一条警报，已打开的卡片保持显示",
+  "Read each GhostMaps alert aloud as the tour reaches it": "巡览抵达每条 GhostMaps 警报时朗读出来"
 }

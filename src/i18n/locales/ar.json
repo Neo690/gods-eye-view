@@ -3554,5 +3554,10 @@
   "Food & drink": "الطعام والشراب",
   "Shops": "المتاجر",
   "Culture & leisure": "الثقافة والترفيه",
-  "Services": "الخدمات"
+  "Services": "الخدمات",
+  "PAUSE TOUR": "إيقاف الجولة مؤقتًا",
+  "RESUME TOUR": "استئناف الجولة",
+  "Pick the tour up where it stopped": "استئناف الجولة من حيث توقفت",
+  "Hold the tour: no camera flight, no next alert, the open card stays": "إيقاف الجولة مؤقتًا: لا انتقال للكاميرا ولا تنبيه تالٍ، وتبقى البطاقة المفتوحة",
+  "Read each GhostMaps alert aloud as the tour reaches it": "قراءة كل تنبيه من GhostMaps بصوت عالٍ عند وصول الجولة إليه"
 }

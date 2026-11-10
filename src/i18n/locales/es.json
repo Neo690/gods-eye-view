@@ -3341,5 +3341,10 @@
   "Food & drink": "Comida y bebida",
   "Shops": "Tiendas",
   "Culture & leisure": "Cultura y ocio",
-  "Services": "Servicios"
+  "Services": "Servicios",
+  "PAUSE TOUR": "PAUSA RECORRIDO",
+  "RESUME TOUR": "REANUDAR RECORRIDO",
+  "Pick the tour up where it stopped": "Reanudar el recorrido donde se detuvo",
+  "Hold the tour: no camera flight, no next alert, the open card stays": "Pausar el recorrido: sin vuelo de cámara, sin siguiente alerta, la ficha abierta se mantiene",
+  "Read each GhostMaps alert aloud as the tour reaches it": "Leer en voz alta cada alerta de GhostMaps cuando el recorrido llega a ella"
 }

@@ -3341,5 +3341,10 @@
   "Food & drink": "Restauration",
   "Shops": "Commerces",
   "Culture & leisure": "Culture et loisirs",
-  "Services": "Services"
+  "Services": "Services",
+  "PAUSE TOUR": "PAUSE TOURNÉE",
+  "RESUME TOUR": "REPRENDRE TOURNÉE",
+  "Pick the tour up where it stopped": "Reprendre la tournée là où elle s'est arrêtée",
+  "Hold the tour: no camera flight, no next alert, the open card stays": "Suspendre la tournée : plus de vol de caméra, pas d'alerte suivante, la fiche ouverte reste affichée",
+  "Read each GhostMaps alert aloud as the tour reaches it": "Lire chaque alerte GhostMaps à voix haute quand la tournée l'atteint"
 }
