@@ -261,6 +261,13 @@ test('validation trims, and refuses empties, newlines, spaces, and oversize valu
     }).ok,
     false,
   );
+  // A real Global Fishing Watch token is a JWT of 825 characters: its RS256
+  // signature segment is 512 on its own. It must pass the same validation the
+  // phone's save route runs.
+  const gfwToken = `${'a'.repeat(56)}.${'b'.repeat(255)}.${'c'.repeat(512)}`;
+  const gfw = validateKeySetupUpdates({ GFW_API_TOKEN: gfwToken });
+  assert.equal(gfw.ok, true);
+  assert.equal(gfw.updates.GFW_API_TOKEN.length, 825);
   assert.equal(validateKeySetupUpdates(null).ok, false);
   assert.equal(validateKeySetupUpdates([]).ok, false);
   assert.equal(validateKeySetupUpdates({}).ok, false);

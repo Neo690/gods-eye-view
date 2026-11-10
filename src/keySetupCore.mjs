@@ -16,8 +16,13 @@
 import { msg } from './i18n/marker.js';
 import { hasProxySignals } from './localRequestGate.mjs';
 
-/** Longest accepted key/token value. Real provider keys are all far shorter. */
-export const KEY_SETUP_VALUE_LIMIT = 512;
+/**
+ * Longest accepted key/token value. It is not 512: Global Fishing Watch issues
+ * a signed JWT whose signature segment alone is 512 characters (825 for the
+ * whole token), so a 512 cap refused a perfectly valid credential. This ceiling
+ * still rejects a pasted file while leaving room for every token in use.
+ */
+export const KEY_SETUP_VALUE_LIMIT = 4096;
 
 /** Most env vars accepted in one save. */
 export const KEY_SETUP_UPDATE_LIMIT = 16;
