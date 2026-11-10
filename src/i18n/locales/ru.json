@@ -3404,5 +3404,13 @@
   "Your choice applies now, but could not be saved.": "Ваш выбор применён, но сохранить его не удалось.",
   "Voice replies appear here.": "Здесь появляются голосовые ответы.",
   "Preview is off.": "Предпросмотр отключён.",
-  "Automatic stop is unavailable for this voice connection.": "Автоматическая остановка недоступна для этого голосового подключения."
+  "Automatic stop is unavailable for this voice connection.": "Автоматическая остановка недоступна для этого голосового подключения.",
+  "OSM Places": "Места OSM",
+  "Places": "Места",
+  "Overpass Turbo": "Overpass Turbo",
+  "Open this view in Overpass Turbo": "Открыть этот вид в Overpass Turbo",
+  "Food & drink": "Еда и напитки",
+  "Shops": "Магазины",
+  "Culture & leisure": "Культура и отдых",
+  "Services": "Услуги"
 }

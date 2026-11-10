@@ -61,6 +61,7 @@ export const LAYER_NAME_KEYS = Object.freeze({
   'iot-sensors': msg('Connected Objects'),
   netmon: msg('Network Monitor'),
   'private-wifi': msg('Private Wi-Fi'),
+  'osm-places': msg('OSM Places'),
 });
 
 /** The layer panel's own English names, where they differ from the module's. */

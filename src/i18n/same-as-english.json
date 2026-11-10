@@ -131,7 +131,8 @@
     "{value} KM/S",
     "ΔE",
     "ΔN",
-    "▲ {frp} MW"
+    "▲ {frp} MW",
+    "Overpass Turbo"
   ],
   "ru": [
     "AIS: --",
@@ -156,7 +157,8 @@
     "WHOT/BHOT",
     "Windows",
     "iOS",
-    "{title} · {when}"
+    "{title} · {when}",
+    "Overpass Turbo"
   ],
   "zh-CN": [
     "1090 MHz",
@@ -220,7 +222,8 @@
     "{value} KM/S",
     "ΔE",
     "ΔN",
-    "▲ {frp} MW"
+    "▲ {frp} MW",
+    "Overpass Turbo"
   ],
   "fr": [
     "1090 MHz",
@@ -352,6 +355,7 @@
     "Saturation",
     "Sentinel-2",
     "Sentinel-2 via HLS",
+    "Services",
     "Sonar",
     "Soul",
     "Source",
@@ -425,7 +429,8 @@
     "ΔE",
     "ΔN",
     "Ⅱ PAUSE",
-    "▲ {frp} MW"
+    "▲ {frp} MW",
+    "Overpass Turbo"
   ],
   "ar": [
     "1090 MHz",
@@ -487,6 +492,7 @@
     "{speed}KT",
     "{title} · {when}",
     "ΔE",
-    "ΔN"
+    "ΔN",
+    "Overpass Turbo"
   ]
 }

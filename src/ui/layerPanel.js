@@ -64,6 +64,10 @@ const PANEL_GROUPS = [
     ],
   },
   {
+    label: msg('Places'),
+    ids: ['osm-places'],
+  },
+  {
     label: msg('Infrastructure'),
     ids: [
       'alpr-cameras',

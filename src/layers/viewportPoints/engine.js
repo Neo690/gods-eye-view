@@ -4,6 +4,7 @@ import { formatNumber, msg, t, translateKnown } from '../../i18n/index.js';
 import { translateFeedError } from '../../ui/statusText.js';
 import {
   MAX_POINTS,
+  MAX_SPAN_DEG,
   clampViewport,
   normalisePoints,
   pointsSignature,
@@ -85,6 +86,7 @@ export function cameraBounds(viewer) {
  * @param {{label:string,color:string}[]} [config.legend] Static row legend.
  * @param {number} [config.pixelSize]
  * @param {number} [config.refreshMs] Interval the data manager re-reads at.
+ * @param {number} [config.maxSpanDeg] Widest view one request may cover.
  * @param {(context: {refresh: () => void}) => {chips?: Array<object>, detail?: string}}
  *   [config.extras] Row controls a local-data layer owns itself (importing a
  *   file, clearing it). Called on every panel refresh, so it must only read.
@@ -106,6 +108,7 @@ export function createViewportPointsLayer({
   legend,
   pixelSize = 7,
   refreshMs = 120000,
+  maxSpanDeg = MAX_SPAN_DEG,
   requiresKeyId,
   emptyHint,
   extras,
@@ -142,7 +145,11 @@ export function createViewportPointsLayer({
   let _tipCameraOff = null;
   let _hoverLastPickAt = 0;
 
-  const bounds = () => clampViewport(cameraBounds(_viewer));
+  const spanLimit =
+    Number.isFinite(Number(maxSpanDeg)) && Number(maxSpanDeg) > 0
+      ? Number(maxSpanDeg)
+      : MAX_SPAN_DEG;
+  const bounds = () => clampViewport(cameraBounds(_viewer), spanLimit);
 
   function scheduleRefresh() {
     if (!_enabled || !_collection) return;
@@ -477,7 +484,7 @@ export function createViewportPointsLayer({
           (_coverage?.clamped
             ? t(
                 'The view was wider than one request: the nearest {span}° around the centre is shown.',
-                { span: 6 },
+                { span: spanLimit },
               ) + ' '
             : '') +
           t(

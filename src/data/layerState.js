@@ -678,6 +678,11 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
     disposition: 'enabled-only',
   }),
   Object.freeze({
+    id: 'osm-places',
+    token: '0c',
+    disposition: 'enabled-only',
+  }),
+  Object.freeze({
     id: 'plate-reader',
     token: '04',
     disposition: 'enabled-only',

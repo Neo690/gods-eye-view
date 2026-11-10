@@ -3333,5 +3333,13 @@
   "Automatic stop is unavailable for this voice connection.": "L'arrêt automatique n'est pas disponible pour cette connexion vocale.",
   "Preview is off.": "L'aperçu est désactivé.",
   "Your choice applies now, but could not be saved.": "Votre choix s'applique maintenant, mais n'a pas pu être enregistré.",
-  "Recent speech": "Paroles récentes"
+  "Recent speech": "Paroles récentes",
+  "OSM Places": "Lieux OSM",
+  "Places": "Lieux",
+  "Overpass Turbo": "Overpass Turbo",
+  "Open this view in Overpass Turbo": "Ouvrir cette vue dans Overpass Turbo",
+  "Food & drink": "Restauration",
+  "Shops": "Commerces",
+  "Culture & leisure": "Culture et loisirs",
+  "Services": "Services"
 }

@@ -3546,5 +3546,13 @@
   "Automatic stop is unavailable for this voice connection.": "الإيقاف التلقائي غير متاح لاتصال الصوت هذا.",
   "Preview is off.": "المعاينة متوقفة.",
   "Your choice applies now, but could not be saved.": "يُطبَّق اختيارك الآن، لكن تعذّر حفظه.",
-  "Recent speech": "الكلام الأخير"
+  "Recent speech": "الكلام الأخير",
+  "OSM Places": "أماكن OSM",
+  "Places": "الأماكن",
+  "Overpass Turbo": "Overpass Turbo",
+  "Open this view in Overpass Turbo": "افتح هذا العرض في Overpass Turbo",
+  "Food & drink": "الطعام والشراب",
+  "Shops": "المتاجر",
+  "Culture & leisure": "الثقافة والترفيه",
+  "Services": "الخدمات"
 }

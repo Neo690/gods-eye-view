@@ -42,6 +42,7 @@ import { createApplicationAirQuality } from './layers/airQuality.js';
 import { createApplicationFirePerimeters } from './layers/perimeters.js';
 import { createApplicationGnssIntegrity } from './layers/gnss.js';
 import { createApplicationCellTowers } from './layers/cellTowers.js';
+import { createApplicationOsmPlaces } from './layers/osmPlaces.js';
 import { createApplicationIotSensors } from './layers/iotSensors.js';
 import { createApplicationNetmon } from './layers/netmon.js';
 import { createPrivateWifiLayer } from '../layers/privateWifi/index.js';
@@ -162,6 +163,7 @@ export function createApplicationCatalog({
           source: sources['gnss-integrity'],
         }),
         createApplicationCellTowers(),
+        createApplicationOsmPlaces(),
         createApplicationIotSensors(),
         createApplicationNetmon(),
         createPrivateWifiLayer(),

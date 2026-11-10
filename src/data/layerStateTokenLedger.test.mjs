@@ -128,7 +128,7 @@ test('reservation ledger is complete, pinned, and rejects duplicate or malformed
     { ...parseLayerStateTokenReservations(reservationRows) },
     { ...LAYER_STATE_TOKEN_RESERVATIONS },
   );
-  assert.equal(Object.keys(LAYER_STATE_TOKEN_RESERVATIONS).length, 48);
+  assert.equal(Object.keys(LAYER_STATE_TOKEN_RESERVATIONS).length, 49);
   assert.deepEqual(
     { ...LAYER_STATE_TOKEN_RESERVATIONS },
     {
@@ -162,11 +162,13 @@ test('reservation ledger is complete, pinned, and rejects duplicate or malformed
       // The AI Sentinel watchdog took the pair after the EMSC quake network.
       'ai-agent': '08',
       // The global disasters tier took the pair after the AI Sentinel, the
-      // camera-advisories layer the pair after it, and the S2 GhostMaps layer
-      // the pair after that; the merge-time fixtures below advance to 0c.
+      // camera-advisories layer the pair after it, the S2 GhostMaps layer the
+      // pair after that and the OSM places layer the next pair; the merge-time
+      // fixtures below advance to 0d.
       'global-disasters': '09',
       'camera-advisories': '0a',
       's2-ghostmaps': '0b',
+      'osm-places': '0c',
     },
   );
   assert.throws(
@@ -192,9 +194,9 @@ test('reservation ledger is complete, pinned, and rejects duplicate or malformed
     /Duplicate layer-state token reservation/,
   );
   assert.equal(
-    parseLayerStateTokenReservations([...reservationRows, ['future', '0c']])
+    parseLayerStateTokenReservations([...reservationRows, ['future', '0d']])
       .future,
-    '0c',
+    '0d',
   );
   assert.throws(
     () =>
@@ -212,14 +214,14 @@ test('reservation ledger is complete, pinned, and rejects duplicate or malformed
 
 test('published retired digits and competing PRs advance the merge-time allocation', () => {
   withPublishedBase(
-    { rows: [...reservationRows, ['retired-layer', '0c']] },
+    { rows: [...reservationRows, ['retired-layer', '0d']] },
     (cwd) => {
       const published = readPublishedLayerStateReservations('HEAD', cwd);
-      assert.equal(nextLayerStateToken(published), '0d');
+      assert.equal(nextLayerStateToken(published), '0e');
       assert.equal(
         validateLayerStateAllocations(published, {
           ...published,
-          newcomer: '0d',
+          newcomer: '0e',
         }),
         true,
       );
@@ -227,9 +229,9 @@ test('published retired digits and competing PRs advance the merge-time allocati
         () =>
           validateLayerStateAllocations(published, {
             ...published,
-            competing: '0c',
+            competing: '0d',
           }),
-        /next free token 0d/,
+        /next free token 0e/,
       );
       assert.throws(
         () =>
@@ -244,7 +246,7 @@ test('published retired digits and competing PRs advance the merge-time allocati
 });
 
 test('PR B replaces its provisional pair after PR A publishes the same one', () => {
-  withPublishedBase({ rows: [...reservationRows, ['pr-a', '0c']] }, (cwd) => {
+  withPublishedBase({ rows: [...reservationRows, ['pr-a', '0d']] }, (cwd) => {
     mkdirSync(path.join(cwd, 'scripts'));
     const fixtureChecker = path.join(
       cwd,
@@ -265,8 +267,8 @@ test('PR B replaces its provisional pair after PR A publishes the same one', () 
 
     writeCodecFixture(
       cwd,
-      [...reservationRows, ['pr-b', '0c']],
-      [{ id: 'pr-b', token: '0c' }],
+      [...reservationRows, ['pr-b', '0d']],
+      [{ id: 'pr-b', token: '0d' }],
     );
     const beforeRebase = runCheck();
     assert.equal(beforeRebase.status, 1);
@@ -274,10 +276,10 @@ test('PR B replaces its provisional pair after PR A publishes the same one', () 
 
     writeCodecFixture(
       cwd,
-      [...reservationRows, ['pr-a', '0c'], ['pr-b', '0c']],
+      [...reservationRows, ['pr-a', '0d'], ['pr-b', '0d']],
       [
-        { id: 'pr-a', token: '0c' },
-        { id: 'pr-b', token: '0c' },
+        { id: 'pr-a', token: '0d' },
+        { id: 'pr-b', token: '0d' },
       ],
     );
     const staleRebase = runCheck();
@@ -285,16 +287,16 @@ test('PR B replaces its provisional pair after PR A publishes the same one', () 
     assert.match(staleRebase.stderr, /Duplicate layer-state token reservation/);
 
     const published = readPublishedLayerStateReservations('HEAD', cwd);
-    assert.equal(nextLayerStateToken(published), '0d');
-    const validBaselineRows = [...reservationRows, ['pr-a', '0c']];
-    writeCodecFixture(cwd, validBaselineRows, [{ id: 'pr-a', token: '0c' }]);
+    assert.equal(nextLayerStateToken(published), '0e');
+    const validBaselineRows = [...reservationRows, ['pr-a', '0d']];
+    writeCodecFixture(cwd, validBaselineRows, [{ id: 'pr-a', token: '0d' }]);
     const helper = spawnSync(
       process.execPath,
       [realpathSync(fixtureNext), 'pr-b'],
       { cwd, encoding: 'utf8' },
     );
     assert.equal(helper.status, 0, helper.stderr);
-    assert.match(helper.stdout, /pr-b: 0d/);
+    assert.match(helper.stdout, /pr-b: 0e/);
     assert.deepEqual(
       JSON.parse(readFileSync(path.join(cwd, LEDGER_PATH), 'utf8')),
       validBaselineRows,
@@ -302,34 +304,34 @@ test('PR B replaces its provisional pair after PR A publishes the same one', () 
     );
     writeCodecFixture(
       cwd,
-      [...reservationRows, ['pr-a', '0c'], ['pr-b', '0d']],
+      [...reservationRows, ['pr-a', '0d'], ['pr-b', '0e']],
       [
-        { id: 'pr-a', token: '0c' },
-        { id: 'pr-b', token: '0d' },
+        { id: 'pr-a', token: '0d' },
+        { id: 'pr-b', token: '0e' },
       ],
     );
     const corrected = runCheck();
     assert.equal(corrected.status, 0, corrected.stderr);
-    assert.match(corrected.stdout, /49 published, 1 new/);
+    assert.match(corrected.stdout, /50 published, 1 new/);
   });
 });
 
 test('allocation batches cross the last digit and base-36 pair boundaries in order', () => {
   // Every digit is owned now, so the pair range is what comes next.
   const allDigits = parseLayerStateTokenReservations(reservationRows);
-  assert.equal(nextLayerStateToken(allDigits), '0c');
-  const baseBefore0c = {
+  assert.equal(nextLayerStateToken(allDigits), '0d');
+  const baseBefore0d = {
     ...allDigits,
     ...Object.fromEntries(
       [...'123456789'].map((second) => [`retired-0${second}`, `0${second}`]),
     ),
   };
-  assert.equal(nextLayerStateToken(baseBefore0c), '0c');
+  assert.equal(nextLayerStateToken(baseBefore0d), '0d');
   assert.equal(
-    validateLayerStateAllocations(baseBefore0c, {
-      ...baseBefore0c,
-      after: '0d',
-      before: '0c',
+    validateLayerStateAllocations(baseBefore0d, {
+      ...baseBefore0d,
+      after: '0e',
+      before: '0d',
     }),
     true,
   );
@@ -358,7 +360,7 @@ test('an isolated valid two-character fixture round-trips an l field beyond the 
     // The digits and the first base-36 pairs are all taken by the real
     // ledger; the fixture continues from the first free pair after the
     // S2 GhostMaps layer.
-    const fixtureLayers = ['0c', '0d', '0e', '0f'].map((token) => ({
+    const fixtureLayers = ['0d', '0e', '0f', '0g'].map((token) => ({
       id: `qa-layer-${token}`,
       token,
     }));
@@ -371,7 +373,7 @@ test('an isolated valid two-character fixture round-trips an l field beyond the 
     assert.equal(codec.validateLayerStateRegistry(), true);
     assert.equal(
       nextLayerStateToken(parseLayerStateTokenReservations(reservationRows)),
-      '0c',
+      '0d',
     );
     assert.equal(
       validateLayerStateAllocations(
@@ -388,10 +390,10 @@ test('an isolated valid two-character fixture round-trips an l field beyond the 
     const params = new URLSearchParams([['v', '2']]);
     codec.encodeLayerStateParams(params, state);
     assert.ok(params.get('l').length > 64, 'fixture must cross the old cap');
-    // 48 real layers (36 one-char tokens and 12 two-char pairs, pairs 00–0b
-    // up to the S2 GhostMaps layer) plus the fixture's four pairs: 52
-    // tokens joined by 51 separators.
-    assert.equal(params.get('l').length, 119);
+    // 49 real layers (36 one-char tokens and 13 two-char pairs, pairs 00–0c
+    // up to the OSM places layer) plus the fixture's four pairs: 53 tokens
+    // joined by 52 separators.
+    assert.equal(params.get('l').length, 122);
     const restored = codec.decodeLayerStateParams(params);
     assert.deepEqual(restored?.enabledLayerIds, expectedLayerIds);
     assert.deepEqual(restored?.options, state.options);
@@ -403,15 +405,15 @@ test('an isolated valid two-character fixture round-trips an l field beyond the 
 test('checker reads a complete future base ledger and rejects retired-token reuse', () => {
   withPublishedBase(
     {
-      rows: [...reservationRows, ['retired-layer', '0c']],
+      rows: [...reservationRows, ['retired-layer', '0d']],
       source:
         'export const LAYER_STATE_TOKEN_RESERVATIONS = Object.freeze({ ["retired-layer"]: "03" });\n',
     },
     (cwd) => {
       const published = readPublishedLayerStateReservations('HEAD', cwd);
       // The real ledger plus the fixture's own retired row.
-      assert.equal(Object.keys(published).length, 49);
-      assert.equal(published['retired-layer'], '0c');
+      assert.equal(Object.keys(published).length, 50);
+      assert.equal(published['retired-layer'], '0d');
       assert.throws(
         () =>
           validateLayerStateAllocations(published, {

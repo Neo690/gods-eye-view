@@ -3880,6 +3880,7 @@ its criteria cannot be silently ignored.
 | Radio                  | Radio Browser (public-domain station directory)                                                                                                                                                 | `src/data/radio.js`                                   | `/api/radio/stations`, `/api/radio/click/:uuid`          | 45 min directory refresh                                                          |
 | Transit 🚌             | Operator GTFS-Realtime VehiclePositions (35 keyless regions, `src/data/transitFeeds.js`)                                                                                                         | `src/layers/transit/` via `src/app/layers/transit.js` | `/api/transit`                                           | 15s (poll + delayed playback)                                                     |
 | Railway Stations 🚉    | OpenStreetMap `railway=station` places, plus next departures joined from SNCF static GTFS and GTFS-Realtime TripUpdates | `src/layers/stations/` via `src/app/layers/stations.js` | `/api/rail/departures` (server index 12 h, snapshot 45 s) | on click (board re-read each open) |
+| OSM Places 🏛 (`osm-places`) | OpenStreetMap named POIs (`amenity`, `shop`, `tourism`, `historic`, `leisure`, `office`, `craft`) through the operator-configured Overpass proxy; colour-coded by family, hover names the OSM kind, and the row's Overpass Turbo chip opens the same query in the editor | `src/layers/osmPlaces/` via `src/app/layers/osmPlaces.js` | `/api/overpass` (opt-in; `/status` probe skips queries when unconfigured) | camera-driven (2° maximum per request, 800 rows, 5 min refresh) |
 | Bikeshare 🚲           | GBFS (Lyft + BCycle + Social Bicycles + PBSC incl. Bike Share Toronto, Bike Itaú (Brazil), Bicing (Barcelona) and seven other Spanish cities + Urban Sharing, Entur, JCDecaux (Lillestrøm, Valencia, Seville) + nextbike (AMBici))                                                                                                                                        | `src/data/bikeshare.js`                               | `/api/gbfs`                                              | 60s                                                                               |
 | Directions 🧭          | OSRM on FOSSGIS servers (OpenStreetMap)                                                                                                                                                         | `src/data/directions.js`                              | `/api/route` (`steps=1`)                                 | on placement / mode change                                                        |
 | Datacenters ▣          | OSM extract (bundled)                                                                                                                                                                           | `src/data/infrastructure.js`                          | —                                                        | static                                                                            |
@@ -3903,6 +3904,20 @@ most, ordered by expected time, a train terminating at the station omitted, a
 cancelled trip marked, and a snapshot over ten minutes old labelled stale. A
 point far from any SNCF stop answers 404 rather than naming another region's
 station. Both upstream URLs stay server-side; the browser sends a position only.
+
+An OSM Places row draws only a named element with a usable position; an unnamed
+node is dropped rather than left as a dot no tooltip can name. Two same-named
+places at the same corner both stay, because each mapped element is its own
+place. The layer asks Overpass for at most 2° per axis around the view centre
+and at most 800 rows, so a country-scale view is clamped to the city it contains
+and the row says so. Families are colour-coded (food, shop, culture, services,
+other) without claiming a business is open or still exists. `OVERPASS TURBO`
+opens [Overpass Turbo](https://github.com/tyrasd/overpass-turbo) at
+`overpass-turbo.eu` with the equivalent `{{bbox}}` query, the current centre
+and zoom, and `R` so the editor runs it on load; the project is linked, not
+bundled, and no request reaches it until the chip is clicked. With no
+`OVERPASS_UPSTREAMS` the `/status` probe reports unconfigured, the layer says
+so, and no query is sent.
 
 GNSS Integrity samples a 250 nm circle around the Earth point under the screen
 centre. Camera reads debounce for 600 ms with a monotonic 2.5 s minimum gap;
@@ -5097,6 +5112,11 @@ Retry-After; absent delays back off from 30 seconds to five minutes. Empty
 `elements` is a valid answer. Existing byte, query, concurrency and cache caps
 remain. Malformed capability-probe responses remain unknown and are retried after the existing 30-second backoff; valid configured decisions remain memoized.
 Consumer capability misses never schedule automatic retries.
+OSM Places follows the same gate: one `/status` probe per source lifetime,
+then a 2°-capped named-POI query; an unconfigured install says so in the row
+and sends no query. Its `OVERPASS TURBO` chip is an outbound link only, carrying
+the equivalent `{{bbox}}` query, the current centre and zoom, and `R` so the
+editor runs it on load.
 
 Keyless browser validation also probes the optional Google tiles-token route.
 The token client cancels rejected response bodies before returning unavailable,

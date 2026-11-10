@@ -558,6 +558,24 @@ const layers = [
     noQuery: 'use set_context_mode contacts',
   },
   {
+    id: 'osm-places',
+    aliases: [
+      'osm places',
+      'openstreetmap places',
+      'map places',
+      'points of interest',
+      'pois',
+    ],
+    fr: ['lieux osm', 'lieux openstreetmap', 'points d’intérêt'],
+    es: ['lugares osm', 'lugares de openstreetmap', 'puntos de interés'],
+    ru: ['места osm', 'места openstreetmap', 'достопримечательности'],
+    zh: ['osm 地点', 'openstreetmap 地点', '兴趣点'],
+    ar: ['أماكن osm', 'أماكن openstreetmap', 'نقاط الاهتمام'],
+    context: false,
+    noQuery:
+      'mapped places; hover names them and the layer panel carries the count',
+  },
+  {
     id: 'cell-towers',
     aliases: ['cell towers', 'cell sites', 'phone masts', 'relay antennas'],
     context: false,

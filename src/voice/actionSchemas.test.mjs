@@ -52,8 +52,9 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // with headroom. Russian, zh-CN and Arabic spoken names now lead the
     // hint for the same layers the same way. Camera advisories extends the
     // manifest with its own aliases and noQuery hint. GhostMaps extends the
-    // generated layer enums and the spoken-name map.
-    '69e4796b554ea5177e2550d4da3e2744395e82f0a5e407f89cf73758c38f0d22',
+    // generated layer enums and the spoken-name map. The mapped OSM places
+    // layer extends it too, with its own aliases and noQuery hint.
+    '0a135750c74a3b37ed9b6326c484ed738a8109ea31d53602e3a83b1297425b59',
   );
 });
 

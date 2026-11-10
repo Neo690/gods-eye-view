@@ -28,6 +28,7 @@
   ["military-installations", "i"],
   ["netmon", "06"],
   ["orbit-changes", "01"],
+  ["osm-places", "0c"],
   ["plate-reader", "04"],
   ["radiation", "5"],
   ["radio", "r"],
