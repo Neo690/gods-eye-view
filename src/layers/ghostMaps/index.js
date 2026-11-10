@@ -17,8 +17,10 @@ import {
 import { createHorizonCull } from '../streetLevel/view.js';
 import { readGhostMapsKml } from './kml.js';
 import { fieldLabel, parseDescriptionFields, wrapCardText } from './records.js';
+import { compareGhostMapsAlerts, scoreGhostMapsAlert } from './severity.js';
 export * from './catalog.js';
 export * from './records.js';
+export * from './severity.js';
 export { readGhostMapsKml } from './kml.js';
 export { createGhostMapsSource } from './source.js';
 
@@ -701,6 +703,60 @@ export function createGhostMapsLayer({
         error: _lastError || [..._failed.values()][0] || null,
         fallback: false,
       };
+    },
+
+    /**
+     * Loaded alerts ranked most severe first, for the Sentinel tour.
+     * Scores are computed once per placemark and kept on the feature.
+     * @param {{limit?: number}} [options]
+     */
+    getSentinelAlerts({ limit = Infinity } = {}) {
+      if (!_enabled) return [];
+      const alerts = [];
+      for (const [productId, item] of _loaded) {
+        item.features.forEach((feature, index) => {
+          const scored = (feature.alert ??= scoreGhostMapsAlert(feature));
+          alerts.push({
+            id: `${productId}:${index}`,
+            product: productId,
+            index,
+            name: fieldLabel(feature.name || feature.folder) || t('Report'),
+            folder: feature.folder ? fieldLabel(feature.folder) : '',
+            lonDeg: feature.anchor[0],
+            latDeg: feature.anchor[1],
+            score: scored.score,
+            severity: scored.severity,
+            summary: scored.summary,
+          });
+        });
+      }
+      alerts.sort(compareGhostMapsAlerts);
+      return Number.isFinite(limit)
+        ? alerts.slice(0, Math.max(0, Math.floor(limit)))
+        : alerts;
+    },
+
+    /**
+     * Open one alert's card as if it had been clicked. Returns false when the
+     * placemark is gone or this platform has no picking/card host.
+     */
+    inspectSentinelAlert(id) {
+      if (!_enabled || !canSelect()) return false;
+      const key = String(id ?? '');
+      if (!featureFor(key).feature) return false;
+      _selectedKey = key;
+      publishCard();
+      render();
+      return true;
+    },
+
+    /** Close the card, but only if it is still this alert's card. */
+    clearSentinelInspection(id) {
+      if (!_selectedKey) return false;
+      if (id !== undefined && _selectedKey !== String(id)) return false;
+      clearSelection();
+      render();
+      return true;
     },
 
     /** Loaded placemarks as plain records, for tools and QA. */

@@ -749,6 +749,154 @@ test('the spider walks to an enabled layer and reports what it holds', async () 
   assert.equal(doc.body.children.length, 0);
 });
 
+test('GhostMaps alerts are toured most severe first, with the card open', async () => {
+  const doc = fakeDocument();
+  let clock = 1_500_000;
+  const flights = [];
+  let cancelled = 0;
+  const viewer = {
+    camera: {
+      positionCartographic: {
+        latitude: 0,
+        longitude: 0,
+        height: 2_000_000,
+      },
+      flyTo(options) {
+        flights.push(options);
+      },
+      cancelFlight() {
+        cancelled += 1;
+      },
+    },
+    scene: { preUpdate: new Cesium.Event() },
+  };
+  const alerts = [
+    {
+      id: 'cip:1',
+      product: 'cip',
+      index: 1,
+      name: 'MassStabbing',
+      folder: 'Syria',
+      lonDeg: 0.2,
+      latDeg: 0.2,
+      score: 540,
+      severity: 'emergency',
+      summary: 'MassStabbing · 11 killed',
+    },
+    {
+      id: 'cip:2',
+      product: 'cip',
+      index: 2,
+      name: 'Vandalism',
+      folder: 'Iraq',
+      lonDeg: 0.4,
+      latDeg: 0.4,
+      score: 20,
+      severity: 'info',
+      summary: 'Vandalism',
+    },
+  ];
+  const inspected = [];
+  const cleared = [];
+  const ghostMaps = {
+    getStats: () => ({ count: alerts.length, commit: 'edition-a' }),
+    getSentinelAlerts: () => alerts,
+    inspectSentinelAlert: (id) => {
+      inspected.push(id);
+      return true;
+    },
+    clearSentinelInspection: (id) => {
+      cleared.push(id);
+      return true;
+    },
+  };
+  const manager = {
+    getAll: () => [
+      {
+        id: 's2-ghostmaps',
+        name: 'S2 GhostMaps',
+        enabled: true,
+        stats: { count: alerts.length, error: null },
+      },
+    ],
+    layers: new Map([
+      ['s2-ghostmaps', { enabled: true, module: ghostMaps }],
+    ]),
+  };
+  const layer = createAiAgentLayer({
+    docScope: doc,
+    now: () => clock,
+    fetchImpl: async () => ({ ok: false, status: 503, json: async () => ({}) }),
+  });
+  layer.attachDataManager(manager);
+  layer.init(viewer);
+  layer.enable();
+
+  // The first target is the severe one, and the view flew to it.
+  let stats = layer.getStats();
+  assert.equal(stats.target, 's2-ghostmaps');
+  assert.equal(stats.targetKind, 'ghostmaps-alert');
+  assert.equal(stats.alert, 'cip:1');
+  assert.equal(flights.length, 1);
+  assert.equal(flights[0].duration, 2.5);
+
+  // Walk in, open the card, then let the scan close it.
+  for (let i = 0; i < 40 && inspected.length === 0; i++) {
+    clock += 250;
+    viewer.scene.preUpdate.raiseEvent();
+  }
+  assert.equal(inspected[0], 'cip:1');
+  const feed = doc.body.children[0].querySelector('.gev-ai-agent-feed');
+  assert.ok(
+    feed.children.some((row) =>
+      /MassStabbing · 11 killed/.test(row.textContent),
+    ),
+    'the alert detail reaches the report card',
+  );
+  for (let i = 0; i < 80 && cleared.length === 0; i++) {
+    clock += 250;
+    viewer.scene.preUpdate.raiseEvent();
+  }
+  assert.equal(cleared[0], 'cip:1');
+  assert.equal(layer.getStats().alertsVisited, 1);
+  // The scan ends with a wide shot, before the tour picks its next alert.
+  assert.equal(flights.length, 2);
+  assert.ok(flights[1].duration < flights[0].duration);
+  const pullbackHeight = Cesium.Cartographic.fromCartesian(
+    flights[1].destination,
+  ).height;
+  assert.ok(
+    pullbackHeight > 5_000_000,
+    `pullback should leave the regional view (got ${pullbackHeight} m)`,
+  );
+  assert.equal(layer.getStats().alert, null);
+
+  // The wide pause expires and the tour flies to the next alert.
+  for (let i = 0; i < 80 && flights.length < 3; i++) {
+    clock += 250;
+    viewer.scene.preUpdate.raiseEvent();
+  }
+  stats = layer.getStats();
+  assert.equal(stats.alert, 'cip:2');
+  assert.equal(flights.length, 3);
+  assert.equal(flights[2].duration, 2.5);
+  const nextHeight = Cesium.Cartographic.fromCartesian(
+    flights[2].destination,
+  ).height;
+  assert.ok(nextHeight <= 1_500_000, 'the next alert is framed close again');
+
+  // Disabling mid-scan closes the card this layer opened, not a manual one.
+  for (let i = 0; i < 40 && inspected.length < 2; i++) {
+    clock += 250;
+    viewer.scene.preUpdate.raiseEvent();
+  }
+  assert.equal(inspected[1], 'cip:2');
+  layer.disable();
+  assert.ok(cancelled >= 1, 'disabling stops the alert flight');
+  assert.equal(cleared.at(-1), 'cip:2', 'disable clears its open card');
+  layer.destroy();
+});
+
 test('a feed that breaks diverts the spider and words one brief', async () => {
   const doc = fakeDocument();
   const viewer = fakeViewer();

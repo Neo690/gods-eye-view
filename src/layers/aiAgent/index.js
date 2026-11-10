@@ -8,15 +8,18 @@
 //     among the enabled layers (patrol.js ranks them by severity, feed health,
 //     freshness, distance and how long ago it looked), crawls to the nearest
 //     record of the chosen layer, scans it and reports what the layer holds,
+//   - when S2 GhostMaps is enabled its alerts take the tour in severity order:
+//     the view flies to each alert, its own report card opens, and the spider
+//     walks in to scan it before moving to the next one,
 //   - the patrol is local and deterministic. Nothing here changes the
-//     operator's layers, and nothing moves the camera: the spider walks, the
-//     view stays where the operator put it,
+//     operator's layers; the GhostMaps alert tour is the only camera motion,
 //   - a model is optional and only ever words a finding that matters
 //     (brief.js), at most once every twenty minutes. With no key the layer is
 //     exactly as useful, and spends nothing.
 // The body is Cesium entities; the inspection note rides the world-overlay
 // host (entity labels are forbidden); the report card is DOM (see overlay.js),
 // so disabling the layer removes all three with no cleanup left behind.
+import * as Cesium from 'cesium';
 import {
   t,
   tn,
@@ -43,6 +46,8 @@ import {
   angularDistance,
   rankInspectionTargets,
   stepPatrol,
+  CRUISE_RAD_PER_S,
+  TURN_RAD_PER_S,
   REST_MS,
   SCAN_MS,
   toDegrees,
@@ -70,6 +75,29 @@ const FALLBACK_SPAWN = Object.freeze({ latDeg: 20, lonDeg: 0 });
 
 /** Longest stretch of time one frame may advance the walk. */
 const MAX_FRAME_DT_S = 0.25;
+
+/** The one layer whose alerts get a guided tour instead of a plain scan. */
+const ALERT_LAYER_ID = 's2-ghostmaps';
+
+/** Keep the alert fly-to near the operator's current altitude, within reason. */
+const ALERT_TOUR_MIN_HEIGHT_M = 400_000;
+const ALERT_TOUR_MAX_HEIGHT_M = 1_500_000;
+const ALERT_TOUR_FLIGHT_MS = 2500;
+/** Between two alerts the view pulls back to a regional shot first. */
+const ALERT_TOUR_PULLBACK_HEIGHT_M = 6_000_000;
+const ALERT_TOUR_PULLBACK_FLIGHT_MS = 1200;
+const ALERT_TOUR_PULLBACK_MS = 2000;
+/** A detailed card needs longer than a generic scan to be read. */
+const ALERT_READ_MS = 7000;
+
+/** Alerts are toured briskly: the card carries the detail, the walk is
+ *  theatre. Eight times cruise keeps a cross-globe hop under ten seconds; the
+ *  turn rate scales with it, or a long stride circles the pole instead of
+ *  settling on a target on the other side of it. */
+const ALERT_WALK_LIMITS = Object.freeze({
+  speed: CRUISE_RAD_PER_S * 8,
+  turn: TURN_RAD_PER_S * 8,
+});
 
 /**
  * Wire the spider to what the application owns.
@@ -103,6 +131,13 @@ export function createAiAgentLayer({
   const watchState = { previous: null, seen: new Set() };
   const recentEvents = [];
   const visitedAt = {};
+  // Alerts already scanned in this edition. A new GhostMaps commit (or a
+  // changed feature count) starts the tour over from the most severe one.
+  const visitedAlerts = new Set();
+  let alertEpoch = null;
+  // The card this layer opened, so a manual GhostMaps click is never closed
+  // by the tour moving on or by the layer being switched off.
+  let activeAlertId = null;
   let lastSeen = null;
 
   // The spider's own state, read by the Cesium callbacks every frame.
@@ -123,6 +158,7 @@ export function createAiAgentLayer({
   let phase = 'rest';
   let scanUntil = 0;
   let restUntil = 0;
+  let pullbackUntil = 0;
   let lastFrameAt = 0;
   let lastBriefAt = 0;
   let briefing = false;
@@ -150,6 +186,62 @@ export function createAiAgentLayer({
   function freshEvents(withinMs = EVENT_MEMORY_MS) {
     const now = nowSource();
     return recentEvents.filter((event) => now - event.at < withinMs);
+  }
+
+  /** The GhostMaps layer module, only while that layer is actually on. */
+  function ghostMapsModule() {
+    const entry = manager?.layers?.get?.(ALERT_LAYER_ID);
+    const module = entry?.module;
+    if (!module || entry.enabled === false) return null;
+    return typeof module.getSentinelAlerts === 'function' ? module : null;
+  }
+
+  /** The module's edition signature: a reload invalidates the visited book. */
+  function alertEdition(module) {
+    const stats = module.getStats?.() || {};
+    return `${stats.commit || ''}:${stats.count || 0}`;
+  }
+
+  /**
+   * The next GhostMaps alert the tour has not read, most severe first. The
+   * layer did the ranking; this only keeps the visited book and drops it when
+   * a new edition lands.
+   */
+  function ghostMapsAlertTarget() {
+    const module = ghostMapsModule();
+    if (!module) return null;
+    const edition = alertEdition(module);
+    if (edition !== alertEpoch) {
+      alertEpoch = edition;
+      visitedAlerts.clear();
+    }
+    let alerts = [];
+    try {
+      alerts = module.getSentinelAlerts() || [];
+    } catch {
+      return null; // a throwing reader is the same as no reader
+    }
+    const next = alerts.find((alert) => !visitedAlerts.has(String(alert.id)));
+    if (!next) return null;
+    const latDeg = Number(next.latDeg);
+    const lonDeg = Number(next.lonDeg);
+    if (!Number.isFinite(latDeg) || !Number.isFinite(lonDeg)) return null;
+    return {
+      kind: 'ghostmaps-alert',
+      layerId: ALERT_LAYER_ID,
+      alertId: String(next.id),
+      label: next.name || next.folder || msg('S2 GhostMaps'),
+      folder: next.folder || '',
+      count: 1,
+      latDeg,
+      lonDeg,
+      severity:
+        next.severity === 'emergency' || next.severity === 'warn'
+          ? next.severity
+          : 'info',
+      score: Number(next.score) || 0,
+      summary: next.summary || '',
+    };
   }
 
   function latestEventFor(layerId) {
@@ -222,6 +314,15 @@ export function createAiAgentLayer({
    * the current target rather than freezing the spider.
    */
   function selectTarget(only = null) {
+    // The GhostMaps alert tour outranks the generic layer patrol. A divert
+    // (only) still wins: a feed that just broke is the operator's news.
+    if (!only) {
+      const alert = ghostMapsAlertTarget();
+      if (alert) {
+        adoptTarget(alert);
+        return true;
+      }
+    }
     const candidates = inspectionCandidates().filter(
       (candidate) => !only || only.has(candidate.layerId),
     );
@@ -232,19 +333,67 @@ export function createAiAgentLayer({
       current: target?.layerId ?? null,
     });
     if (!ranked.length) return false;
-    target = ranked[0];
+    adoptTarget(ranked[0]);
+    return true;
+  }
+
+  /** Make one target current, flying the view there for a GhostMaps alert. */
+  function adoptTarget(next) {
+    target = next;
     spider.note = '';
     syncNote();
     spider.scanning = false;
     spider.severity = target.severity;
     phase = 'walk';
-    return true;
+    if (target.kind === 'ghostmaps-alert') flyToAlert(target);
+  }
+
+  /** One top-down camera flight, with the alert tour's easing. */
+  function flyCamera(lonDeg, latDeg, heightM, durationMs) {
+    const camera = viewer?.camera;
+    if (typeof camera?.flyTo !== 'function') return;
+    try {
+      camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(lonDeg, latDeg, heightM),
+        orientation: {
+          heading: 0,
+          pitch: -Cesium.Math.PI_OVER_TWO,
+          roll: 0,
+        },
+        duration: durationMs / 1000,
+      });
+    } catch {
+      // A camera torn down mid-tour cannot take another flight.
+    }
+  }
+
+  /** Frame the alert without changing how far out the operator already is. */
+  function flyToAlert(alert) {
+    const height = Number(viewer?.camera?.positionCartographic?.height);
+    const safeHeight = Number.isFinite(height)
+      ? Math.min(
+          ALERT_TOUR_MAX_HEIGHT_M,
+          Math.max(ALERT_TOUR_MIN_HEIGHT_M, height),
+        )
+      : ALERT_TOUR_MIN_HEIGHT_M;
+    flyCamera(alert.lonDeg, alert.latDeg, safeHeight, ALERT_TOUR_FLIGHT_MS);
+  }
+
+  /** Leave the scanned alert for a wide shot before choosing the next one. */
+  function pullBackFromAlert() {
+    flyCamera(
+      spider.lonDeg,
+      spider.latDeg,
+      ALERT_TOUR_PULLBACK_HEIGHT_M,
+      ALERT_TOUR_PULLBACK_FLIGHT_MS,
+    );
   }
 
   /** Sit still when there is nowhere worth going. */
   function rest() {
     target = null;
     phase = 'rest';
+    pullbackUntil = 0;
     restUntil = nowSource() + REST_MS;
     spider.note = '';
     syncNote();
@@ -306,6 +455,45 @@ export function createAiAgentLayer({
     });
   }
 
+  /** The spider reached a GhostMaps alert: its card is open, so report it. */
+  function reportAlert(candidate) {
+    const layerName = translateKnown(candidate.label);
+    // The card carries the full popup; this is the one-line feed summary.
+    const detail = candidate.summary || candidate.label;
+    const event = {
+      kind: 'event-update',
+      layerId: AI_AGENT_LAYER_ID,
+      label: layerName,
+      detail,
+      at: nowSource(),
+      severity: candidate.severity,
+    };
+    recentEvents.push(event);
+    while (recentEvents.length > 30) recentEvents.shift();
+    avatar?.pushEvent(event);
+    avatar?.setState(severityNow());
+    void maybeBrief({
+      layer: layerName,
+      count: 1,
+      severity: candidate.severity,
+    });
+  }
+
+  /** Close only this tour's card and stop its camera flight. */
+  function clearAlertTour() {
+    if (activeAlertId) {
+      ghostMapsModule()?.clearSentinelInspection?.(activeAlertId);
+      activeAlertId = null;
+    }
+    if (target?.kind === 'ghostmaps-alert' || phase === 'pullback') {
+      try {
+        viewer?.camera?.cancelFlight?.();
+      } catch {
+        // A camera torn down mid-tour cannot take another cancellation.
+      }
+    }
+  }
+
   /** One animation step: walk, scan, rest, then choose again.
    *
    * The orb's glow breathes on the clock while the walk itself stays tied to
@@ -323,29 +511,65 @@ export function createAiAgentLayer({
       if (now >= restUntil && !target && !selectTarget()) rest();
       return;
     }
+    if (phase === 'pullback') {
+      if (now < pullbackUntil) return;
+      if (!selectTarget()) rest();
+      return;
+    }
     if (!target) {
       rest();
       return;
     }
     if (phase === 'walk') {
-      const step = stepPatrol(spider, target, dtSec);
+      const step = stepPatrol(
+        spider,
+        target,
+        dtSec,
+        target.kind === 'ghostmaps-alert' ? ALERT_WALK_LIMITS : undefined,
+      );
       spider.latDeg = step.latDeg;
       spider.lonDeg = step.lonDeg;
       spider.headingRad = step.headingRad;
       if (!step.arrived) return;
       phase = 'scan';
-      scanUntil = now + SCAN_MS;
+      scanUntil =
+        now + (target.kind === 'ghostmaps-alert' ? ALERT_READ_MS : SCAN_MS);
       spider.scanning = true;
       spider.note = translateKnown(target.label);
       spider.severity = target.severity;
       syncNote();
       updateRing();
-      reportInspection(target);
+      if (target.kind === 'ghostmaps-alert') {
+        const opened = ghostMapsModule()?.inspectSentinelAlert?.(
+          target.alertId,
+        );
+        if (opened) activeAlertId = target.alertId;
+        reportAlert(target);
+      } else {
+        reportInspection(target);
+      }
       return;
     }
     // phase === 'scan'
     updateRing();
     if (now < scanUntil) return;
+    if (target.kind === 'ghostmaps-alert') {
+      visitedAlerts.add(target.alertId);
+      // Close only this alert's card: a click on another pin during the scan
+      // belongs to the operator and stays open.
+      ghostMapsModule()?.clearSentinelInspection?.(target.alertId);
+      if (activeAlertId === target.alertId) activeAlertId = null;
+      spider.scanning = false;
+      spider.note = '';
+      syncNote();
+      target = null;
+      // Hold over the scanned alert, pull back, then pick the next one from
+      // the wide shot. The pause also makes the transition read as a move.
+      phase = 'pullback';
+      pullbackUntil = now + ALERT_TOUR_PULLBACK_MS;
+      pullBackFromAlert();
+      return;
+    }
     visitedAt[target.layerId] = now;
     spider.scanning = false;
     spider.note = '';
@@ -450,6 +674,9 @@ export function createAiAgentLayer({
    */
   function divert(fresh) {
     if (!fresh.length) return;
+    // A GhostMaps alert owns the view and its card until the scan ends; a
+    // feed-count wobble must not yank the operator away mid-alert.
+    if (target?.kind === 'ghostmaps-alert' || phase === 'pullback') return;
     const wanted = new Set();
     for (const event of fresh) {
       if (eventSeverity(event) === 'info') continue;
@@ -503,6 +730,9 @@ export function createAiAgentLayer({
     enable() {
       if (destroyed) return false;
       enabled = true;
+      // A fresh enable starts the alert tour from the most severe again.
+      visitedAlerts.clear();
+      alertEpoch = null;
       spider.visible = true;
       avatar?.setSleeping(false);
       // The tick stalls before the follow does its one gate read: a hidden
@@ -516,6 +746,9 @@ export function createAiAgentLayer({
 
     disable() {
       enabled = false;
+      clearAlertTour();
+      visitedAlerts.clear();
+      alertEpoch = null;
       spider.visible = false;
       spider.scanning = false;
       spider.note = '';
@@ -532,6 +765,7 @@ export function createAiAgentLayer({
       if (!enabled || destroyed) return false;
       watchCycle();
       avatar?.setState(severityNow());
+      if (phase === 'pullback') return true;
       if (!target && nowSource() >= restUntil && !selectTarget()) rest();
       return true;
     },
@@ -539,6 +773,7 @@ export function createAiAgentLayer({
     destroy() {
       destroyed = true;
       enabled = false;
+      clearAlertTour();
       stopTicking();
       spider.visible = false;
       try {
@@ -616,6 +851,9 @@ export function createAiAgentLayer({
           'The Sentinel spider walks the globe, inspects enabled layers and reports what each one holds.',
         mode: body ? 'patrol' : 'watchdog',
         target: target?.layerId ?? null,
+        targetKind: target?.kind ?? null,
+        alert: target?.alertId ?? null,
+        alertsVisited: visitedAlerts.size,
       };
     },
   };
