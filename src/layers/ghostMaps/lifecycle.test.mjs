@@ -167,6 +167,19 @@ test('entity construction failure releases parsed image URLs', async (t) => {
   assert.equal(layer.getStats().error, 'fixture entity failure');
 });
 
+test('GhostMaps pins shrink with camera distance', async (t) => {
+  const { layer, viewer, mounted } = fixture(t);
+  await layer.update(viewer);
+  const [dataSource] = [...mounted];
+  const [entity] = dataSource.entities.values;
+  const scale = entity.billboard.scale.getValue();
+  const byDistance = entity.billboard.scaleByDistance.getValue();
+  assert.ok(scale > 0 && scale <= 0.6);
+  assert.ok(byDistance.nearValue > byDistance.farValue);
+  assert.equal(byDistance.near, 100_000);
+  assert.equal(byDistance.far, 5_000_000);
+});
+
 test('successful load keeps icons until the product is disabled', async (t) => {
   const { layer, viewer, mounted, created, revoked } = fixture(t);
   await layer.update(viewer);

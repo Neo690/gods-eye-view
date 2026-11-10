@@ -28,6 +28,20 @@ const PICK_PREFIX = 'ghostmaps:';
 const STORAGE_KEY = 'gev.ghostmaps.products';
 const ACCENT = '#c8ff00';
 const MAX_ICON_BYTES = 512 * 1024;
+// KML icons are 60 px squares and some editions ship a 1.9 icon scale.
+// Uncapped, one alert pin covers more of a phone's globe than the country
+// under it; a product can carry a thousand of them, and their overdraw alone
+// costs frames on a phone. The base scale follows the KML but stays below
+// native size; scaleByDistance drops it to about a third at globe altitude
+// and restores the detail only once the camera is over the region.
+const MAX_ICON_SCALE = 0.6;
+const MIN_ICON_SCALE = 0.35;
+const ICON_SCALE_BY_DISTANCE = new Cesium.NearFarScalar(
+  100_000,
+  1,
+  5_000_000,
+  0.35,
+);
 const CARD_HOST_OPTIONS = Object.freeze({
   cohortLimit: 1,
   collisionCapacity: 1,
@@ -241,9 +255,10 @@ export function createGhostMapsLayer({
               billboard: {
                 image: style.icon || markerImage(color),
                 scale: Math.min(
-                  1.5,
-                  Math.max(0.35, (style.iconScale ?? 1) * 0.7),
+                  MAX_ICON_SCALE,
+                  Math.max(MIN_ICON_SCALE, (style.iconScale ?? 1) * 0.7),
                 ),
+                scaleByDistance: ICON_SCALE_BY_DISTANCE,
                 color:
                   style.icon && style.iconColor
                     ? cesiumColor(style.iconColor)
