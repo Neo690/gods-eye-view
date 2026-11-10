@@ -130,6 +130,20 @@ function expectedPaths() {
   return expected;
 }
 
+// The Radio Sites layer reads exactly one file, and it is committed: an
+// installer without it cannot draw a French radio site. It is small enough to
+// ship (1.8 MB), so its absence is a build error — the mirror image of the
+// credential rule above, which fails for carrying a file it must not.
+const RADIO_SITES_EXTRACT = 'data/anfr/cell-towers.json.gz';
+
+function checkRadioSites() {
+  if (!existsSync(path.join(PAYLOAD_DIR, RADIO_SITES_EXTRACT))) {
+    throw new Error(
+      `${RADIO_SITES_EXTRACT} is missing from the payload: run \`npm run towers:build\` before packaging.`,
+    );
+  }
+}
+
 function checkParity() {
   const expected = expectedPaths();
   const missing = [];
@@ -199,6 +213,7 @@ export function preparePayload() {
     });
   }
   checkPayload();
+  checkRadioSites();
   const expected = checkParity();
 
   const { files, bytes } = measure(PAYLOAD_DIR);

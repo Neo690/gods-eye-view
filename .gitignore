@@ -14,8 +14,12 @@ qa-shots/
 output/
 .gev-logs/
 .gev-cache/
-# ANFR radio-site extract built by `npm run towers:build` (63 MB upstream).
-data/anfr/
+# ANFR radio-site data (Licence Ouverte 2.0). The 63 MB monthly archive that
+# `npm run towers:build` downloads stays out of git; the 1.8 MB extract built
+# from it ships, so an installer built from a plain clone — CI included —
+# carries the Radio Sites layer offline instead of saying "not built".
+/data/anfr/anfr-archive.zip
+/data/anfr/cell-towers.json
 # Browser QA gate evidence (screenshots, console and network dumps).
 qa-artifacts/
 # Playwright MCP session logs: browser consoles can carry tokens in URLs.
