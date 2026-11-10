@@ -3551,5 +3551,29 @@
   "RESUME TOUR": "استئناف الجولة",
   "Pick the tour up where it stopped": "استئناف الجولة من حيث توقفت",
   "Hold the tour: no camera flight, no next alert, the open card stays": "إيقاف الجولة مؤقتًا: لا انتقال للكاميرا ولا تنبيه تالٍ، وتبقى البطاقة المفتوحة",
-  "Read each GhostMaps alert aloud as the tour reaches it": "قراءة كل تنبيه من GhostMaps بصوت عالٍ عند وصول الجولة إليه"
+  "Read each GhostMaps alert aloud as the tour reaches it": "قراءة كل تنبيه من GhostMaps بصوت عالٍ عند وصول الجولة إليه",
+  "ASK": "اسأل",
+  "Hold to ask about the alerts: the most severe, the next one, the total, or repeat": "اضغط مطولًا للسؤال عن التنبيهات: الأخطر، التالي، الإجمالي أو التكرار",
+  "Ask the Sentinel": "اسأل الحارس",
+  "Most severe: {alert}": "الأخطر: {alert}",
+  "Next: {alert}": "التالي: {alert}",
+  "{count} alerts loaded": {
+    "zero": "{count} تنبيه محمّل",
+    "one": "{count} تنبيه محمّل",
+    "two": "{count} تنبيهان محمّلان",
+    "few": "{count} تنبيهات محمّلة",
+    "many": "{count} تنبيهًا محمّلًا",
+    "other": "{count} تنبيه محمّل"
+  },
+  "{count} emergencies": {
+    "zero": "{count} حالة طارئة",
+    "one": "{count} حالة طارئة",
+    "two": "{count} حالتان طارئتان",
+    "few": "{count} حالات طارئة",
+    "many": "{count} حالة طارئة",
+    "other": "{count} حالة طارئة"
+  },
+  "Nothing to repeat yet.": "لا يوجد ما يمكن تكراره بعد.",
+  "I can tell you the most severe alert, the next one, the total, or repeat the last one.": "يمكنني أن أخبرك بالأخطر، أو التالي، أو الإجمالي، أو تكرار الأخير.",
+  "No GhostMaps alerts are loaded yet.": "لم يتم تحميل أي تنبيه من GhostMaps بعد."
 }

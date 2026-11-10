@@ -93,15 +93,56 @@ function spiderGlyph(document) {
   return svg;
 }
 
+/** The microphone of ASK mode: a capsule, an arc and a stand. */
+function micGlyph(document) {
+  if (typeof document.createElementNS !== 'function') {
+    const fallback = document.createElement('span');
+    attr(fallback, 'aria-hidden', 'true');
+    fallback.textContent = '🎙';
+    return fallback;
+  }
+  const svg = attr(
+    document.createElementNS(SVG_NS, 'svg'),
+    'viewBox',
+    '0 0 24 24',
+  );
+  attr(svg, 'class', 'gev-ai-agent-mic');
+  attr(svg, 'aria-hidden', 'true');
+  const capsule = attr(document.createElementNS(SVG_NS, 'rect'), 'x', '9');
+  attr(capsule, 'y', '3');
+  attr(capsule, 'width', '6');
+  attr(capsule, 'height', '11');
+  attr(capsule, 'rx', '3');
+  svg.appendChild(capsule);
+  const arc = attr(
+    document.createElementNS(SVG_NS, 'path'),
+    'd',
+    'M5 11a7 7 0 0 0 14 0',
+  );
+  svg.appendChild(arc);
+  const stem = attr(document.createElementNS(SVG_NS, 'path'), 'd', 'M12 20v2');
+  svg.appendChild(stem);
+  return svg;
+}
+
 /**
  * Build (or reuse) the report card.
  *
- * @param {{doc?: Document, host?: Element}} [repos] host appends the root.
- * @returns {object|null} view with setState/pushEvent/setSleeping/destroy.
+ * @param {object} [repos]
+ * @param {Document} [repos.doc] document seam.
+ * @param {Element} [repos.host] host appends the root.
+ * @param {Function} [repos.onAskStart] a held ASK microphone was pressed.
+ * @param {Function} [repos.onAskEnd] the held press was released.
+ * @param {Function} [repos.onAskCancel] the held press was dropped.
+ * @returns {object|null} view with setState/pushEvent/setAskMode/setAnswer/
+ *   setSleeping/destroy.
  */
 export function createAvatarOverlay({
   doc = undefined,
   host = undefined,
+  onAskStart = () => {},
+  onAskEnd = () => {},
+  onAskCancel = () => {},
 } = {}) {
   const document = doc ?? globalThis.document;
   if (!document || typeof document.createElement !== 'function') return null;
@@ -121,6 +162,29 @@ export function createAvatarOverlay({
   attr(toggle, 'aria-controls', 'gev-ai-agent-feed');
   box.appendChild(toggle);
 
+  // ASK mode's push-to-talk button and the answer it produces. Both stay out
+  // of the card until the mode is switched on from the layer row.
+  const ask = document.createElement('button');
+  ask.className = 'gev-ai-agent-ask';
+  attr(ask, 'type', 'button');
+  attr(ask, 'aria-label', t('Ask the Sentinel'));
+  attr(
+    ask,
+    'title',
+    t(
+      'Hold to ask about the alerts: the most severe, the next one, the total, or repeat',
+    ),
+  );
+  attr(ask, 'data-listening', 'false');
+  ask.hidden = true;
+  ask.appendChild(micGlyph(document));
+
+  const answer = document.createElement('div');
+  answer.className = 'gev-ai-agent-answer';
+  attr(answer, 'role', 'status');
+  attr(answer, 'aria-live', 'polite');
+  answer.hidden = true;
+
   const bubble = document.createElement('div');
   bubble.className = 'gev-ai-agent-bubble';
   bubble.hidden = true;
@@ -131,12 +195,16 @@ export function createAvatarOverlay({
   feed.hidden = true;
 
   root.appendChild(box);
+  root.appendChild(ask);
+  root.appendChild(answer);
   root.appendChild(bubble);
   root.appendChild(feed);
   (host || document.body).appendChild(root);
 
   let expanded = false;
   let destroyed = false;
+  let askMode = false;
+  let pressing = false;
 
   function syncExpanded() {
     bubble.hidden = !expanded || !bubble.textContent;
@@ -149,6 +217,50 @@ export function createAvatarOverlay({
     expanded = !expanded;
     syncExpanded();
   });
+
+  // A press is the question, a release is the end of it. The pointer is
+  // captured so a release outside the button still closes the microphone.
+  const startAsk = (event) => {
+    if (destroyed || !askMode || pressing) return;
+    event?.preventDefault?.();
+    pressing = true;
+    attr(ask, 'data-listening', 'true');
+    try {
+      ask.setPointerCapture?.(event?.pointerId);
+    } catch {
+      // A pointer id the browser no longer knows cannot be captured.
+    }
+    onAskStart?.();
+  };
+
+  const endAsk = (event) => {
+    if (!pressing) return;
+    event?.preventDefault?.();
+    pressing = false;
+    attr(ask, 'data-listening', 'false');
+    onAskEnd?.();
+  };
+
+  const cancelAsk = () => {
+    if (!pressing) return;
+    pressing = false;
+    attr(ask, 'data-listening', 'false');
+    onAskCancel?.();
+  };
+
+  ask.addEventListener?.('pointerdown', startAsk);
+  ask.addEventListener?.('pointerup', endAsk);
+  ask.addEventListener?.('pointercancel', cancelAsk);
+  ask.addEventListener?.('lostpointercapture', () => {
+    if (pressing) endAsk();
+  });
+  ask.addEventListener?.('keydown', (event) => {
+    if (event?.key === ' ' || event?.key === 'Enter') startAsk(event);
+  });
+  ask.addEventListener?.('keyup', (event) => {
+    if (event?.key === ' ' || event?.key === 'Enter') endAsk(event);
+  });
+  ask.addEventListener?.('blur', cancelAsk);
 
   const severityWord = {
     info: t('calm'),
@@ -196,6 +308,28 @@ export function createAvatarOverlay({
         feed.lastElementChild.remove();
       bubble.textContent = title;
       bubble.hidden = !expanded;
+    },
+
+    /** ASK mode: the held microphone appears, and leaves with the mode. */
+    setAskMode(value) {
+      if (destroyed) return;
+      askMode = Boolean(value);
+      ask.hidden = !askMode;
+      if (!askMode) {
+        pressing = false;
+        attr(ask, 'data-listening', 'false');
+        answer.textContent = '';
+        answer.hidden = true;
+      }
+      root.classList.toggle?.('asking', askMode);
+    },
+
+    /** The answer to a question, readable without a speaker. */
+    setAnswer(text) {
+      if (destroyed) return;
+      const line = String(text ?? '').trim();
+      answer.textContent = line;
+      answer.hidden = !askMode || !line;
     },
 
     /** Dormant layer: keep the badge but grey it out and close the card. */

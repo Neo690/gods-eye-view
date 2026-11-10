@@ -3338,5 +3338,23 @@
   "RESUME TOUR": "REANUDAR RECORRIDO",
   "Pick the tour up where it stopped": "Reanudar el recorrido donde se detuvo",
   "Hold the tour: no camera flight, no next alert, the open card stays": "Pausar el recorrido: sin vuelo de cámara, sin siguiente alerta, la ficha abierta se mantiene",
-  "Read each GhostMaps alert aloud as the tour reaches it": "Leer en voz alta cada alerta de GhostMaps cuando el recorrido llega a ella"
+  "Read each GhostMaps alert aloud as the tour reaches it": "Leer en voz alta cada alerta de GhostMaps cuando el recorrido llega a ella",
+  "ASK": "PREGUNTAR",
+  "Hold to ask about the alerts: the most severe, the next one, the total, or repeat": "Mantén pulsado para preguntar por las alertas: la más grave, la siguiente, el total o repetir",
+  "Ask the Sentinel": "Preguntar al Centinela",
+  "Most severe: {alert}": "La más grave: {alert}",
+  "Next: {alert}": "La siguiente: {alert}",
+  "{count} alerts loaded": {
+    "one": "{count} alerta cargada",
+    "many": "{count} alertas cargadas",
+    "other": "{count} alertas cargadas"
+  },
+  "{count} emergencies": {
+    "one": "{count} emergencia",
+    "many": "{count} emergencias",
+    "other": "{count} emergencias"
+  },
+  "Nothing to repeat yet.": "Aún no hay nada que repetir.",
+  "I can tell you the most severe alert, the next one, the total, or repeat the last one.": "Puedo decir la alerta más grave, la siguiente, el total o repetir la última.",
+  "No GhostMaps alerts are loaded yet.": "Aún no hay alertas de GhostMaps cargadas."
 }

@@ -59,6 +59,9 @@ import {
 import { requestFindingBrief, BRIEF_MIN_INTERVAL_MS } from './brief.js';
 import { createSpiderCameraFollow } from './follow.js';
 import { createAlertVoice } from './voice.js';
+import { createAlertAnswerer, readAskIntent } from './ask.js';
+import { createAskMic } from './askMic.js';
+import { dictationMessage } from '../../ui/dictation.js';
 
 export const AI_AGENT_LAYER_ID = 'ai-agent';
 
@@ -134,6 +137,8 @@ const ALERT_WALK_LIMITS = Object.freeze({
  *   silent rather than reaching across the package boundary.
  * @param {object} [options.voice] spoken-alert seam (see voice.js); without
  *   one the layer creates the device voice on init.
+ * @param {Function} [options.askMic] push-to-talk factory seam (see
+ *   askMic.js); without one the layer creates the platform input on init.
  * @returns {object} data-layer module (lifecycle contract).
  */
 export function createAiAgentLayer({
@@ -142,6 +147,7 @@ export function createAiAgentLayer({
   fetchImpl = undefined,
   overlayHost: noteOverlayHost = null,
   voice: voiceSource = null,
+  askMic: askMicFactory = null,
 } = {}) {
   let document = docScope ?? globalThis.document;
   let manager = null;
@@ -201,6 +207,56 @@ export function createAiAgentLayer({
   // theatre on top of the card, never the operator's only copy of the news.
   let voice = voiceSource;
   const notifyRow = () => rowControlsListener?.();
+
+  // ASK mode: a held question about the alerts, answered from what is already
+  // in memory. The input is the platform recogniser; the answer is local
+  // (ask.js), so the mode needs no model, no key and no network.
+  let askMode = false;
+  let askMic = null;
+  let askAnswer = '';
+  const answerer = createAlertAnswerer();
+
+  /** Put one sentence on the card's answer line; a refusal is read, not said. */
+  function showAskMessage(text) {
+    if (destroyed || !askMode) return;
+    askAnswer = String(text || '');
+    avatar?.setAnswer(askAnswer);
+  }
+
+  /**
+   * Answer one question about the alerts. The GhostMaps layer already ranked
+   * them, so "next" is the next stop of the tour, not a second sort.
+   */
+  function answerQuestion(question) {
+    if (destroyed || !askMode) return null;
+    let alerts = [];
+    try {
+      alerts = ghostMapsModule()?.getSentinelAlerts?.() || [];
+    } catch {
+      alerts = []; // a throwing reader is the same as no reader
+    }
+    const result = answerer.answer(alerts, readAskIntent(question));
+    askAnswer = result.text;
+    avatar?.setAnswer(result.text);
+    if (voice?.isEnabled?.()) voice.announce(result.text);
+    return result;
+  }
+
+  /**
+   * Switch ASK mode. Entering it clears the tour's current headline so the
+   * first answer is not cut by it; leaving it closes the microphone.
+   */
+  function setAskMode(next) {
+    if (destroyed) return;
+    const on = Boolean(next) && Boolean(askMic);
+    if (on === askMode) return;
+    askMode = on;
+    askAnswer = '';
+    if (askMode) voice?.stop?.();
+    else askMic?.cancel?.();
+    avatar?.setAskMode(askMode);
+    notifyRow();
+  }
 
   const strId = (raw) => String(raw?.id ?? '');
 
@@ -515,6 +571,9 @@ export function createAiAgentLayer({
   function announceAlert(candidate) {
     if (!voice?.isEnabled?.()) return;
     if (document?.hidden === true) return;
+    // A held question owns the speaker: the tour's next headline must not cut
+    // the answer in half. Answers are spoken directly, below, not here.
+    if (askMode) return;
     voice.announce(candidate.summary || candidate.label);
   }
 
@@ -781,10 +840,29 @@ export function createAiAgentLayer({
     init(appViewer) {
       if (viewer) throw new Error('AI agent layer is already initialized');
       viewer = appViewer;
-      if (document) avatar = createAvatarOverlay({ doc: document });
+      if (!voice) voice = createAlertVoice({ locale: () => getLocale() });
+      const micFactory = askMicFactory ?? createAskMic;
+      askMic = micFactory({
+        locale: () => getLocale(),
+        onTranscript: (text) => answerQuestion(text),
+        onError: (code) => showAskMessage(dictationMessage(code)),
+      });
+      // A layer whose platform has no recogniser simply has no ASK mode: the
+      // row chip never appears, rather than opening a button that cannot hear.
+      if (!askMic?.available) {
+        askMic?.destroy?.();
+        askMic = null;
+      }
+      if (document) {
+        avatar = createAvatarOverlay({
+          doc: document,
+          onAskStart: () => askMic?.start?.(),
+          onAskEnd: () => askMic?.stop?.(),
+          onAskCancel: () => askMic?.cancel?.(),
+        });
+      }
       spriteFrames = spiderSpriteFrames({ doc: document });
       body = createSpiderBody({ viewer, frames: spriteFrames, state: spider });
-      if (!voice) voice = createAlertVoice({ locale: () => getLocale() });
       follow = createSpiderCameraFollow({
         camera: viewer?.camera,
         canvas: viewer?.canvas ?? viewer?.scene?.canvas,
@@ -818,6 +896,13 @@ export function createAiAgentLayer({
 
     disable() {
       enabled = false;
+      // A question in progress belongs to an active layer.
+      if (askMode) {
+        askMode = false;
+        askAnswer = '';
+        avatar?.setAskMode(false);
+      }
+      askMic?.cancel?.();
       // A sentence about an alert the tour abandoned is stale.
       voice?.stop?.();
       clearAlertTour();
@@ -862,6 +947,9 @@ export function createAiAgentLayer({
       follow = null;
       voice?.destroy?.();
       voice = null;
+      askMic?.destroy?.();
+      askMic = null;
+      askMode = false;
       rowControlsListener = null;
       try {
         avatar?.destroy();
@@ -876,50 +964,71 @@ export function createAiAgentLayer({
     },
 
     /**
-     * The Layers row's controls: the alert voice, the tour's hold, and an
-     * opt-in checkbox that asks the view to follow the sentinel gently.
+     * One question, answered from the loaded alerts. ASK mode has to be on:
+     * a microphone press and this method run the same path.
+     * @param {string} question the transcript
+     * @returns {{intent: string|null, text: string, alertId: string|null}|null}
+     */
+    ask(question) {
+      return answerQuestion(question);
+    },
+
+    /**
+     * The Layers row's controls: ASK mode, the alert voice, the tour's hold,
+     * and an opt-in checkbox that asks the view to follow the sentinel gently.
      * Re-read live on every render, so a stale chip can never flip a toggle
-     * the wrong way.
+     * the wrong way. ASK only appears where the platform can hear a press.
      */
     getRowControls() {
-      return {
-        chips: [
-          {
-            id: 'voice',
-            label: t('VOICE'),
-            active: voice?.isEnabled?.() === true,
-            title: t('Read each GhostMaps alert aloud as the tour reaches it'),
-            onClick: () => {
-              voice?.setEnabled?.(voice.isEnabled() !== true);
-              notifyRow();
-            },
+      const chips = [];
+      if (askMic) {
+        chips.push({
+          id: 'ask',
+          label: t('ASK'),
+          active: askMode,
+          title: t(
+            'Hold to ask about the alerts: the most severe, the next one, the total, or repeat',
+          ),
+          onClick: () => setAskMode(!askMode),
+        });
+      }
+      chips.push(
+        {
+          id: 'voice',
+          label: t('VOICE'),
+          active: voice?.isEnabled?.() === true,
+          title: t('Read each GhostMaps alert aloud as the tour reaches it'),
+          onClick: () => {
+            voice?.setEnabled?.(voice.isEnabled() !== true);
+            notifyRow();
           },
-          {
-            id: 'pause-tour',
-            label: tourPaused ? t('RESUME TOUR') : t('PAUSE TOUR'),
-            active: tourPaused,
-            title: tourPaused
-              ? t('Pick the tour up where it stopped')
-              : t(
-                  'Hold the tour: no camera flight, no next alert, the open card stays',
-                ),
-            onClick: () => setTourPaused(!tourPaused),
+        },
+        {
+          id: 'pause-tour',
+          label: tourPaused ? t('RESUME TOUR') : t('PAUSE TOUR'),
+          active: tourPaused,
+          title: tourPaused
+            ? t('Pick the tour up where it stopped')
+            : t(
+                'Hold the tour: no camera flight, no next alert, the open card stays',
+              ),
+          onClick: () => setTourPaused(!tourPaused),
+        },
+        {
+          id: 'follow',
+          label: t('FOLLOW CAMERA'),
+          active: followEnabled,
+          title: t(
+            'Drift the view to the Sentinel as it patrols; paused while you drag or zoom',
+          ),
+          onClick: () => {
+            followEnabled = !followEnabled;
+            follow?.setEnabled(followEnabled);
+            notifyRow();
           },
-          {
-            id: 'follow',
-            label: t('FOLLOW CAMERA'),
-            active: followEnabled,
-            title: t(
-              'Drift the view to the Sentinel as it patrols; paused while you drag or zoom',
-            ),
-            onClick: () => {
-              followEnabled = !followEnabled;
-              follow?.setEnabled(followEnabled);
-              notifyRow();
-            },
-          },
-        ],
-      };
+        },
+      );
+      return { chips };
     },
 
     setRowControlsListener(value) {
@@ -955,6 +1064,8 @@ export function createAiAgentLayer({
         alertsVisited: visitedAlerts.size,
         paused: tourPaused,
         voice: voice?.isEnabled?.() === true,
+        ask: askMode,
+        askAnswer,
       };
     },
   };

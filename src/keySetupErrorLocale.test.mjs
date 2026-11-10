@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   admitKeySetupRequest,
   KEY_SETUP_UPDATE_LIMIT,
+  KEY_SETUP_VALUE_LIMIT,
   validateKeySetupUpdates,
 } from './keySetupCore.mjs';
 import { collectKeyUpdates, saveRefusalText } from './keySetup.js';
@@ -28,7 +29,9 @@ const refusals = () => [
   validateKeySetupUpdates(
     collectKeyUpdates([{ envVar: 'OPENAI_API_KEY', value: 'sk abc123' }]),
   ),
-  validateKeySetupUpdates({ OPENAI_API_KEY: 'x'.repeat(600) }),
+  validateKeySetupUpdates({
+    OPENAI_API_KEY: 'x'.repeat(KEY_SETUP_VALUE_LIMIT + 1),
+  }),
   validateKeySetupUpdates({ OPENAI_API_KEY: ' ' }),
   validateKeySetupUpdates({ OPENAI_API_KEY: 42 }),
   validateKeySetupUpdates({ PATH: '/usr/bin' }),

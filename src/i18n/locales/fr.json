@@ -3338,5 +3338,23 @@
   "RESUME TOUR": "REPRENDRE TOURNÉE",
   "Pick the tour up where it stopped": "Reprendre la tournée là où elle s'est arrêtée",
   "Hold the tour: no camera flight, no next alert, the open card stays": "Suspendre la tournée : plus de vol de caméra, pas d'alerte suivante, la fiche ouverte reste affichée",
-  "Read each GhostMaps alert aloud as the tour reaches it": "Lire chaque alerte GhostMaps à voix haute quand la tournée l'atteint"
+  "Read each GhostMaps alert aloud as the tour reaches it": "Lire chaque alerte GhostMaps à voix haute quand la tournée l'atteint",
+  "ASK": "DEMANDER",
+  "Hold to ask about the alerts: the most severe, the next one, the total, or repeat": "Appui long pour interroger les alertes : la plus grave, la suivante, le total ou répète",
+  "Ask the Sentinel": "Demander à la Sentinelle",
+  "Most severe: {alert}": "La plus grave : {alert}",
+  "Next: {alert}": "La suivante : {alert}",
+  "{count} alerts loaded": {
+    "one": "{count} alerte chargée",
+    "many": "{count} alertes chargées",
+    "other": "{count} alertes chargées"
+  },
+  "{count} emergencies": {
+    "one": "{count} urgence",
+    "many": "{count} urgences",
+    "other": "{count} urgences"
+  },
+  "Nothing to repeat yet.": "Rien à répéter pour l'instant.",
+  "I can tell you the most severe alert, the next one, the total, or repeat the last one.": "Je peux dire la plus grave, la suivante, le total, ou répéter la dernière.",
+  "No GhostMaps alerts are loaded yet.": "Aucune alerte GhostMaps n'est encore chargée."
 }

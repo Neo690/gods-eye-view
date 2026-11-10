@@ -38,6 +38,7 @@ import { getWorldOverlayDiagnostics } from '../../overlays/worldOverlay.js';
 // The real application adapter: the note path is proven against the actual
 // world-overlay host, not a mock of it.
 import { overlayHost } from '../../app/layers/overlayHost.js';
+import { setLocale } from '../../i18n/index.js';
 
 const DEG = Math.PI / 180;
 
@@ -1281,5 +1282,255 @@ test('a new GhostMaps edition does not replay the alerts already read', async ()
     1,
     'the first alert is read once, not replayed',
   );
+  layer.destroy();
+});
+
+// ---------------------------------------------------------------------------
+// ASK mode
+// ---------------------------------------------------------------------------
+
+test('ASK mode hears a held question and answers it from the loaded alerts', () => {
+  const doc = fakeDocument();
+  const clock = 1_500_000;
+  const viewer = {
+    camera: {
+      positionCartographic: {
+        latitude: 0,
+        longitude: 0,
+        height: 2_000_000,
+      },
+      flyTo() {},
+      cancelFlight() {},
+    },
+    scene: { preUpdate: new Cesium.Event() },
+  };
+  const alerts = [
+    {
+      id: 'cip:1',
+      product: 'cip',
+      index: 1,
+      name: 'MassStabbing',
+      folder: 'Syria',
+      lonDeg: 0.2,
+      latDeg: 0.2,
+      score: 540,
+      severity: 'emergency',
+      summary: 'MassStabbing · 11 killed',
+    },
+    {
+      id: 'cip:2',
+      product: 'cip',
+      index: 2,
+      name: 'MissileStrike',
+      folder: 'Ukraine',
+      lonDeg: 0.4,
+      latDeg: 0.4,
+      score: 420,
+      severity: 'emergency',
+      summary: 'MissileStrike · 2 killed',
+    },
+  ];
+  const ghostMaps = {
+    getStats: () => ({ count: alerts.length, commit: 'edition-a' }),
+    getSentinelAlerts: () => alerts,
+    inspectSentinelAlert: () => true,
+    clearSentinelInspection: () => true,
+  };
+  const manager = {
+    getAll: () => [
+      {
+        id: 's2-ghostmaps',
+        name: 'S2 GhostMaps',
+        enabled: true,
+        stats: { count: alerts.length, error: null },
+      },
+    ],
+    layers: new Map([['s2-ghostmaps', { enabled: true, module: ghostMaps }]]),
+  };
+  // The speaker and the microphone are seams here: the real voice has its own
+  // suite, and the real input is driveable only through a phone.
+  const spoken = [];
+  const voice = {
+    isEnabled: () => true,
+    announce: (text) => {
+      spoken.push(text);
+      return true;
+    },
+    stop() {},
+    setEnabled() {},
+  };
+  const mic = {
+    available: true,
+    starts: 0,
+    stops: 0,
+    cancels: 0,
+    destroyed: false,
+    handlers: null,
+    start() {
+      mic.starts += 1;
+      return true;
+    },
+    stop() {
+      mic.stops += 1;
+      return true;
+    },
+    cancel() {
+      mic.cancels += 1;
+    },
+    destroy() {
+      mic.destroyed = true;
+    },
+  };
+  setLocale('en');
+  const layer = createAiAgentLayer({
+    docScope: doc,
+    now: () => clock,
+    voice,
+    askMic: (handlers) => {
+      mic.handlers = handlers;
+      return mic;
+    },
+  });
+  layer.attachDataManager(manager);
+  layer.init(viewer);
+  layer.enable();
+
+  const root = doc.body.children[0];
+  const askButton = root.querySelector('.gev-ai-agent-ask');
+  const answerLine = root.querySelector('.gev-ai-agent-answer');
+  const askChip = () =>
+    layer.getRowControls().chips.find((chip) => chip.id === 'ask');
+
+  assert.equal(askChip().active, false, 'the mode starts off');
+  assert.equal(askButton.hidden, true, 'no microphone before the mode is on');
+  assert.equal(answerLine.hidden, true);
+  assert.equal(layer.ask('the most severe'), null, 'a question needs the mode');
+
+  askChip().onClick();
+  assert.equal(layer.getStats().ask, true);
+  assert.equal(askChip().active, true);
+  assert.equal(askButton.hidden, false, 'the mode shows the microphone');
+
+  // Press, hear a question, release: one local answer, said once.
+  askButton.listeners.pointerdown[0]({ preventDefault() {}, pointerId: 7 });
+  assert.equal(mic.starts, 1);
+  mic.handlers.onTranscript('the most severe');
+  assert.equal(
+    layer.getStats().askAnswer,
+    'Most severe: MassStabbing · 11 killed · Syria',
+  );
+  assert.deepEqual(spoken, [layer.getStats().askAnswer]);
+  assert.equal(answerLine.textContent, layer.getStats().askAnswer);
+  assert.equal(answerLine.hidden, false, 'the reply is readable too');
+
+  mic.handlers.onTranscript('the next one');
+  assert.match(layer.getStats().askAnswer, /^Next: MissileStrike/);
+  askButton.listeners.pointerup[0]({ preventDefault() {} });
+  assert.equal(mic.stops, 1, 'the release closes the microphone');
+
+  // A question outside the four gets the menu, not an invented alert.
+  mic.handlers.onTranscript('bonjour');
+  assert.match(layer.getStats().askAnswer, /most severe alert/i);
+
+  // Switching the layer off closes the microphone and hides the reply.
+  layer.disable();
+  assert.equal(layer.getStats().ask, false);
+  assert.ok(mic.cancels >= 1);
+  assert.equal(askButton.hidden, true);
+  assert.equal(answerLine.hidden, true);
+  layer.destroy();
+  assert.equal(mic.destroyed, true);
+});
+
+test('ASK mode keeps the tour silent so an answer is never cut in half', () => {
+  const doc = fakeDocument();
+  let clock = 1_500_000;
+  const viewer = {
+    camera: {
+      positionCartographic: {
+        latitude: 0,
+        longitude: 0,
+        height: 2_000_000,
+      },
+      flyTo() {},
+      cancelFlight() {},
+    },
+    scene: { preUpdate: new Cesium.Event() },
+  };
+  const alerts = [
+    {
+      id: 'cip:1',
+      name: 'MassStabbing',
+      folder: 'Syria',
+      lonDeg: 0.2,
+      latDeg: 0.2,
+      score: 540,
+      severity: 'emergency',
+      summary: 'MassStabbing · 11 killed',
+    },
+  ];
+  const ghostMaps = {
+    getStats: () => ({ count: 1, commit: 'edition-a' }),
+    getSentinelAlerts: () => alerts,
+    inspectSentinelAlert: () => true,
+    clearSentinelInspection: () => true,
+  };
+  const manager = {
+    getAll: () => [
+      {
+        id: 's2-ghostmaps',
+        name: 'S2 GhostMaps',
+        enabled: true,
+        stats: { count: 1, error: null },
+      },
+    ],
+    layers: new Map([['s2-ghostmaps', { enabled: true, module: ghostMaps }]]),
+  };
+  const spoken = [];
+  const voice = {
+    isEnabled: () => true,
+    announce: (text) => {
+      spoken.push(text);
+      return true;
+    },
+    stop() {},
+    setEnabled() {},
+  };
+  const mic = {
+    available: true,
+    handlers: null,
+    start: () => true,
+    stop: () => true,
+    cancel() {},
+    destroy() {},
+  };
+  const layer = createAiAgentLayer({
+    docScope: doc,
+    now: () => clock,
+    voice,
+    askMic: (handlers) => {
+      mic.handlers = handlers;
+      return mic;
+    },
+  });
+  layer.attachDataManager(manager);
+  layer.init(viewer);
+  layer.enable();
+
+  layer
+    .getRowControls()
+    .chips.find((chip) => chip.id === 'ask')
+    .onClick();
+  // Walk the tour into the alert with the mode on: the card still opens, the
+  // speaker stays clear for the question.
+  for (let i = 0; i < 40; i++) {
+    clock += 250;
+    viewer.scene.preUpdate.raiseEvent();
+  }
+  assert.deepEqual(spoken, [], 'the tour does not narrate in ASK mode');
+
+  mic.handlers.onTranscript('la plus grave');
+  assert.equal(spoken.length, 1);
+  assert.match(spoken[0], /^Most severe: MassStabbing/);
   layer.destroy();
 });

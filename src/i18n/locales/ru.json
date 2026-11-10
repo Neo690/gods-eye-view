@@ -3409,5 +3409,25 @@
   "RESUME TOUR": "ПРОДОЛЖИТЬ ОБХОД",
   "Pick the tour up where it stopped": "Продолжить обход с того места, где он остановился",
   "Hold the tour: no camera flight, no next alert, the open card stays": "Приостановить обход: без полёта камеры и следующей тревоги, открытая карточка остаётся",
-  "Read each GhostMaps alert aloud as the tour reaches it": "Читать вслух каждую тревогу GhostMaps, когда обход до неё доходит"
+  "Read each GhostMaps alert aloud as the tour reaches it": "Читать вслух каждую тревогу GhostMaps, когда обход до неё доходит",
+  "ASK": "СПРОСИТЬ",
+  "Hold to ask about the alerts: the most severe, the next one, the total, or repeat": "Удерживайте, чтобы спросить о тревогах: самая серьёзная, следующая, всего или повторить",
+  "Ask the Sentinel": "Спросить Часового",
+  "Most severe: {alert}": "Самая серьёзная: {alert}",
+  "Next: {alert}": "Следующая: {alert}",
+  "{count} alerts loaded": {
+    "one": "{count} тревога загружена",
+    "few": "{count} тревоги загружено",
+    "many": "{count} тревог загружено",
+    "other": "{count} тревоги загружено"
+  },
+  "{count} emergencies": {
+    "one": "{count} экстренная",
+    "few": "{count} экстренные",
+    "many": "{count} экстренных",
+    "other": "{count} экстренные"
+  },
+  "Nothing to repeat yet.": "Пока нечего повторять.",
+  "I can tell you the most severe alert, the next one, the total, or repeat the last one.": "Я могу назвать самую серьёзную тревогу, следующую, общее число или повторить последнюю.",
+  "No GhostMaps alerts are loaded yet.": "Тревоги GhostMaps ещё не загружены."
 }

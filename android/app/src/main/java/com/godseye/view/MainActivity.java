@@ -74,6 +74,8 @@ public class MainActivity extends Activity {
   private boolean dictationOfflineOnly = true;
   /** Set once this press has retried without naming a language. */
   private boolean dictationLanguageDropped = false;
+  /** Where this session's events go: the palette or the Sentinel's question. */
+  private boolean dictationForAsk = false;
   private String pendingLocationOrigin;
   private ApiForwarder apiForwarder;
   /** The phone's own synthesiser for the Sentinel's spoken alerts; WebView
@@ -275,6 +277,29 @@ public class MainActivity extends Activity {
   }
 
   /**
+   * Opens one recogniser session for either owner. The sink is chosen here so
+   * every event of the session — including the language and offline retries in
+   * {@link DictationListener} — goes back to the page control that asked.
+   */
+  private void beginDictation(String locale, boolean forAsk) {
+    dictationForAsk = forAsk;
+    pendingDictationLocale = locale == null ? "" : locale;
+    dictationLanguageDropped = false;
+    if (hasMic()) {
+      startDictation(pendingDictationLocale);
+      return;
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      requestPermissions(
+        new String[] { Manifest.permission.RECORD_AUDIO },
+        REQUEST_DICTATION_MIC
+      );
+    } else {
+      emitDictation("error", "", "permission");
+    }
+  }
+
+  /**
    * Starts the phone's own speech recogniser for command dictation.
    *
    * <p>This is the shell's answer to a voice mode that costs nothing: no
@@ -333,8 +358,11 @@ public class MainActivity extends Activity {
       Log.w(TAG, "Dictation event could not be built", error);
       return;
     }
+    final String callback = dictationForAsk
+      ? "__gevAskDictation"
+      : "__gevDictation";
     final String script =
-      "window.__gevDictation&&window.__gevDictation(" + event + ")";
+      "window." + callback + "&&window." + callback + "(" + event + ")";
     runOnUiThread(() -> webView.evaluateJavascript(script, null));
   }
 
@@ -859,28 +887,50 @@ public class MainActivity extends Activity {
   /** Exposes native relay capabilities to the in-app Web client. */
   public final class NativeBridge {
     /**
-     * Starts the phone's own recogniser. The page listens for
+     * Starts the phone's own recogniser for a command. The page listens for
      * {@code window.__gevDictation(...)}; true means the attempt began.
      */
     @JavascriptInterface
     public boolean dictate(String locale) {
+      runOnUiThread(() -> beginDictation(locale, false));
+      return true;
+    }
+
+    /**
+     * Starts the recogniser for a held Sentinel question. The session answers
+     * through {@code window.__gevAskDictation(...)}, a channel of its own, so
+     * a question can never open the command palette.
+     */
+    @JavascriptInterface
+    public boolean askDictate(String locale) {
+      runOnUiThread(() -> beginDictation(locale, true));
+      return true;
+    }
+
+    /** Ends a held press; the recogniser answers with its final line. */
+    @JavascriptInterface
+    public void dictateStop() {
       runOnUiThread(() -> {
-        pendingDictationLocale = locale == null ? "" : locale;
-        dictationLanguageDropped = false;
-        if (hasMic()) {
-          startDictation(pendingDictationLocale);
-          return;
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-          requestPermissions(
-            new String[] { Manifest.permission.RECORD_AUDIO },
-            REQUEST_DICTATION_MIC
-          );
-        } else {
-          emitDictation("error", "", "permission");
+        if (dictation == null) return;
+        try {
+          dictation.stopListening();
+        } catch (RuntimeException error) {
+          Log.w(TAG, "Dictation could not stop", error);
         }
       });
-      return true;
+    }
+
+    /** Drops a held press without a transcript. */
+    @JavascriptInterface
+    public void dictateCancel() {
+      runOnUiThread(() -> {
+        if (dictation == null) return;
+        try {
+          dictation.cancel();
+        } catch (RuntimeException error) {
+          Log.w(TAG, "Dictation could not be cancelled", error);
+        }
+      });
     }
 
     /**

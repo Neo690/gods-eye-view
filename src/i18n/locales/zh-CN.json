@@ -3196,5 +3196,19 @@
   "RESUME TOUR": "继续巡览",
   "Pick the tour up where it stopped": "从暂停处继续巡览",
   "Hold the tour: no camera flight, no next alert, the open card stays": "暂停巡览：不再移动镜头、不切换下一条警报，已打开的卡片保持显示",
-  "Read each GhostMaps alert aloud as the tour reaches it": "巡览抵达每条 GhostMaps 警报时朗读出来"
+  "Read each GhostMaps alert aloud as the tour reaches it": "巡览抵达每条 GhostMaps 警报时朗读出来",
+  "ASK": "提问",
+  "Hold to ask about the alerts: the most severe, the next one, the total, or repeat": "按住提问：最严重、下一条、总数或重复",
+  "Ask the Sentinel": "向哨兵提问",
+  "Most severe: {alert}": "最严重：{alert}",
+  "Next: {alert}": "下一条：{alert}",
+  "{count} alerts loaded": {
+    "other": "{count} 条警报已载入"
+  },
+  "{count} emergencies": {
+    "other": "{count} 条紧急"
+  },
+  "Nothing to repeat yet.": "暂无可重复的内容。",
+  "I can tell you the most severe alert, the next one, the total, or repeat the last one.": "我可以告诉你最严重的警报、下一条、总数，或重复上一条。",
+  "No GhostMaps alerts are loaded yet.": "尚未载入 GhostMaps 警报。"
 }
