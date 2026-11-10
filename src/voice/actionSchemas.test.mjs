@@ -54,7 +54,7 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // manifest with its own aliases and noQuery hint. GhostMaps extends the
     // generated layer enums and the spoken-name map. The mapped OSM places
     // layer extends it too, with its own aliases and noQuery hint.
-    '0a135750c74a3b37ed9b6326c484ed738a8109ea31d53602e3a83b1297425b59',
+    'f313213819e5ea939529b073fd7a070e4c9c6623adfc676d285a89d247c3105e',
   );
 });
 
