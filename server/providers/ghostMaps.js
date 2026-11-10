@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import {
   GHOSTMAPS_MAX_FILE_BYTES,
@@ -112,6 +113,33 @@ export function createGhostMapsWatcher({
   let diskLoaded = false;
   const listeners = new Set();
   const downloads = new Map();
+  // A packaged desktop app keeps its payload under Program Files, where the
+  // default cache beside the app is not writable. The cache is only an
+  // optimization: fall back to the user's temp directory, and if that also
+  // fails, still serve the bytes that were just downloaded.
+  const fallbackCacheDir = path.join(os.tmpdir(), 'gods-eye-view', 'ghostmaps');
+  const unwritableCache = new Set(['EPERM', 'EACCES', 'EROFS']);
+  let cacheRoot = cacheDir;
+
+  /** Run one cache write, retrying once in a writable root on permission fails. */
+  async function writeCache(write) {
+    try {
+      await write();
+      return true;
+    } catch (error) {
+      if (unwritableCache.has(error?.code) && cacheRoot !== fallbackCacheDir) {
+        cacheRoot = fallbackCacheDir;
+        try {
+          await write();
+          return true;
+        } catch (retry) {
+          error = retry;
+        }
+      }
+      warn('[ghostmaps] could not cache:', error.message);
+      return false;
+    }
+  }
 
   const apiHeaders = (useToken = true) => ({
     Accept: 'application/vnd.github+json',
@@ -307,7 +335,7 @@ export function createGhostMapsWatcher({
     diskLoaded = true;
     try {
       const saved = JSON.parse(
-        await fsp.readFile(path.join(cacheDir, 'catalog.json'), 'utf8'),
+        await fsp.readFile(path.join(cacheRoot, 'catalog.json'), 'utf8'),
       );
       if (/^[0-9a-f]{40}$/.test(saved?.commit) && Array.isArray(saved.products))
         state = { ...state, ...saved, error: null };
@@ -317,16 +345,14 @@ export function createGhostMapsWatcher({
   }
 
   async function saveDisk() {
-    try {
-      await fsp.mkdir(cacheDir, { recursive: true });
+    await writeCache(async () => {
+      await fsp.mkdir(cacheRoot, { recursive: true });
       const { commit, committedAt, message, products, changedAt } = state;
       await fsp.writeFile(
-        path.join(cacheDir, 'catalog.json'),
+        path.join(cacheRoot, 'catalog.json'),
         JSON.stringify({ commit, committedAt, message, products, changedAt }),
       );
-    } catch (error) {
-      warn('[ghostmaps] could not save catalog:', error.message);
-    }
+    });
   }
 
   function emit() {
@@ -470,9 +496,13 @@ export function createGhostMapsWatcher({
   async function file(id) {
     const product = state.products.find((p) => p.id === id);
     if (!product) return null;
-    const target = path.join(cacheDir, 'files', `${product.version}.kmz`);
     try {
-      return { product, bytes: await fsp.readFile(target) };
+      return {
+        product,
+        bytes: await fsp.readFile(
+          path.join(cacheRoot, 'files', `${product.version}.kmz`),
+        ),
+      };
     } catch {
       /* not cached yet */
     }
@@ -488,11 +518,20 @@ export function createGhostMapsWatcher({
         const bytes = Buffer.from(
           await readResponseBytesCapped(response, GHOSTMAPS_MAX_FILE_BYTES),
         );
-        await fsp.mkdir(path.dirname(target), { recursive: true });
-        const temp = `${target}.${process.pid}.tmp`;
-        await fsp.writeFile(temp, bytes);
-        await fsp.rename(temp, target);
-        await pruneFiles();
+        // A failed cache write must not turn a good download into a 502: the
+        // installed desktop app cannot write beside its payload.
+        await writeCache(async () => {
+          const target = path.join(
+            cacheRoot,
+            'files',
+            `${product.version}.kmz`,
+          );
+          await fsp.mkdir(path.dirname(target), { recursive: true });
+          const temp = `${target}.${process.pid}.tmp`;
+          await fsp.writeFile(temp, bytes);
+          await fsp.rename(temp, target);
+          await pruneFiles();
+        });
         return bytes;
       })().finally(() => downloads.delete(product.version));
       downloads.set(product.version, pending);
@@ -503,7 +542,7 @@ export function createGhostMapsWatcher({
   /** Keep only files that a current product still points to. */
   async function pruneFiles() {
     const keep = new Set(state.products.map((p) => `${p.version}.kmz`));
-    const dir = path.join(cacheDir, 'files');
+    const dir = path.join(cacheRoot, 'files');
     for (const name of await fsp.readdir(dir).catch(() => [])) {
       if (!keep.has(name) && !name.endsWith('.tmp'))
         await fsp.rm(path.join(dir, name), { force: true }).catch(() => {});

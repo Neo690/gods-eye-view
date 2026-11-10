@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -439,4 +439,35 @@ test('routes: unknown paths and methods are refused without contacting GitHub', 
   assert.equal(catalog.status, 200);
   assert.equal(JSON.parse(catalog.body).commit, sha('1'));
   assert.equal(started, 2);
+});
+
+test('a cache that cannot be written still serves the downloaded edition', async () => {
+  const { repo, fetchImpl } = fakeGitHub();
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'ghostmaps-'));
+  try {
+    // A file where the cache directory should be: every mkdir fails, which is
+    // what a packaged app sees under Program Files (EPERM) — but the edition
+    // that was downloaded must still reach the layer.
+    const blocked = path.join(dir, 'blocked');
+    await writeFile(blocked, 'not a directory');
+    const warnings = [];
+    const watcher = createGhostMapsWatcher({
+      fetchImpl,
+      cacheDir: blocked,
+      log: () => {},
+      warn: (...args) => warnings.push(args.join(' ')),
+    });
+    await watcher.checkNow();
+    const found = await watcher.file('cip');
+    assert.equal(found?.product.id, 'cip');
+    assert.equal(Buffer.from(found.bytes).toString(), 'KMZ!');
+    assert.ok(
+      warnings.some((line) => /could not cache/.test(line)),
+      warnings.join('\n'),
+    );
+    repo.calls.length = 0;
+    watcher.stop();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
