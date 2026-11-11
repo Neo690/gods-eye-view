@@ -253,3 +253,155 @@ test('AI summaries missing a non-nominal provenance token fall back deterministi
     true,
   );
 });
+
+test('enabled layers carry their own records as highlights', async () => {
+  const { hudSummaryLayerContext } = await import('./hudSummaryResponse.js');
+  const now = 1_000_000;
+  const context = hudSummaryLayerContext(
+    [
+      {
+        id: 'conflict-events',
+        name: 'Conflict events (7d)',
+        enabled: true,
+        stats: { count: 6, lastUpdate: now, source: 'ACLED' },
+        getRowControls: () => ({
+          list: {
+            items: [
+              { lead: '23 killed', text: 'Battles · Ukraine' },
+              { lead: '12 killed', text: 'Explosions · Sudan' },
+              { lead: '4 killed', text: 'Battles · Mali' },
+            ],
+          },
+        }),
+      },
+      {
+        id: 'flights',
+        name: 'Live Flights',
+        enabled: false,
+        stats: { count: 99, lastUpdate: now },
+        getRowControls: () => ({
+          list: { items: [{ lead: 'N123', text: 'FL350' }] },
+        }),
+      },
+      {
+        id: 'bare',
+        name: 'No Card Layer',
+        enabled: true,
+        stats: { count: 0, lastUpdate: null },
+      },
+    ],
+    { now },
+  );
+  assert.equal(context.enabledLayers[0].count, 6);
+  assert.deepEqual(context.enabledLayers[0].highlights, [
+    '23 killed · Battles · Ukraine',
+    '12 killed · Explosions · Sudan',
+  ]);
+  // Disabled layers contribute nothing, and a layer without a card carries
+  // no highlights key at all rather than an empty one.
+  assert.equal(context.enabledLayerLabels.includes('Live Flights'), false);
+  assert.equal('highlights' in context.enabledLayers[1], false);
+});
+
+test('a layer card that throws cannot break the summary context', async () => {
+  const { hudSummaryLayerContext } = await import('./hudSummaryResponse.js');
+  const context = hudSummaryLayerContext([
+    {
+      id: 'broken',
+      name: 'Broken',
+      enabled: true,
+      stats: { count: 1, lastUpdate: 1 },
+      getRowControls: () => {
+        throw new Error('no card');
+      },
+    },
+  ]);
+  assert.equal(context.enabledLayers[0].count, 1);
+  assert.equal('highlights' in context.enabledLayers[0], false);
+});
+
+test('the five-word contract forbids an invented zero', () => {
+  assert.match(
+    HUD_SUMMARY_INSTRUCTIONS,
+    /count is above zero, the five words MUST state that count/,
+  );
+  assert.match(HUD_SUMMARY_INSTRUCTIONS, /Never write ZERO, NONE or NO/);
+  assert.match(HUD_SUMMARY_INSTRUCTIONS, /highlights must never contradict/);
+});
+
+test('an AI line claiming zero is dropped when records exist', async () => {
+  const { hudSummaryCountsHonest } = await import('./hudSummaryResponse.js');
+  const populated = [{ count: 6 }, { count: 50 }];
+  assert.equal(
+    hudSummaryCountsHonest('ZERO CONFLICT EVENTS SEVEN DAYS', populated),
+    false,
+  );
+  assert.equal(
+    hudSummaryCountsHonest('NONE REPORTED TODAY ANYWHERE', populated),
+    false,
+  );
+  assert.equal(
+    hudSummaryCountsHonest('SIX CONFLICT EVENTS NOMINAL FEED', populated),
+    true,
+  );
+  // One genuinely empty layer keeps a zero claim plausible.
+  assert.equal(
+    hudSummaryCountsHonest('ZERO CONFLICT EVENTS SEVEN DAYS', [
+      { count: 6 },
+      { count: 0 },
+    ]),
+    true,
+  );
+  // Nothing enabled: nothing to contradict.
+  assert.equal(
+    hudSummaryCountsHonest('ZERO CONFLICT EVENTS SEVEN DAYS', []),
+    true,
+  );
+});
+
+test('highlights reach the context through the manager lookup, not the row', async () => {
+  const { hudSummaryLayerContext } = await import('./hudSummaryResponse.js');
+  // Exactly what DataLayerManager.getAll() hands out: no methods on the row.
+  const rows = [
+    {
+      id: 'conflict-events',
+      name: 'Conflict events (7d)',
+      source: 'ACLED',
+      enabled: true,
+      lifecycleState: 'on',
+      stats: { count: 6, lastUpdate: 5000, source: 'ACLED' },
+    },
+  ];
+  const cards = new Map([
+    [
+      'conflict-events',
+      {
+        list: {
+          items: [
+            { lead: '23 killed', text: 'Battles · Ukraine' },
+            { lead: '12 killed', text: 'Explosions · Sudan' },
+          ],
+        },
+      },
+    ],
+  ]);
+  const withLookup = hudSummaryLayerContext(rows, {
+    now: 6000,
+    getRowControls: (id) => cards.get(id) ?? null,
+  });
+  assert.equal(withLookup.enabledLayers[0].count, 6);
+  assert.deepEqual(withLookup.enabledLayers[0].highlights, [
+    '23 killed · Battles · Ukraine',
+    '12 killed · Explosions · Sudan',
+  ]);
+
+  // Without the lookup the row has nothing to offer: no invented highlights.
+  const withoutLookup = hudSummaryLayerContext(rows, { now: 6000 });
+  assert.equal('highlights' in withoutLookup.enabledLayers[0], false);
+});
+
+test('the manager lookup is what hud.js passes', () => {
+  const source = readFileSync(new URL('./hud.js', import.meta.url), 'utf8');
+  assert.match(source, /hudSummaryLayerContext\([\s\S]{0,240}?getRowControls/);
+  assert.match(source, /module\?\.getRowControls\?\.\(\)/);
+});

@@ -5,6 +5,8 @@ import { AircraftDisplay } from './aircraftDisplay.js';
 import { LayerBindings } from './layerBindings.js';
 import { PanelChrome } from './panelChrome.js';
 import { initMobileShell } from './mobileShell.js';
+import { createInsiderPanel } from './insiderPanel.js';
+import { createConflictPanel } from './conflictPanel.js';
 import { VisualSettings } from './visualSettings.js';
 import { NavigationController } from './navigationController.js';
 import { ShareRestoration } from './shareRestoration.js';
@@ -608,6 +610,8 @@ export class StyleManager extends ShellFacade {
     this._initPanelChrome();
     this._initLocaleSelector();
     this._initAlertCenter();
+    this._initInsiderPanel();
+    this._initConflictPanel();
     this._sizeDisplayLabelColumn();
     this._initLeftPanelAdaptiveLayout();
     this._initRightPanelAdaptiveLayout();
@@ -1065,6 +1069,60 @@ export class StyleManager extends ShellFacade {
    * default phone arrangement stays the compact console of mobile-compact.css.
    * @returns {void}
    */
+  /**
+   * Mounts the insider filings window (src/ui/insiderPanel.js): the full Form 4
+   * list for the non-spatial insider layer.
+   *
+   * The window listens to the data manager rather than polling the layer, so it
+   * repaints from the same `update()` that feeds the Layers row card, and an
+   * operator who never enables the layer still sees its info line instead of an
+   * empty box.
+   * @returns {void}
+   */
+  _initInsiderPanel(attempt = 0) {
+    const host = globalThis.document?.getElementById?.('insider-filings-host');
+    const dataManager = this._dataManager;
+    if (!host || typeof dataManager?.subscribe !== 'function') {
+      // The window is mounted while the shell boots, and the layer manager is
+      // wired a beat later; a missing partner must cost the window its list, so
+      // retry briefly and give up quietly rather than mounting a dead panel.
+      if (attempt < 40) {
+        globalThis.setTimeout?.(() => {
+          if (!this._disposed) this._initInsiderPanel(attempt + 1);
+        }, 500);
+      }
+      return;
+    }
+    this._insiderPanel?.destroy();
+    this._insiderPanel = createInsiderPanel({ container: host, dataManager });
+    console.log('[UI:InsiderPanel] Mounted');
+  }
+
+  /**
+   * Mounts the conflict events window (src/ui/conflictPanel.js): the deadliest
+   * ACLED events for the non-spatial conflict layer.
+   *
+   * Same shape as the insider window: it listens to the data manager, so it
+   * repaints from the same `update()` that feeds the Layers row card, and a
+   * layer that is off shows its info line rather than an empty box.
+   * @returns {void}
+   */
+  _initConflictPanel(attempt = 0) {
+    const host = globalThis.document?.getElementById?.('conflict-events-host');
+    const dataManager = this._dataManager;
+    if (!host || typeof dataManager?.subscribe !== 'function') {
+      if (attempt < 40) {
+        globalThis.setTimeout?.(() => {
+          if (!this._disposed) this._initConflictPanel(attempt + 1);
+        }, 500);
+      }
+      return;
+    }
+    this._conflictPanel?.destroy();
+    this._conflictPanel = createConflictPanel({ container: host, dataManager });
+    console.log('[UI:ConflictPanel] Mounted');
+  }
+
   _initMobileShell() {
     this._mobileShell = initMobileShell({
       setPanelCollapsed: (panelId, collapsed, options) =>
@@ -2027,6 +2085,8 @@ export class StyleManager extends ShellFacade {
     this._localePicker?.destroy();
     this._localePicker = null;
     this._alertCenter?.destroy();
+    this._insiderPanel?.destroy();
+    this._conflictPanel?.destroy();
     this._alertCenter = null;
     this._recording.destroy();
     this._mobileShell?.destroy();

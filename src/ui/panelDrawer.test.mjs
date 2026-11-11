@@ -121,11 +121,13 @@ function clickTarget({ tab = null, toggle = null } = {}) {
   };
 }
 
-test('the drawer lists the six rail windows above the phone breakpoint', () => {
+test('the drawer lists the eight rail windows above the phone breakpoint', () => {
   assert.deepEqual(
     PANEL_WINDOW_SPECS.map((spec) => spec.id),
     [
       'data-panel',
+      'insider-panel',
+      'conflict-panel',
       'scene-panel',
       'pp-toggles',
       'cctv-panel',

@@ -43,9 +43,11 @@ function panel(make, id, { collapsed = false, marked = false } = {}) {
   };
 }
 
-test('the rail list is the six windows, in reading order', () => {
+test('the rail list is the eight windows, in reading order', () => {
   assert.deepEqual(PANEL_WINDOW_IDS, [
     'data-panel',
+    'insider-panel',
+    'conflict-panel',
     'scene-panel',
     'pp-toggles',
     'cctv-panel',

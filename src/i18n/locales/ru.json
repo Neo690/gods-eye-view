@@ -506,6 +506,8 @@
   "Live Flights": "Рейсы онлайн",
   "Military Flights": "Военные рейсы",
   "Earthquakes (24h)": "Землетрясения (24 ч)",
+  "Conflict events (7d)": "События конфликтов (7 дн.)",
+  "Insider filings (Form 4)": "Отчёты инсайдеров (Form 4)",
   "Earthquakes (EMSC)": "Землетрясения (EMSC)",
   "Satellites": "Спутники",
   "Space Missions (30d)": "Космические миссии (30 дн.)",
@@ -3287,13 +3289,6 @@
   "Read on the server, from the camera’s own frame; nothing is stored": "Читается на сервере, по кадру самой камеры; ничего не сохраняется",
   "Plate Reader": "Распознавание номеров",
   "Face analysis unavailable": "Анализ лиц недоступен",
-  "{count} faces visible": {
-    "one": "Видно {count} лицо",
-    "few": "Видно {count} лица",
-    "many": "Видно {count} лиц",
-    "other": "Видно {count} лиц"
-  },
-  "No face found": "Лица не найдены",
   "Nothing analysed yet": "Ещё ничего не проанализировано",
   "STOP BLUR": "ОСТАНОВИТЬ РАЗМЫТИЕ",
   "BLUR FACES": "РАЗМЫТЬ ЛИЦА",
@@ -3429,5 +3424,52 @@
   },
   "Nothing to repeat yet.": "Пока нечего повторять.",
   "I can tell you the most severe alert, the next one, the total, or repeat the last one.": "Я могу назвать самую серьёзную тревогу, следующую, общее число или повторить последнюю.",
-  "No GhostMaps alerts are loaded yet.": "Тревоги GhostMaps ещё не загружены."
+  "No GhostMaps alerts are loaded yet.": "Тревоги GhostMaps ещё не загружены.",
+  "{count} killed": {
+    "one": "{count} погибший",
+    "few": "{count} погибших",
+    "many": "{count} погибших",
+    "other": "{count} погибших"
+  },
+  "Incident": "Инцидент",
+  "{count} events": {
+    "one": "{count} событие",
+    "few": "{count} события",
+    "many": "{count} событий",
+    "other": "{count} события"
+  },
+  "Last 7 days": "Последние 7 дней",
+  "Deadliest conflict events": "Самые смертоносные события конфликтов",
+  "Insider feed unavailable": "Поток данных об инсайдерах недоступен",
+  "Unknown issuer": "Неизвестный эмитент",
+  "Unknown reporting owner": "Неизвестный отчитывающийся владелец",
+  "{count} filings": {
+    "one": "{count} отчёт",
+    "few": "{count} отчёта",
+    "many": "{count} отчётов",
+    "other": "{count} отчёта"
+  },
+  "Latest insider filings": "Последние отчёты по форме 4",
+  "Conflict feed unavailable": "Поток данных о конфликтах недоступен",
+  "ACLED": "ACLED",
+  "SEC EDGAR": "SEC EDGAR",
+  "{count} people visible": {
+    "one": "{count} человек в кадре",
+    "few": "{count} человека в кадре",
+    "many": "{count} человек в кадре",
+    "other": "{count} человека в кадре"
+  },
+  "No person visible": "В кадре нет людей",
+  "COUNT PEOPLE": "СЧИТАТЬ ЛЮДЕЙ",
+  "Count the people visible in the selected camera": "Подсчитать людей в кадре выбранной камеры",
+  "1–9 killed": "1–9 погибших",
+  "10+ killed": "10+ погибших",
+  "Source error": "Ошибка источника",
+  "ACLED is not configured: set ACLED_EMAIL and ACLED_PASSWORD in .env": "ACLED не настроен: укажите ACLED_EMAIL и ACLED_PASSWORD в .env",
+  "ACLED rejected the credentials": "ACLED отклонил учётные данные",
+  "ACLED denied API access for this account": "ACLED запретил доступ к API для этой учётной записи",
+  "ACLED did not answer": "ACLED не ответил",
+  "ACLED returned unreadable data": "ACLED вернул нечитаемые данные",
+  "Retry the read": "Повторить чтение",
+  "Retrying…": "Повторная попытка…"
 }

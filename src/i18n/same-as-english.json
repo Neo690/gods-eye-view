@@ -2,6 +2,7 @@
   "es": [
     "1090 MHz",
     "978 MHz UAT",
+    "ACLED",
     "AIS: --",
     "AIS: {name}",
     "ANIME",
@@ -82,6 +83,7 @@
     "S2 · {name}",
     "SAR",
     "SE",
+    "SEC EDGAR",
     "SECTOR {lat} {lon}",
     "SIG",
     "SQUAWK {code} · {status}",
@@ -135,6 +137,7 @@
     "Overpass Turbo"
   ],
   "ru": [
+    "ACLED",
     "AIS: --",
     "AIS: {name}",
     "Android",
@@ -151,6 +154,7 @@
     "R&B",
     "REC",
     "S2 GhostMaps",
+    "SEC EDGAR",
     "Space-Track CDM",
     "TCA",
     "VS",
@@ -163,6 +167,7 @@
   "zh-CN": [
     "1090 MHz",
     "978 MHz UAT",
+    "ACLED",
     "AIS: --",
     "AIS: {name}",
     "Android",
@@ -190,6 +195,7 @@
     "Pc",
     "REC",
     "S2 GhostMaps",
+    "SEC EDGAR",
     "SRC {value}",
     "Sentinel-2",
     "Space-Track CDM",
@@ -228,6 +234,7 @@
   "fr": [
     "1090 MHz",
     "978 MHz UAT",
+    "ACLED",
     "AIS: {name}",
     "ALTITUDE",
     "ALTITUDE · FT",
@@ -286,6 +293,7 @@
     "Hip-Hop",
     "House",
     "IMAGE",
+    "Incident",
     "Indie",
     "Infrastructure",
     "Ironbow",
@@ -340,6 +348,7 @@
     "S2 GhostMaps",
     "SAR",
     "SE",
+    "SEC EDGAR",
     "SIG",
     "SITE",
     "SOURCE",
@@ -435,6 +444,7 @@
   "ar": [
     "1090 MHz",
     "978 MHz UAT",
+    "ACLED",
     "AIS: --",
     "AIS: {name}",
     "Android",
@@ -461,6 +471,7 @@
     "Pc",
     "S2 GhostMaps",
     "SAR",
+    "SEC EDGAR",
     "SIG",
     "SQUAWK {code} · {status}",
     "STD",

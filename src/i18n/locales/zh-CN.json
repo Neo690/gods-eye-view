@@ -1733,6 +1733,8 @@
   "Live Flights": "实时航班",
   "Military Flights": "军用航班",
   "Earthquakes (24h)": "地震（24 小时）",
+  "Conflict events (7d)": "冲突事件（7 天）",
+  "Insider filings (Form 4)": "内部人申报（Form 4）",
   "Earthquakes (EMSC)": "地震（EMSC）",
   "Satellites": "卫星",
   "Space Missions (30d)": "太空任务（30 天）",
@@ -3083,10 +3085,6 @@
   "Read on the server, from the camera’s own frame; nothing is stored": "在服务器上读取摄像头本身的画面，不保存任何内容",
   "Plate Reader": "车牌读取",
   "Face analysis unavailable": "人脸分析不可用",
-  "{count} faces visible": {
-    "other": "可见人脸：{count}"
-  },
-  "No face found": "未找到人脸",
   "Nothing analysed yet": "尚未分析任何内容",
   "STOP BLUR": "停止模糊",
   "BLUR FACES": "模糊人脸",
@@ -3210,5 +3208,40 @@
   },
   "Nothing to repeat yet.": "暂无可重复的内容。",
   "I can tell you the most severe alert, the next one, the total, or repeat the last one.": "我可以告诉你最严重的警报、下一条、总数，或重复上一条。",
-  "No GhostMaps alerts are loaded yet.": "尚未载入 GhostMaps 警报。"
+  "No GhostMaps alerts are loaded yet.": "尚未载入 GhostMaps 警报。",
+  "{count} killed": {
+    "other": "{count} 人死亡"
+  },
+  "Incident": "事件",
+  "{count} events": {
+    "other": "{count} 起事件"
+  },
+  "Last 7 days": "最近 7 天",
+  "Deadliest conflict events": "最致命的冲突事件",
+  "Insider feed unavailable": "内部人交易数据源不可用",
+  "Unknown issuer": "未知发行人",
+  "Unknown reporting owner": "未知申报人",
+  "{count} filings": {
+    "other": "{count} 份申报"
+  },
+  "Latest insider filings": "最新 Form 4 申报",
+  "Conflict feed unavailable": "冲突数据源不可用",
+  "ACLED": "ACLED",
+  "SEC EDGAR": "SEC EDGAR",
+  "{count} people visible": {
+    "other": "{count} 人在画面中"
+  },
+  "No person visible": "画面中无人",
+  "COUNT PEOPLE": "统计人数",
+  "Count the people visible in the selected camera": "统计所选摄像头画面中的人数",
+  "1–9 killed": "1–9 人死亡",
+  "10+ killed": "10+ 人死亡",
+  "Source error": "数据源错误",
+  "ACLED is not configured: set ACLED_EMAIL and ACLED_PASSWORD in .env": "ACLED 未配置：请在 .env 中填写 ACLED_EMAIL 和 ACLED_PASSWORD",
+  "ACLED rejected the credentials": "ACLED 拒绝了凭据",
+  "ACLED denied API access for this account": "ACLED 拒绝此账户访问 API",
+  "ACLED did not answer": "ACLED 未响应",
+  "ACLED returned unreadable data": "ACLED 返回了无法解析的数据",
+  "Retry the read": "重新读取",
+  "Retrying…": "正在重试…"
 }

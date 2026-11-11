@@ -1429,3 +1429,103 @@ body.recording-mode #right-context-rail > [data-panel-id] {
 .gev-point-hover-tip[hidden] {
   display: none;
 }
+
+/* Insider filings window: a full list, so it scrolls inside the panel instead
+   of pushing every window below it off the rail. */
+.insider-panel-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+.insider-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(46vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.insider-panel-body::-webkit-scrollbar {
+  width: 6px;
+}
+.insider-panel-body::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.35);
+  border-radius: 3px;
+}
+.insider-panel-status {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+.insider-panel-status[hidden] {
+  display: none;
+}
+
+/* Conflict window: same scrolling list chrome, amber to match the toll bands. */
+.conflict-panel-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+.conflict-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(46vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.conflict-panel-body::-webkit-scrollbar {
+  width: 6px;
+}
+.conflict-panel-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 165, 0, 0.35);
+  border-radius: 3px;
+}
+.conflict-panel-status {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+.conflict-panel-status[hidden] {
+  display: none;
+}
+
+/* Source failure: the code the proxy returned plus its reason. Shows even
+   with stale rows, so a broken feed never passes for a working one. */
+.conflict-panel-error {
+  margin: 0;
+  padding: 6px 8px;
+  border-left: 2px solid var(--gev-danger, #ff6b6b);
+  background: rgba(255, 107, 107, 0.12);
+  color: var(--gev-danger-text, #ffe4e4);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  letter-spacing: 0.04em;
+}
+.conflict-panel-error[hidden] {
+  display: none;
+}
+.conflict-panel-error:not([hidden]) {
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+.conflict-panel-error:hover:not([disabled]) {
+  background: rgba(255, 107, 107, 0.18);
+}
+.conflict-panel-error:focus-visible {
+  outline: 2px solid rgba(255, 107, 107, 0.7);
+  outline-offset: 1px;
+}
+.conflict-panel-error[disabled] {
+  cursor: progress;
+  opacity: 0.85;
+}

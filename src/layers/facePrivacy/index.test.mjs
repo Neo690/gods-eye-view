@@ -59,9 +59,10 @@ test('an analysis shows the face count of the selected camera', async () => {
   layer.getRowControls().chips[0].onClick();
   await settle();
   assert.deepEqual(reader.calls, ['cam-1']);
-  assert.match(layer.getRowControls().info, /2 faces visible/);
+  assert.match(layer.getRowControls().info, /2 people visible/);
   assert.deepEqual(layer.getStats(), {
     faces: 2,
+    people: 2,
     cameraId: 'cam-1',
     lastReadAt: 1234,
     busy: false,
@@ -87,7 +88,7 @@ test('turning the chip off removes the blur without another read', async () => {
   assert.deepEqual(reader.calls, ['cam-1']);
   assert.equal(layer.getStats().blurring, false);
   assert.equal(blur.clears, 1);
-  assert.match(layer.getRowControls().info, /1 face visible/);
+  assert.match(layer.getRowControls().info, /1 person visible/);
 });
 
 test('an empty analysis says so instead of leaving a stale blur points at nobody', async () => {
@@ -101,7 +102,7 @@ test('an empty analysis says so instead of leaving a stale blur points at nobody
   layer.enable();
   layer.getRowControls().chips[0].onClick();
   await settle();
-  assert.match(layer.getRowControls().info, /No face found/);
+  assert.match(layer.getRowControls().info, /No person visible/);
 });
 
 test('two clicks while the first analysis runs share one request', async () => {
@@ -182,7 +183,7 @@ test('a result belongs to the camera it was analysed from', async () => {
   layer.enable();
   layer.getRowControls().chips[0].onClick();
   await settle();
-  assert.match(layer.getRowControls().info, /1 face visible/);
+  assert.match(layer.getRowControls().info, /1 person visible/);
   selected = 'cam-2';
   assert.match(layer.getRowControls().info, /Nothing analysed yet/);
 });
@@ -227,6 +228,63 @@ test('turning the layer off forgets the answer and the blur', async () => {
   assert.equal(layer.getStats().blurring, false);
   layer.enable();
   assert.match(layer.getRowControls().info, /Nothing analysed yet/);
+});
+
+test('the count chip answers a headcount without touching the picture', async () => {
+  const reader = source([{ score: 0.9 }, { score: 0.8 }, { score: 0.4 }]);
+  const blur = overlaySpy();
+  const layer = createFaceLayer({
+    source: reader,
+    camera: cctv('cam-9'),
+    overlay: blur,
+    now: () => 4321,
+  });
+  layer.init({});
+  layer.enable();
+  const chip = layer.getRowControls().chips.find(({ id }) => id === 'count');
+  assert.ok(chip, 'the row must offer a headcount');
+  chip.onClick();
+  await settle();
+  assert.deepEqual(reader.calls, ['cam-9']);
+  assert.deepEqual(blur.draws, []);
+  assert.equal(layer.getStats().blurring, false);
+  assert.match(layer.getRowControls().info, /3 people visible/);
+  const count = layer.getPersonCount();
+  assert.equal(count.cameraId, 'cam-9');
+  assert.equal(count.count, 3);
+  assert.equal(count.at, 4321);
+  assert.equal(count.basis, 'scrfd-faces');
+  assert.equal(count.busy, false);
+  assert.equal(count.error, null);
+});
+
+test('the headcount needs a camera, like the blur action', () => {
+  const layer = createFaceLayer({ source: source(), camera: cctv(null) });
+  layer.init({});
+  layer.enable();
+  const chip = layer.getRowControls().chips.find(({ id }) => id === 'count');
+  assert.equal(chip.disabled, true);
+  assert.equal(layer.getPersonCount().count, 0);
+  assert.equal(layer.getPersonCount().at, null);
+});
+
+test('a headcount belongs to the camera it was read from', async () => {
+  let selected = 'cam-1';
+  const layer = createFaceLayer({
+    source: source([{}, {}]),
+    camera: { getParams: () => ({ selectedCameraId: selected }) },
+  });
+  layer.init({});
+  layer.enable();
+  layer
+    .getRowControls()
+    .chips.find(({ id }) => id === 'count')
+    .onClick();
+  await settle();
+  assert.equal(layer.getPersonCount().count, 2);
+  selected = 'cam-2';
+  assert.equal(layer.getPersonCount().count, 0);
+  assert.equal(layer.getPersonCount().cameraId, 'cam-2');
 });
 
 test('the layer survives the manager tick that has nothing to fetch', async () => {

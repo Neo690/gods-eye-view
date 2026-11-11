@@ -23,11 +23,24 @@
  * what switching a layer on should mean.
  * @module layers/facePrivacy
  */
-import { t, tn } from '../../i18n/index.js';
+import { t } from '../../i18n/index.js';
 import { FACE_LAYER_ID, faceCount, isCachedAnswer } from './model.js';
+import {
+  PEOPLE_BASIS,
+  PEOPLE_LIMIT_NOTE,
+  countPeople,
+  peopleLabel,
+} from './people.js';
 
 export { FACE_LAYER_ID } from './model.js';
 export { createFaceAnalysisSource, FaceAnalysisError } from './sources.js';
+export {
+  PEOPLE_BASIS,
+  PEOPLE_LIMIT_NOTE,
+  countPeople,
+  peopleLabel,
+  peopleSummary,
+} from './people.js';
 
 /**
  * @param {object} options
@@ -135,7 +148,7 @@ export function createFaceLayer({
    * Concurrent clicks share one request: a second read asked for while the
    * first is in flight would spend another inference on the same frame.
    */
-  async function readSelected() {
+  async function readSelected({ blur = true } = {}) {
     if (!_enabled || _busy) return null;
     const cameraId = selectedCameraId();
     if (!cameraId) {
@@ -152,7 +165,9 @@ export function createFaceLayer({
       _result = payload;
       _readCameraId = cameraId;
       _lastReadAt = now();
-      showOverlay(payload, cameraId);
+      // A headcount answers a question about the picture; it must not change
+      // the picture. Only the blur action paints the overlay.
+      if (blur) showOverlay(payload, cameraId);
       console.log(
         `[Data:FacePrivacy] ${cameraId}: ${payload.faces.length} face(s)`,
       );
@@ -231,6 +246,7 @@ export function createFaceLayer({
     getStats() {
       return {
         faces: _result ? faceCount(_result) : 0,
+        people: countPeople(_result),
         cameraId: _readCameraId,
         lastReadAt: _lastReadAt,
         busy: _busy,
@@ -247,10 +263,7 @@ export function createFaceLayer({
       if (_busy) info = t('Reading the selected camera…');
       else if (!cameraId) info = t('Select a CCTV camera first');
       else if (_error) info = t('Face analysis unavailable');
-      else if (answer)
-        info = count
-          ? tn(count, '{count} face visible', '{count} faces visible')
-          : t('No face found');
+      else if (answer) info = peopleLabel(count);
       else info = t('Nothing analysed yet');
       const cached = isCachedAnswer(answer) && t('Cached answer');
       return {
@@ -273,18 +286,52 @@ export function createFaceLayer({
               void readSelected();
             },
           },
+          {
+            // A headcount, not a blur: the operator can ask how many people
+            // are on the frame without the picture changing under them.
+            id: 'count',
+            label: t('COUNT PEOPLE'),
+            title: cameraId
+              ? t('Count the people visible in the selected camera')
+              : t('Select a CCTV camera first'),
+            disabled: !_enabled || _busy || !cameraId,
+            onClick: () => {
+              void readSelected({ blur: false });
+            },
+          },
         ],
         info: [info, cached].filter(Boolean).join(' · '),
         infoTitle: _error
           ? _error.detail || t('Face analysis could not answer')
-          : t(
-              'Analysed on the server, from the camera’s own frame; identities are never matched here',
-            ),
+          : `${t('Analysed on the server, from the camera’s own frame; identities are never matched here')} ${t(PEOPLE_LIMIT_NOTE)}`,
       };
     },
 
     setRowControlsListener(listener) {
       rowControlsListener = typeof listener === 'function' ? listener : null;
+    },
+
+    /**
+     * Headcount for the selected camera, as data another surface can use
+     * (voice, a panel badge) without re-reading the frame.
+     *
+     * The count belongs to the camera the answer came from: switching cameras
+     * reports zero rather than the previous camera's people.
+     *
+     * @returns {{cameraId: string|null, count: number, at: number|null,
+     *   basis: string, busy: boolean, error: string|null}}
+     */
+    getPersonCount() {
+      const cameraId = selectedCameraId();
+      const answer = resultFor(cameraId);
+      return {
+        cameraId,
+        count: countPeople(answer),
+        at: answer ? _lastReadAt : null,
+        basis: PEOPLE_BASIS,
+        busy: _busy,
+        error: _error?.code || null,
+      };
     },
 
     /** The layer keeps no records to analyse: people are not places. */

@@ -1784,6 +1784,8 @@
   "Live Flights": "Vols en direct",
   "Military Flights": "Vols militaires",
   "Earthquakes (24h)": "Séismes (24 h)",
+  "Conflict events (7d)": "Événements de conflit (7 j)",
+  "Insider filings (Form 4)": "Déclarations d'initiés (Form 4)",
   "Earthquakes (EMSC)": "Séismes (EMSC)",
   "Satellites": "Satellites",
   "Space Missions (30d)": "Missions spatiales (30 j)",
@@ -3205,12 +3207,6 @@
   "Read on the server, from the camera’s own frame; nothing is stored": "Lu sur le serveur, depuis l'image de la caméra elle-même ; rien n'est conservé",
   "Plate Reader": "Lecteur de plaques",
   "Face analysis unavailable": "Analyse de visages indisponible",
-  "{count} faces visible": {
-    "many": "{count} visages visibles",
-    "one": "{count} visage visible",
-    "other": "{count} visages visibles"
-  },
-  "No face found": "Aucun visage détecté",
   "Nothing analysed yet": "Rien n'a encore été analysé",
   "STOP BLUR": "STOP FLOUTAGE",
   "BLUR FACES": "FLOUTER LES VISAGES",
@@ -3356,5 +3352,48 @@
   },
   "Nothing to repeat yet.": "Rien à répéter pour l'instant.",
   "I can tell you the most severe alert, the next one, the total, or repeat the last one.": "Je peux dire la plus grave, la suivante, le total, ou répéter la dernière.",
-  "No GhostMaps alerts are loaded yet.": "Aucune alerte GhostMaps n'est encore chargée."
+  "No GhostMaps alerts are loaded yet.": "Aucune alerte GhostMaps n'est encore chargée.",
+  "{count} killed": {
+    "one": "{count} mort",
+    "many": "{count} morts",
+    "other": "{count} morts"
+  },
+  "Incident": "Incident",
+  "{count} events": {
+    "one": "{count} événement",
+    "many": "{count} événements",
+    "other": "{count} événements"
+  },
+  "Last 7 days": "7 derniers jours",
+  "Deadliest conflict events": "Événements de conflit les plus meurtriers",
+  "Insider feed unavailable": "Flux d'initiés indisponible",
+  "Unknown issuer": "Émetteur inconnu",
+  "Unknown reporting owner": "Déclarant inconnu",
+  "{count} filings": {
+    "one": "{count} dépôt",
+    "many": "{count} dépôts",
+    "other": "{count} dépôts"
+  },
+  "Latest insider filings": "Derniers dépôts Form 4",
+  "Conflict feed unavailable": "Flux de conflits indisponible",
+  "ACLED": "ACLED",
+  "SEC EDGAR": "SEC EDGAR",
+  "{count} people visible": {
+    "one": "{count} personne visible",
+    "many": "{count} personnes visibles",
+    "other": "{count} personnes visibles"
+  },
+  "No person visible": "Aucune personne visible",
+  "COUNT PEOPLE": "COMPTER LES PERSONNES",
+  "Count the people visible in the selected camera": "Compter les personnes visibles dans la caméra sélectionnée",
+  "1–9 killed": "1–9 morts",
+  "10+ killed": "10+ morts",
+  "Source error": "Erreur de la source",
+  "ACLED is not configured: set ACLED_EMAIL and ACLED_PASSWORD in .env": "ACLED n'est pas configuré : renseignez ACLED_EMAIL et ACLED_PASSWORD dans .env",
+  "ACLED rejected the credentials": "ACLED a refusé les identifiants",
+  "ACLED denied API access for this account": "ACLED a refusé l'accès à l'API pour ce compte",
+  "ACLED did not answer": "ACLED n'a pas répondu",
+  "ACLED returned unreadable data": "ACLED a renvoyé des données illisibles",
+  "Retry the read": "Relancer la lecture",
+  "Retrying…": "Nouvelle tentative…"
 }

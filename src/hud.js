@@ -27,6 +27,7 @@ import {
 } from './data/geoid.js';
 import { getBasemapLabelContext } from './voice/gevActions.js';
 import {
+  hudSummaryCountsHonest,
   hudSummaryMatchesProvenance,
   hudSummaryLayerContext,
   hudTelemetryProvenance,
@@ -894,10 +895,20 @@ export class IntelHUD {
       if (!response.ok || !data?.summary) {
         throw new Error(data?.error || `HTTP ${response.status}`);
       }
+      // Two independent gates: the line must carry the feed-state token the
+      // roster demands, and it must not call a populated roster empty. Either
+      // failure keeps the deterministic fallback, so the HUD can never show a
+      // "ZERO" it cannot back with the layer's own records.
+      const matchesProvenance = hudSummaryMatchesProvenance(
+        data.summary,
+        context.feedProvenance,
+      );
+      const matchesCounts = hudSummaryCountsHonest(
+        data.summary,
+        context.enabledLayers,
+      );
       this._setSummaryText(
-        hudSummaryMatchesProvenance(data.summary, context.feedProvenance)
-          ? data.summary
-          : fallbackText,
+        matchesProvenance && matchesCounts ? data.summary : fallbackText,
         animate,
       );
     } catch (error) {
@@ -949,7 +960,22 @@ export class IntelHUD {
       streetLabels: labels.streetLabels,
       nearbyPlaceLabels: labels.nearbyPlaceLabels,
       enabledLayerLabels: enabledLayers,
-      ...hudSummaryLayerContext(this._dataManager?.getAll?.() || []),
+      // getAll() rows are plain projections, so a layer's own readout card is
+      // only reachable through the manager's module map. Passing the lookup is
+      // what actually puts the records in the summary context.
+      ...hudSummaryLayerContext(this._dataManager?.getAll?.() || [], {
+        getRowControls: (id) => {
+          try {
+            return (
+              this._dataManager?.layers
+                ?.get?.(id)
+                ?.module?.getRowControls?.() ?? null
+            );
+          } catch {
+            return null;
+          }
+        },
+      }),
     };
   }
 

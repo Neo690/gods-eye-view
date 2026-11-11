@@ -16,7 +16,11 @@ const ROOT = path.resolve(
   '..',
   '..',
 );
-const TEMPLATES = ['layer-panels.html', 'display-controls.html', 'context.html'];
+const TEMPLATES = [
+  'layer-panels.html',
+  'display-controls.html',
+  'context.html',
+];
 
 function readTemplates() {
   return TEMPLATES.map((name) =>
@@ -107,11 +111,13 @@ function panel(make, id, { collapsed = true } = {}) {
   return node;
 }
 
-test('the disclosure lists the six rail windows in reading order', () => {
+test('the disclosure lists the eight rail windows in reading order', () => {
   assert.deepEqual(
     MOBILE_PANEL_TAB_SPECS.map((spec) => spec.id),
     [
       'data-panel',
+      'insider-panel',
+      'conflict-panel',
       'scene-panel',
       'pp-toggles',
       'cctv-panel',
@@ -149,7 +155,10 @@ test('the windows are behind a closed control, not laid over the map', () => {
     css,
     /@media \(max-width: 720px\)[\s\S]*\.gev-panel-tabs-menu\[hidden\]\s*\{\s*display:\s*none;/,
   );
-  assert.doesNotMatch(css, /grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.doesNotMatch(
+    css,
+    /grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/,
+  );
   // The collapsed chips the strip replaces must not keep drawing.
   assert.match(
     css,
@@ -187,7 +196,11 @@ test('the toggle rides the globe action row when there is one', () => {
     document: doc,
     setPanelCollapsed: () => {},
   });
-  assert.equal(row.children[0], control.element, 'the button comes first in the row');
+  assert.equal(
+    row.children[0],
+    control.element,
+    'the button comes first in the row',
+  );
   assert.equal(control.element.parentNode, row);
   control.destroy();
 });
@@ -195,7 +208,9 @@ test('the toggle rides the globe action row when there is one', () => {
 test('without a document there is nothing to build', () => {
   assert.equal(createMobilePanelTabs({ document: null }), null);
   assert.equal(
-    createMobilePanelTabs({ document: { body: {}, getElementById: () => null } }),
+    createMobilePanelTabs({
+      document: { body: {}, getElementById: () => null },
+    }),
     null,
   );
 });
@@ -204,9 +219,14 @@ test('the list starts closed and the button says so', () => {
   const panels = {};
   const { doc, make } = fakeDocument({ panels });
   panels['data-panel'] = panel(make, 'data-panel');
-  const control = createMobilePanelTabs({ document: doc, setPanelCollapsed: () => {} });
+  const control = createMobilePanelTabs({
+    document: doc,
+    setPanelCollapsed: () => {},
+  });
   assert.ok(control);
-  const menu = control.element.children.find((c) => c.id === 'gev-panel-tabs-menu');
+  const menu = control.element.children.find(
+    (c) => c.id === 'gev-panel-tabs-menu',
+  );
   const toggle = control.element.children.find((c) =>
     c.className.includes('gev-panel-tabs-toggle'),
   );
@@ -223,7 +243,8 @@ test('choosing a window opens it, closes the previous one, and puts the list awa
   const calls = [];
   const control = createMobilePanelTabs({
     document: doc,
-    setPanelCollapsed: (id, collapsed, options) => calls.push({ id, collapsed, options }),
+    setPanelCollapsed: (id, collapsed, options) =>
+      calls.push({ id, collapsed, options }),
     isMobile: () => true,
   });
   const toggle = control.element.children.find((c) =>
@@ -232,13 +253,17 @@ test('choosing a window opens it, closes the previous one, and puts the list awa
   const handler = control.element.listeners.get('click');
 
   const click = (target) => handler({ target });
-  const toggleTarget = { closest: (selector) => (selector.includes('toggle') ? toggle : null) };
+  const toggleTarget = {
+    closest: (selector) => (selector.includes('toggle') ? toggle : null),
+  };
   click(toggleTarget);
   assert.equal(toggle.getAttribute('aria-expanded'), 'true');
 
   const item = {
     closest: (selector) =>
-      selector.includes('toggle') ? null : { dataset: { panelTab: 'scene-panel' } },
+      selector.includes('toggle')
+        ? null
+        : { dataset: { panelTab: 'scene-panel' } },
   };
   click(item);
 

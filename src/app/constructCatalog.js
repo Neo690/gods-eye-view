@@ -31,6 +31,8 @@ import { createApplicationFirms } from './layers/firms.js';
 import { createApplicationFishingEffort } from './layers/fishingEffort.js';
 import { createApplicationEarthquakes } from './layers/earthquakes.js';
 import { createApplicationEmscSeismic } from './layers/emscSeismic.js';
+import { createApplicationConflictEvents } from './layers/conflictEvents.js';
+import { createApplicationInsider } from './layers/insider.js';
 import { createApplicationGlobalDisasters } from './layers/disasters.js';
 import { createApplicationAiAgent } from './layers/aiAgent.js';
 import { createApplicationRadiation } from './layers/radiation.js';
@@ -145,6 +147,8 @@ export function createApplicationCatalog({
         }),
         createApplicationEarthquakes({ source: sources.earthquakes }),
         createApplicationEmscSeismic({ source: sources.emsc }),
+        createApplicationConflictEvents(),
+        createApplicationInsider(),
         createApplicationGlobalDisasters(),
         createApplicationAiAgent(),
         createApplicationRadiation({ source: sources.radiation }),

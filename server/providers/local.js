@@ -45,6 +45,8 @@ import { iotSensorsProxy } from './iotSensors.js';
 import { netMonProxy } from './netmon.js';
 import { cellTowersProxy } from './cellTowers.js';
 import { copernicusEmsProxy } from './copernicusEms.js';
+import { conflictsProxy } from './conflicts.js';
+import { insiderProxy } from './insider.js';
 import { valyuEventsProxy } from './valyu.js';
 
 /**
@@ -75,6 +77,12 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     // Copernicus EMS sends no CORS headers; this route fronts the first
     // activations page for the disasters layer.
     copernicusEmsProxy(),
+    // ACLED is keyed and sends no CORS headers; GDELT backs the same route when
+    // no credential is configured, so the layer is never a dead toggle.
+    conflictsProxy(),
+    // EDGAR demands a declared User-Agent and sends no CORS headers; the route
+    // answers prepared Form 4 rows so the browser never talks to sec.gov.
+    insiderProxy(),
     // Optional keymetered OSINT search relay (Valyu). Keyless installs get a
     // clean 503 from the route itself; it costs nothing to mount.
     valyuEventsProxy(),

@@ -15,6 +15,14 @@ import { msg } from '../i18n/index.js';
  */
 export const PANEL_WINDOW_SPECS = Object.freeze([
   Object.freeze({ id: 'data-panel', label: msg('DATA LAYERS') }),
+  Object.freeze({
+    id: 'insider-panel',
+    label: msg('Insider filings (Form 4)'),
+  }),
+  Object.freeze({
+    id: 'conflict-panel',
+    label: msg('Conflict events (7d)'),
+  }),
   Object.freeze({ id: 'scene-panel', label: msg('SCENES') }),
   Object.freeze({ id: 'pp-toggles', label: msg('DISPLAY') }),
   Object.freeze({ id: 'cctv-panel', label: msg('CCTV') }),
