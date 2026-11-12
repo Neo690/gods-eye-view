@@ -45,7 +45,7 @@ test('catalogs construct distinct layers and classification from their supplied 
   // global disasters tier + the AI agent watchdog + the camera-advisory join +
   // the GhostMaps tier + the OSM places layer; the count is pinned so adding a
   // layer is a deliberate review, not a side effect.
-  assert.equal(first.layers.length, 51);
+  assert.equal(first.layers.length, 53);
   assert.ok(first.get('local-adsb'), 'Local ADS-B is registered');
   assert.deepEqual(
     first.metadata.find(({ id }) => id === 'local-adsb'),
@@ -171,7 +171,7 @@ test('Mapillary can be omitted or replaced without changing catalog membership',
     surface: fixtureSurface(lifetime.signal),
   };
   const catalog = createApplicationCatalog(options);
-  assert.equal(catalog.layers.length, 51);
+  assert.equal(catalog.layers.length, 53);
   assert.deepEqual(catalog.get('street-level').providerIds, []);
   assert.equal(
     catalogControlServices(catalog).streetLevelLayer,

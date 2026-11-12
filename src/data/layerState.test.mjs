@@ -202,8 +202,8 @@ function encode(state) {
 
 test('production registry is exact, canonical, and rejects incomplete contracts', async () => {
   assert.equal(validateLayerStateRegistry(), true);
-  assert.equal(REGISTERED_LAYER_IDS.length, 49);
-  assert.equal(new Set(REGISTERED_LAYER_IDS).size, 49);
+  assert.equal(REGISTERED_LAYER_IDS.length, 51);
+  assert.equal(new Set(REGISTERED_LAYER_IDS).size, 51);
   assert.ok(REGISTERED_LAYER_IDS.includes('transit'));
   assert.ok(REGISTERED_LAYER_IDS.includes('radiation'));
   assert.deepEqual(REGISTERED_LAYER_IDS, [...REGISTERED_LAYER_IDS].sort());
@@ -243,7 +243,7 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   for (const [id, token] of Object.entries(LEGACY_LAYER_STATE_TOKENS)) {
     assert.equal(LAYER_STATE_TOKEN_RESERVATIONS[id], token);
   }
-  assert.equal(nextLayerStateToken(), '0d');
+  assert.equal(nextLayerStateToken(), '0f');
   // 6 and 7 belong to Radio Sites and Connected Objects, 8 to the mapped
   // railway stations and 9 to the transport-activity layer; every digit is
   // owned, so the allocator works through the base-36 pairs, where 00 is the
@@ -251,23 +251,21 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   // layer, 03 the fishing-effort layer, 04 the plate reader, 05 the
   // face-privacy layer, 06 the operator-node monitor, 07 the EMSC quake
   // network, 08 the AI Sentinel, 09 the global disasters tier, 0a the
-  // camera-advisories layer, 0b the S2 GhostMaps layer and 0c the OSM
-  // places layer.
+  // camera-advisories layer, 0b the S2 GhostMaps layer, 0c the OSM
+  // places layer, 0d the conflict-events layer and 0e the insider layer.
   assert.equal(
     nextLayerStateToken({
       ...LAYER_STATE_TOKEN_RESERVATIONS,
       alpha: '9',
     }),
-    '0d',
+    '0f',
   );
   const digitsExhausted = {
     ...LAYER_STATE_TOKEN_RESERVATIONS,
-    ...Object.fromEntries(
-      [...'9'].map((digit) => [`prior-${digit}`, digit]),
-    ),
+    ...Object.fromEntries([...'9'].map((digit) => [`prior-${digit}`, digit])),
   };
-  assert.equal(nextLayerStateToken(digitsExhausted), '0d');
-  assert.equal(nextLayerStateToken({ ...digitsExhausted, used: '0d' }), '0e');
+  assert.equal(nextLayerStateToken(digitsExhausted), '0f');
+  assert.equal(nextLayerStateToken({ ...digitsExhausted, used: '0f' }), '0g');
   assert.equal(
     nextLayerStateToken({
       ...digitsExhausted,
@@ -313,8 +311,8 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   assert.equal(
     validateLayerStateAllocations(LAYER_STATE_TOKEN_RESERVATIONS, {
       ...LAYER_STATE_TOKEN_RESERVATIONS,
-      future: '0d',
-      next: '0e',
+      future: '0f',
+      next: '0g',
     }),
     true,
   );
@@ -322,9 +320,9 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
     () =>
       validateLayerStateAllocations(LAYER_STATE_TOKEN_RESERVATIONS, {
         ...LAYER_STATE_TOKEN_RESERVATIONS,
-        future: '0e',
+        future: '0g',
       }),
-    /next free token 0d/,
+    /next free token 0f/,
   );
   // Hand the last digit back, which is what a ledger with one digit still
   // free looks like now that every real one is owned.
@@ -336,15 +334,15 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
       ...beforeLastDigit,
       futurePair: '0b',
       futureDigit: '9',
-      futurePairSpare: '0d',
+      futurePairSpare: '0f',
     }),
     true,
   );
   assert.equal(
     validateLayerStateAllocations(digitsExhausted, {
       ...digitsExhausted,
-      pairA: '0d',
-      pairB: '0e',
+      pairA: '0f',
+      pairB: '0g',
     }),
     true,
   );
@@ -354,7 +352,7 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
         { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '6' },
         { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '6', competing: '6' },
       ),
-    /next free token 0d/,
+    /next free token 0f/,
   );
   assert.throws(
     () => validateLayerStateAllocations({ future: '00' }, { future: '01' }),
@@ -3002,7 +3000,10 @@ test('Clear All cancels a saved restore still waiting to start', async () => {
   gate.resolve();
   const results = await restore;
   for (const id of ['earthquakes', 'flights']) {
-    assert.equal(results.find((result) => result.layerId === id).succeeded, false);
+    assert.equal(
+      results.find((result) => result.layerId === id).succeeded,
+      false,
+    );
   }
   assert.deepEqual([...manager.getEnabledLayerIds()], []);
   assert.equal(enabledLayerParam(sink), '');
