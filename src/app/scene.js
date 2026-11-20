@@ -77,6 +77,7 @@ export async function createApplicationScene({
     cesiumToken,
   });
   const photoreal = await withinBudget(load, TILESET_BUDGET_MS, {
+    signal,
     onTimeout: () => ({
       tileset: null,
       route: 'osm',
@@ -91,7 +92,9 @@ export async function createApplicationScene({
     // A tileset that lands after its budget still owns GPU memory.
     onLate: (late) => late?.tileset?.destroy?.(),
   });
-  const tileset = photoreal.tileset;
+  // An abort settles the wait with nothing instead of a fallback, so the read
+  // is null-safe; a tileset that lands after it is the late hook's to destroy.
+  const tileset = photoreal?.tileset ?? null;
   // A provider can finish after cancellation; retain ownership of its result.
   defer(() => {
     if (tileset && !tileset.isDestroyed()) {
@@ -152,6 +155,8 @@ export async function createApplicationScene({
     }),
     STACK_BUDGET_MS,
     {
+      // A destroyed scene must not warn about a stack load nobody is watching.
+      signal,
       onTimeout: () =>
         console.warn(
           `[Init] Map stack still loading after ${STACK_BUDGET_MS} ms; continuing.`,
