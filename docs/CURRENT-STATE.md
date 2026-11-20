@@ -3991,7 +3991,9 @@ maker at all, because the same chip sits in a lamp and in a camera. A second
 import keeps the first time each device was seen (keyed by MAC, else address)
 and the row names how many are new. A device can carry a note the operator wrote,
 shown in its hover tip; it follows that device across imports and leaves with the
-scan. The place the ring is drawn around can come from the browser's location,
+scan. A table has to look like one, so a file holding a single address-and-MAC
+row is refused rather than read as a one-device inventory. The place the ring is
+drawn around can come from the browser's location,
 one click on the globe, or typed coordinates (latitude first, a decimal comma
 accepted), and all three write the same stored place — a refused location
 permission no longer means an empty layer. The positions are schematic: a LAN

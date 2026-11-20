@@ -8,6 +8,7 @@ import {
   normalisePoint,
   normalisePoints,
   normaliseBounds,
+  pointOutlineWidth,
   pointsSignature,
 } from './records.js';
 
@@ -99,6 +100,32 @@ test('duplicate ids collapse and the cap holds', () => {
   assert.equal(normalisePoints(rows).length, 3);
   assert.equal(normalisePoints(null).length, 0);
   assert.ok(MAX_POINTS >= 500);
+});
+
+test('the point outline width follows what the driver can draw', () => {
+  // A normal GPU reports 10 or more: the layers keep their 2px outline.
+  assert.equal(pointOutlineWidth({ maximumAliasedLineWidth: 10 }), 2);
+  assert.equal(pointOutlineWidth({ maximumAliasedLineWidth: 2.5 }), 2);
+  assert.equal(
+    pointOutlineWidth({ context: { maximumAliasedLineWidth: 8 } }),
+    2,
+  );
+  // A capped driver (software WebGL, some ANGLE setups) reports 1: asking for 2
+  // used to throw and stop the scene, so it gets the widest line it can draw.
+  assert.equal(pointOutlineWidth({ maximumAliasedLineWidth: 1 }), 1);
+  assert.equal(
+    pointOutlineWidth({ context: { maximumAliasedLineWidth: 1 } }),
+    1,
+  );
+  assert.equal(pointOutlineWidth({ maximumAliasedLineWidth: 0.5 }), 1);
+  // Nothing known to read: keep the designed look rather than guess a limit.
+  assert.equal(pointOutlineWidth({}), 2);
+  assert.equal(pointOutlineWidth(null), 2);
+  assert.equal(pointOutlineWidth({ maximumAliasedLineWidth: Number.NaN }), 2);
+  assert.equal(pointOutlineWidth({ maximumAliasedLineWidth: 0 }), 2);
+  // Never wider than the layer asked for, and never below one pixel.
+  assert.equal(pointOutlineWidth({ maximumAliasedLineWidth: 10 }, 3), 3);
+  assert.equal(pointOutlineWidth({ maximumAliasedLineWidth: 2 }, 3), 2);
 });
 
 test('the drawn signature ignores fields the primitives do not show', () => {

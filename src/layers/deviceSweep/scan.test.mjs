@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { classifyDevice, parseNmapScan, vendorForMac } from './scan.js';
+import { classifyDevice, parseInventory, vendorForMac } from './scan.js';
 import {
   DEVICE_SWEEP_STORAGE_KEY,
   DeviceSweepStoreError,
@@ -85,7 +85,7 @@ const LEASES = [
 ].join('\n');
 
 test('a normal nmap report becomes devices with their MAC, vendor and ports', () => {
-  const result = parseNmapScan(NORMAL_SWEEP);
+  const result = parseInventory(NORMAL_SWEEP);
   assert.equal(result.format, 'normal');
   assert.equal(result.devices.length, 3);
   const camera = result.devices.find((device) => device.ip === '192.168.1.42');
@@ -103,7 +103,7 @@ test('a normal nmap report becomes devices with their MAC, vendor and ports', ()
 });
 
 test('the XML report keeps open ports, drops closed ones and skips down hosts', () => {
-  const result = parseNmapScan(XML_SCAN);
+  const result = parseInventory(XML_SCAN);
   assert.equal(result.format, 'xml');
   assert.deepEqual(
     result.devices.map((device) => device.ip),
@@ -123,7 +123,7 @@ test('the XML report keeps open ports, drops closed ones and skips down hosts', 
 });
 
 test('the greppable report is read the same way', () => {
-  const result = parseNmapScan(GREPPABLE_SCAN);
+  const result = parseInventory(GREPPABLE_SCAN);
   assert.equal(result.format, 'greppable');
   const camera = result.devices.find((device) => device.ip === '192.168.1.70');
   assert.equal(camera.hostname, 'cam.local');
@@ -141,7 +141,7 @@ test('the greppable report is read the same way', () => {
 });
 
 test('an ARP table is an inventory: addresses, MACs and the names arp knew', () => {
-  const result = parseNmapScan(ARP_TABLE);
+  const result = parseInventory(ARP_TABLE);
   assert.equal(result.format, 'arp');
   assert.deepEqual(
     result.devices.map((device) => device.ip),
@@ -160,7 +160,7 @@ test('an ARP table is an inventory: addresses, MACs and the names arp knew', () 
 });
 
 test('/proc/net/arp is read from its columns, without a zero MAC', () => {
-  const result = parseNmapScan(PROC_ARP);
+  const result = parseInventory(PROC_ARP);
   assert.equal(result.format, 'arp');
   assert.deepEqual(
     result.devices.map((device) => device.ip),
@@ -170,7 +170,7 @@ test('/proc/net/arp is read from its columns, without a zero MAC', () => {
 });
 
 test('a lease list keeps the address, the MAC and the name it carries', () => {
-  const result = parseNmapScan(LEASES);
+  const result = parseInventory(LEASES);
   assert.equal(result.format, 'leases');
   assert.equal(result.devices.length, 2);
   const laptop = result.devices[0];
@@ -183,14 +183,14 @@ test('a lease list keeps the address, the MAC and the name it carries', () => {
 });
 
 test('a file that is not an inventory is refused, not guessed at', () => {
-  assert.equal(parseNmapScan('name,colour\nfoo,red\n').format, null);
-  assert.deepEqual(parseNmapScan('').devices, []);
+  assert.equal(parseInventory('name,colour\nfoo,red\n').format, null);
+  assert.deepEqual(parseInventory('').devices, []);
   // An address with no MAC beside it is not a device the sweep can name.
-  assert.equal(parseNmapScan('Gateway 192.168.1.1\n').format, null);
+  assert.equal(parseInventory('Gateway 192.168.1.1\n').format, null);
 });
 
 test('one host seen twice merges into the richer row', () => {
-  const merged = parseNmapScan([XML_SCAN, XML_SCAN].join('\n'));
+  const merged = parseInventory([XML_SCAN, XML_SCAN].join('\n'));
   assert.equal(merged.devices.length, 2);
 });
 
@@ -201,7 +201,7 @@ test('the cap keeps what fits and says so', () => {
     `MAC Address: 24:0A:C4:00:00:0${index} (Espressif)`,
     '',
   ]).join('\n');
-  const result = parseNmapScan(rows, { limit: 3 });
+  const result = parseInventory(rows, { limit: 3 });
   assert.equal(result.devices.length, 3);
   assert.equal(result.truncated, true);
 });
@@ -228,7 +228,7 @@ test('a prefix the shortlist cannot vouch for is not attributed', () => {
   for (const mac of ['AC:E6:B8:11:22:33', '08:3A:F8:11:22:33'])
     assert.equal(vendorForMac(mac), '', `${mac} is unregistered`);
 
-  const result = parseNmapScan(
+  const result = parseInventory(
     [
       'Nmap scan report for 192.168.1.50',
       'Host is up.',
@@ -275,6 +275,38 @@ test('the verdict says what the evidence supports and nothing more', () => {
   );
 });
 
+test('one address-and-MAC line is not a list, so the file is refused', () => {
+  const single = '192.168.1.10,aa:bb:cc:dd:ee:ff,laptop-living-room';
+  assert.equal(
+    parseInventory(single).format,
+    null,
+    'a file quoting one address and one MAC is not an inventory',
+  );
+  assert.deepEqual(parseInventory(single).devices, []);
+});
+
+/** The shape `arp -a` prints on Windows: interface, column header, entries. */
+const WINDOWS_ARP = [
+  '',
+  'Interface: 192.168.1.100 --- 0xb',
+  '  Internet Address      Physical Address      Type',
+  '  192.168.1.1           00-11-22-33-44-55     dynamic',
+  '  192.168.1.42          44-19-b6-11-22-33     dynamic',
+  '',
+].join('\n');
+
+test("Windows' arp table is still read, and its rows are leases", () => {
+  const result = parseInventory(WINDOWS_ARP);
+  assert.equal(result.format, 'leases');
+  assert.deepEqual(
+    result.devices.map((device) => device.ip),
+    ['192.168.1.1', '192.168.1.42'],
+    'the interface line and the column header hold no lease',
+  );
+  assert.equal(result.devices[1].mac, '44:19:B6:11:22:33');
+  assert.equal(result.devices[1].verdict, 'camera');
+});
+
 /** In-memory Storage for the store tests. */
 function fakeStorage() {
   const map = new Map();
@@ -296,7 +328,7 @@ test('a scan and its place round-trip, and clearing keeps the place', () => {
     name: '',
     notes: {},
   });
-  const { devices } = parseNmapScan(NORMAL_SWEEP);
+  const { devices } = parseInventory(NORMAL_SWEEP);
   store.write({ devices, name: 'scan.txt' });
   store.setPlace({ lat: 48.85, lon: 2.35 });
   const read = store.read();
@@ -418,7 +450,7 @@ test('devices are drawn in a ring around the declared place, flagged first', () 
   assert.ok(Math.abs(first.lat - place.lat) < 0.001);
   assert.ok(Math.abs(first.lon - place.lon) < 0.001);
 
-  const { devices } = parseNmapScan(NORMAL_SWEEP);
+  const { devices } = parseInventory(NORMAL_SWEEP);
   const bounds = {
     west: place.lon - 0.01,
     south: place.lat - 0.01,
@@ -433,7 +465,7 @@ test('devices are drawn in a ring around the declared place, flagged first', () 
 });
 
 test('no place, or a view that does not hold it, is an empty answer', async () => {
-  const { devices } = parseNmapScan(NORMAL_SWEEP);
+  const { devices } = parseInventory(NORMAL_SWEEP);
   const bounds = { west: 2.3, south: 48.8, east: 2.4, north: 48.9 };
   assert.deepEqual(devicesInBounds(devices, null, bounds).rows, []);
   assert.deepEqual(
@@ -450,7 +482,7 @@ test('no place, or a view that does not hold it, is an empty answer', async () =
 });
 
 test('the source answers from the store only, and never reaches the network', async () => {
-  const { devices } = parseNmapScan(NORMAL_SWEEP);
+  const { devices } = parseInventory(NORMAL_SWEEP);
   const store = { read: () => ({ devices, place: { lat: 48.85, lon: 2.35 } }) };
   const source = createDeviceSweepSource({ store });
   const originalFetch = globalThis.fetch;

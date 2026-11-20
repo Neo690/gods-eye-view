@@ -7,6 +7,7 @@ import {
   MAX_SPAN_DEG,
   clampViewport,
   normalisePoints,
+  pointOutlineWidth,
   pointsSignature,
 } from './records.js';
 
@@ -191,6 +192,9 @@ export function createViewportPointsLayer({
     _signature = signature;
     _collection.removeAll();
     const baseColor = Cesium.Color.fromCssColorString(colour);
+    // A driver capped at a 1px line would refuse the 2px outline and stop the
+    // scene, so the width follows what this scene can draw.
+    const outlineWidth = pointOutlineWidth(_viewer?.scene);
     for (const point of _points) {
       const drawn = pointColour
         ? Cesium.Color.fromCssColorString(pointColour(point) || colour)
@@ -201,7 +205,7 @@ export function createViewportPointsLayer({
         pixelSize,
         color: drawn,
         outlineColor: drawn.withAlpha(0.25),
-        outlineWidth: 2,
+        outlineWidth,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       });
     }

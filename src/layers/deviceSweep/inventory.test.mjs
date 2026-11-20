@@ -40,6 +40,19 @@ test('the row, the name and the voice manifest all know the layer', () => {
   assert.match(read('README.md'), /🔎 \*\*Device Sweep\*\*/);
 });
 
+test('the README row names every inventory the reader accepts', () => {
+  // scan.js reads five shapes: nmap's XML, normal and greppable reports, an
+  // ARP table and a DHCP lease list. A row that lists only nmap tells the
+  // operator not to try the file they already have, so the claim is checked
+  // here rather than left to drift.
+  const row = read('README.md')
+    .split('\n')
+    .find((line) => line.startsWith('| 🔎 **Device Sweep**'));
+  assert.ok(row, 'the README keeps a Device Sweep row');
+  for (const shape of ['XML', 'normal', 'greppable', 'arp -a', 'DHCP'])
+    assert.ok(row.includes(shape), `the row must name ${shape}`);
+});
+
 test('every module of the layer is declared in both layer packages', () => {
   const boundaries = read('scripts/package-boundaries.json');
   const modules = fs

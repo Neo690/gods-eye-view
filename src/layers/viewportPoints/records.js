@@ -10,6 +10,31 @@ export const MAX_SPAN_DEG = 6;
 /** Most points one response may contribute to the scene. */
 export const MAX_POINTS = 800;
 
+/** The outline the point layers are drawn with, in pixels. */
+export const POINT_OUTLINE_WIDTH = 2;
+
+/**
+ * The outline width a point may actually ask for.
+ *
+ * The layers are drawn with a 2px outline, but a driver may report a maximum
+ * aliased line width of 1 — software rendering does, and so do some Windows
+ * ANGLE configurations. Cesium rejects a wider command and stops rendering
+ * the whole scene, so the request is capped at what the scene says it can
+ * draw. Every normal GPU reports 10 or more, so the look does not change
+ * there; only a capped driver sees a thinner outline instead of no globe.
+ *
+ * @param {{maximumAliasedLineWidth?: number, context?: {maximumAliasedLineWidth?: number}}} [scene]
+ * @param {number} [preferred] Width the layers ask for when the driver allows it.
+ * @returns {number} At least 1, at most `preferred`.
+ */
+export function pointOutlineWidth(scene, preferred = POINT_OUTLINE_WIDTH) {
+  const reported = Number(
+    scene?.maximumAliasedLineWidth ?? scene?.context?.maximumAliasedLineWidth,
+  );
+  if (!Number.isFinite(reported) || reported <= 0) return preferred;
+  return Math.max(1, Math.min(preferred, Math.floor(reported)));
+}
+
 /** Longitude/latitude sanity, and a degenerate view is not a query. */
 export function normaliseBounds(value) {
   if (!value || typeof value !== 'object') return null;

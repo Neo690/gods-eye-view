@@ -1,5 +1,5 @@
 import { t } from '../../i18n/index.js';
-import { createSweepDialog, styleSweepField } from './dialog.js';
+import { createSweepDialog, labelledField, styleSweepField } from './dialog.js';
 import { DEVICE_SWEEP_NOTE_MAX, deviceSweepKey } from './store.js';
 
 /**
@@ -33,9 +33,6 @@ export function openNoteDialog({
   if (!dialog) return null;
   const doc = dialog.element.ownerDocument ?? documentRef;
 
-  const deviceField = doc.createElement('label');
-  deviceField.textContent = t('Device');
-  Object.assign(deviceField.style, { display: 'block' });
   const select = styleSweepField(doc.createElement('select'));
   for (const device of list) {
     const option = doc.createElement('option');
@@ -48,18 +45,16 @@ export function openNoteDialog({
         .join(' · ') || option.value;
     select.append(option);
   }
-  deviceField.append(select);
 
-  const noteField = doc.createElement('label');
-  noteField.textContent = t('Note');
-  Object.assign(noteField.style, { display: 'block' });
   const textarea = styleSweepField(doc.createElement('textarea'));
   textarea.rows = 3;
   textarea.maxLength = DEVICE_SWEEP_NOTE_MAX;
   textarea.value = notes[select.value] ?? '';
-  noteField.append(textarea);
 
-  dialog.body.append(deviceField, noteField);
+  dialog.body.append(
+    labelledField(doc, t('Device'), select),
+    labelledField(doc, t('Note'), textarea),
+  );
   dialog.button(t('SAVE NOTE'), { type: 'submit' });
 
   select.addEventListener('change', () => {

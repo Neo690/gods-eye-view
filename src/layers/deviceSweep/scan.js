@@ -1,5 +1,5 @@
 /**
- * Read an nmap scan the operator ran themselves into the devices on a LAN.
+ * Read an inventory of the operator's own network into the devices on it.
  *
  * The globe can draw a public camera because its provider publishes a
  * position for it. A device on the operator's own Wi-Fi publishes nothing, so
@@ -11,10 +11,15 @@
  * different format is asking them to remember a flag: nmap's XML report
  * (`-oX`), its normal report (no flag) and its greppable one (`-oG`), plus the
  * two inventories a desktop already has without installing anything — the ARP
- * table (`arp -a`, `/proc/net/arp`) and a router's DHCP lease list. Only hosts
- * a scan saw up are kept, and only ports it saw open; the table and lease
- * shapes carry no ports at all, so their verdicts rest on the MAC and the host
- * name alone.
+ * table (`arp -a` on Linux, macOS and Windows, `/proc/net/arp`) and a router's
+ * DHCP lease list. Only hosts a scan saw up are kept, and only ports it saw
+ * open; the table and lease shapes carry no ports at all, so their verdicts
+ * rest on the MAC and the host name alone.
+ *
+ * A table has to look like one. Its rows are an address and a MAC, so more than
+ * one such row is required: a file that happens to quote a single address and
+ * MAC is about something else, and reading it as an inventory would invent a
+ * device the operator never scanned for.
  *
  * What a device *is* stays a guess, and the verdict says so: a MAC prefix, an
  * open RTSP port and a hostname are evidence, not proof. A lamp can serve an
@@ -450,6 +455,26 @@ const looksLikeArp = (body) =>
   lines(body).some((line) => ARP_AT_LINE.test(line));
 
 /**
+ * The format a file claims and the hosts it yields, or `[null, []]`.
+ *
+ * Each shape is tried in the order it can be told apart, because each names
+ * itself: an nmap report says so, an ARP table has a line shape of its own, and
+ * a lease list is what is left — the one shape that has to prove it is a list.
+ * The Windows ARP table is the same three columns as a lease export, so it is
+ * read there too, and a real one carries its interface line and several rows.
+ */
+function readInventory(text) {
+  if (/<nmaprun\b/i.test(text)) return ['xml', xmlDevices(text)];
+  if (/^Nmap scan report for /m.test(text))
+    return ['normal', normalDevices(text)];
+  if (/^Host:\s/m.test(text)) return ['greppable', greppableDevices(text)];
+  if (ARP_PROC_COLUMNS.test(text.trim()) || looksLikeArp(text))
+    return ['arp', arpDevices(text)];
+  const leases = leaseDevices(text);
+  return leases.length > 1 ? ['leases', leases] : [null, []];
+}
+
+/**
  * Parse one inventory file into classified devices.
  *
  * @param {string} text File contents.
@@ -460,35 +485,12 @@ const looksLikeArp = (body) =>
  *   truncated: boolean,
  * }}
  */
-export function parseNmapScan(text, { limit = SCAN_MAX_DEVICES } = {}) {
+export function parseInventory(text, { limit = SCAN_MAX_DEVICES } = {}) {
   const body = String(text ?? '');
   const cap =
     Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : SCAN_MAX_DEVICES;
-  const empty = { format: null, devices: [], truncated: false };
-  let format = null;
-  let raw = [];
-  if (/<nmaprun\b/i.test(body)) {
-    format = 'xml';
-    raw = xmlDevices(body);
-  } else if (/^Nmap scan report for /m.test(body)) {
-    format = 'normal';
-    raw = normalDevices(body);
-  } else if (/^Host:\s/m.test(body)) {
-    format = 'greppable';
-    raw = greppableDevices(body);
-  } else if (ARP_PROC_COLUMNS.test(body.trim()) || looksLikeArp(body)) {
-    format = 'arp';
-    raw = arpDevices(body);
-  } else if (
-    lines(body).some(
-      (line) => IPV4_ANYWHERE.test(line) && MAC_ANYWHERE.test(line),
-    )
-  ) {
-    format = 'leases';
-    raw = leaseDevices(body);
-  } else {
-    return empty;
-  }
+  const [format, raw] = readInventory(body);
+  if (!format) return { format: null, devices: [], truncated: false };
 
   const byKey = new Map();
   let truncated = false;

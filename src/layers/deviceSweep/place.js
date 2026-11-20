@@ -1,7 +1,7 @@
 import * as Cesium from 'cesium';
 import { isPointerFree } from '../../data/inputOwnership.js';
 import { t } from '../../i18n/index.js';
-import { createSweepDialog, styleSweepField } from './dialog.js';
+import { createSweepDialog, labelledField, styleSweepField } from './dialog.js';
 
 /**
  * Placing the sweep without a location fix.
@@ -164,9 +164,6 @@ export function openCoordinateDialog({
   if (!dialog) return null;
   const doc = dialog.element.ownerDocument ?? documentRef;
 
-  const field = doc.createElement('label');
-  field.textContent = t('Coordinates');
-  Object.assign(field.style, { display: 'block' });
   const input = styleSweepField(doc.createElement('input'));
   input.type = 'text';
   input.value = coordinatesText(place);
@@ -174,8 +171,7 @@ export function openCoordinateDialog({
   input.autocomplete = 'off';
   input.spellcheck = false;
   input.inputMode = 'decimal';
-  field.append(input);
-  dialog.body.append(field);
+  dialog.body.append(labelledField(doc, t('Coordinates'), input));
 
   dialog.button(t('SET PLACE'), { type: 'submit' });
 

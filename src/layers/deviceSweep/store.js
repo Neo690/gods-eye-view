@@ -188,6 +188,11 @@ export function createDeviceSweepStore({
     return { bytes, importedAt: payload.at };
   }
 
+  /** Write the payload already read, with one part replaced. */
+  function save(current, patch) {
+    return persist({ ...current, ...patch });
+  }
+
   /**
    * The whole stored payload, or an empty one. A half-written or hand-edited
    * value is not worth crashing a layer over: it reads as "no import" and the
@@ -268,13 +273,7 @@ export function createDeviceSweepStore({
         firstSeen: Number.isFinite(previous) ? previous : at,
       });
     }
-    const { bytes } = persist({
-      devices: kept,
-      name,
-      place: current.place,
-      importedAt: at,
-      notes: current.notes,
-    });
+    const { bytes } = save(current, { devices: kept, name, importedAt: at });
     return {
       bytes,
       importedAt: at,
@@ -293,13 +292,7 @@ export function createDeviceSweepStore({
     const current = read();
     const next = readPlace(place);
     try {
-      persist({
-        devices: current.devices,
-        place: next,
-        importedAt: current.importedAt,
-        name: current.name,
-        notes: current.notes,
-      });
+      save(current, { place: next });
     } catch {
       // A broken store already reads as empty; the place is not worth a crash.
     }
@@ -325,18 +318,10 @@ export function createDeviceSweepStore({
     if (value) notes[id] = value;
     else delete notes[id];
     try {
-      persist({
-        devices: current.devices,
-        place: current.place,
-        importedAt: current.importedAt,
-        name: current.name,
-        notes,
-      });
+      save(current, { notes });
     } catch {
       return current.notes;
     }
-    for (const device of current.devices)
-      if (deviceSweepKey(device) === id) device.note = value;
     return notes;
   }
 
@@ -353,7 +338,7 @@ export function createDeviceSweepStore({
       return;
     }
     try {
-      persist({ devices: [], place: current.place });
+      save(current, { devices: [], notes: {} });
     } catch {
       // Nothing to do: a broken store already reads as empty.
     }

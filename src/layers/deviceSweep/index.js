@@ -1,7 +1,6 @@
 import { formatNumber, msg, t } from '../../i18n/index.js';
 import { createViewportPointsLayer } from '../viewportPoints/engine.js';
-// classifyDevice and vendorForMac are re-exported below, not used here.
-import { SCAN_MAX_DEVICES, parseNmapScan } from './scan.js';
+import { SCAN_MAX_DEVICES, parseInventory } from './scan.js';
 import { openNoteDialog } from './notes.js';
 import {
   DEVICE_SWEEP_COLOURS,
@@ -26,7 +25,7 @@ import { createDeviceSweepStore } from './store.js';
 export {
   SCAN_MAX_DEVICES,
   classifyDevice,
-  parseNmapScan,
+  parseInventory,
   vendorForMac,
 } from './scan.js';
 export {
@@ -56,7 +55,6 @@ export {
   openCoordinateDialog,
   parseCoordinates,
 } from './place.js';
-export { openNoteDialog } from './notes.js';
 export {
   DEVICE_SWEEP_COLOURS,
   DEVICE_SWEEP_LEGEND,
@@ -65,6 +63,7 @@ export {
   deviceSweepRow,
   deviceVerdictLabel,
 } from './presentation.js';
+export { openNoteDialog };
 
 /** A fix as the two numbers the ring is drawn around, or null. */
 function placeFrom(position) {
@@ -179,7 +178,7 @@ export function createDeviceSweepLayer({
   async function importFile(file) {
     try {
       const text = await file?.text?.();
-      const parsed = parseNmapScan(String(text ?? ''));
+      const parsed = parseInventory(String(text ?? ''));
       if (!parsed.format) {
         feedback = t('That file is not an inventory this layer reads');
       } else if (!parsed.devices.length) {
@@ -189,19 +188,23 @@ export function createDeviceSweepLayer({
           devices: parsed.devices,
           name: file.name,
         });
-        feedback =
+        const suffix = [
+          added
+            ? t('{count} new since your last scan', {
+                count: formatNumber(added),
+              })
+            : '',
+          parsed.truncated
+            ? t('capped at {limit}', { limit: SCAN_MAX_DEVICES })
+            : '',
+        ].filter(Boolean);
+        feedback = [
           t('Imported {count} devices from {name}', {
             count: formatNumber(parsed.devices.length),
             name: file.name || t('the selected file'),
-          }) +
-          (added
-            ? ` · ${t('{count} new since your last scan', {
-                count: formatNumber(added),
-              })}`
-            : '') +
-          (parsed.truncated
-            ? ` · ${t('capped at {limit}', { limit: SCAN_MAX_DEVICES })}`
-            : '');
+          }),
+          ...suffix,
+        ].join(' · ');
       }
     } catch (error) {
       console.warn('[Data:device-sweep] import failed:', error);
@@ -237,7 +240,7 @@ export function createDeviceSweepLayer({
       placePicker = placePickerFactory({
         getViewer: () => viewer,
         onPick: (place) => {
-          pickingPlace = false;
+          stopPick();
           setPlaceFrom(place);
         },
         onMiss: () => {
@@ -247,6 +250,12 @@ export function createDeviceSweepLayer({
       });
     }
     return placePicker;
+  }
+
+  /** Drop an armed globe click: the layer holds no pointer listener idle. */
+  function stopPick() {
+    placePicker?.disarm();
+    pickingPlace = false;
   }
 
   function armPlacePick() {
@@ -260,8 +269,7 @@ export function createDeviceSweepLayer({
   }
 
   function disarmPlacePick() {
-    placePicker?.disarm();
-    pickingPlace = false;
+    stopPick();
     feedback = '';
     refreshPanel();
   }
@@ -361,15 +369,13 @@ export function createDeviceSweepLayer({
   };
   const disableLayer = layer.disable.bind(layer);
   layer.disable = () => {
-    placePicker?.disarm();
-    pickingPlace = false;
+    stopPick();
     disableLayer();
   };
   const destroyLayer = layer.destroy.bind(layer);
   layer.destroy = (scene) => {
-    placePicker?.disarm();
+    stopPick();
     placePicker = null;
-    pickingPlace = false;
     viewer = null;
     destroyLayer(scene);
   };

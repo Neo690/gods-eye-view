@@ -46,14 +46,30 @@ export function styleSweepField(node) {
 }
 
 /**
+ * A labelled field, the shape both dialogs use: the label wraps the control,
+ * so clicking the text focuses it and no id is needed.
+ *
+ * @param {Document} doc
+ * @param {string} label
+ * @param {HTMLElement} node
+ * @returns {HTMLLabelElement}
+ */
+export function labelledField(doc, label, node) {
+  const field = doc.createElement('label');
+  field.textContent = label;
+  Object.assign(field.style, { display: 'block' });
+  field.append(node);
+  return field;
+}
+
+/**
  * @param {object} options
  * @param {string} options.title Shown as the heading and the accessible name.
  * @param {Document} [options.documentRef] Test seam.
  * @returns {{element: HTMLDialogElement, form: HTMLFormElement,
  *   body: HTMLElement, footer: HTMLElement, status: HTMLElement,
  *   button: (label: string, options?: {type?: string}) => HTMLButtonElement,
- *   cancel: HTMLButtonElement, close: () => void}|null} null where there is
- *   no document (tests, SSR).
+ *   close: () => void}|null} null where there is no document (tests, SSR).
  */
 export function createSweepDialog({
   title,
@@ -135,11 +151,10 @@ export function createSweepDialog({
 
   // Cancel is the dialog's own, wired once here: a dialog whose cancel button
   // does nothing is a form the operator can only leave with Escape.
-  const cancel = button(t('Cancel'));
-  cancel.addEventListener('click', close);
+  button(t('Cancel')).addEventListener('click', close);
 
   element.addEventListener('cancel', cancelDialog);
   doc.body.append(element);
   element.showModal?.();
-  return { element, form, body, footer, status, button, cancel, close };
+  return { element, form, body, footer, status, button, close };
 }
