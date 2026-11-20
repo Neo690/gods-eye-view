@@ -47,6 +47,7 @@ import { createApplicationOsmPlaces } from './layers/osmPlaces.js';
 import { createApplicationIotSensors } from './layers/iotSensors.js';
 import { createApplicationNetmon } from './layers/netmon.js';
 import { createPrivateWifiLayer } from '../layers/privateWifi/index.js';
+import { createDeviceSweepLayer } from '../layers/deviceSweep/index.js';
 import { createApplicationGhostMaps } from './layers/ghostMaps.js';
 import { createApplicationCables } from './layers/submarineCables.js';
 import { createApplicationStreetLevel } from './layers/streetLevel.js';
@@ -64,6 +65,9 @@ export const LOCAL_ONLY_LAYER_METADATA = Object.freeze([
   // An imported wardrive is one operator's own file: a share link must never
   // imply that the recipient has it, and it must never be restored for them.
   Object.freeze({ id: 'private-wifi', disposition: 'local-only' }),
+  // A scan of someone's own network is that operator's file, and the place it
+  // is drawn at is theirs: neither belongs in a link someone else opens.
+  Object.freeze({ id: 'device-sweep', disposition: 'local-only' }),
 ]);
 
 /** Serialization metadata for every layer the application catalog constructs. */
@@ -169,6 +173,7 @@ export function createApplicationCatalog({
         createApplicationIotSensors(),
         createApplicationNetmon(),
         createPrivateWifiLayer(),
+        createDeviceSweepLayer(),
         createApplicationGhostMaps({ source: sources['s2-ghostmaps'] }),
         createApplicationAlpr({ surface, source: sources.alpr }),
         createApplicationStreetLevel({

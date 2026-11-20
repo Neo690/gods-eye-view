@@ -60,6 +60,9 @@ export const LAYER_NAME_KEYS = Object.freeze({
   'iot-sensors': msg('Connected Objects'),
   netmon: msg('Network Monitor'),
   'private-wifi': msg('Private Wi-Fi'),
+  'device-sweep': msg('Device Sweep'),
+  'conflict-events': msg('Conflict events (7d)'),
+  insider: msg('Insider filings (Form 4)'),
   'osm-places': msg('OSM Places'),
 });
 

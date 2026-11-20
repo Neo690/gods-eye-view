@@ -53,8 +53,10 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // hint for the same layers the same way. Camera advisories extends the
     // manifest with its own aliases and noQuery hint. GhostMaps extends the
     // generated layer enums and the spoken-name map. The mapped OSM places
-    // layer extends it too, with its own aliases and noQuery hint.
-    'f313213819e5ea939529b073fd7a070e4c9c6623adfc676d285a89d247c3105e',
+    // layer extends it too, with its own aliases and noQuery hint. The
+    // conflict-events, insider and device-sweep layers each add their own
+    // aliases and noQuery hint.
+    'dff266625168c81259d66a5dfb88b6e90851233ae86b767196275fc40424fdfc',
   );
 });
 

@@ -3894,6 +3894,7 @@ its criteria cannot be silently ignored.
 | Fire Perimeters 🔥 | NIFC WFIGS current interagency perimeters (keyless, paged past the 2000-record cap); InciWeb catalog + incident page origin and update time checks for verified incident-page links | `src/layers/perimeters/` via `src/app/layers/perimeters.js` | `/api/fire-perimeters` + `/api/fire-perimeters/inciweb/*` | 5 min (server caches: catalog 1 h; publication 30 min) |
 | Radiation ☢ (`radiation`) | Ambient gamma dose rate: BfS ODL (Germany, hourly, keyless), Health Canada FPSN (keyless), plus Safecast, radmon.org and uRADMonitor volunteer Geiger counts converted to µSv/h and marked estimated — five networks in one aggregated snapshot, each row tagged with its network (uRADMonitor reads only the units of the account in `URADMONITOR_USER_ID`/`URADMONITOR_USER_HASH`, so it is skipped when those keys are unset) | `src/layers/radiation/` via `src/app/layers/radiation.js` | `/api/radiation` | 10 min (server cache 5 min; a failed network keeps serving its last snapshot for up to 1 h, flagged degraded) |
 | Network Monitor 📡 (`netmon`) | Operator-declared nodes in `GEV_NETMON_TARGETS` (`label\|host\|port\|lat\|lon`), probed by this app's own server with a plain, payload-free TCP connect — no third-party upstream; positions are declared, never resolved from host names | `src/layers/netmon/` via `src/app/layers/netmon.js` | `/api/netmon` | 60s poll (server probe deadline 5 s; server cache 30 s, one in-flight refresh) |
+| Device Sweep 🔎 (`device-sweep`) | An inventory the operator ran themselves — nmap XML, normal or greppable, an ARP table (`arp -a`, `/proc/net/arp`) or a router DHCP lease list — read in the page: maker from a shortlist checked against the IEEE MA-L registry, RTSP and recorder ports, camera-like host names, and one marker per device around the operator's own place, ranked flagged-first; the place comes from MY LOCATION, one click on the globe or typed coordinates, and the markers are a schematic ring, never a room plan | `src/layers/deviceSweep/` via `src/app/layers/constructCatalog.js` | — (nothing leaves the page) | on import, on a place change, and on camera movement |
 
 A railway station card opens on click and names only what the map records —
 operator, network and platform count appear when present, absent instead of
@@ -3977,6 +3978,25 @@ cannot quietly recolour the map.
 Neither colour says more than that. Probe only nodes you own or have explicit
 permission to monitor — using it otherwise is misuse, not a supported
 configuration. See [method and limits](../DATA_SOURCES.md#network-monitor-your-own-nodes-apinetmon).
+
+Device Sweep (`src/layers/deviceSweep/`) is the inverse of every other camera
+layer: it reads an inventory of the operator's own network and asks no provider
+anything. The file stays in the page — the layer is registered `local-only`, so
+no share link can carry it — and the verdicts are computed from the file's own
+evidence: a MAC prefix from a shortlist re-checked against the IEEE MA-L
+registry, an open RTSP or recorder port, a camera-like host name. ARP tables and
+lease exports carry no ports, so their verdicts rest on the MAC and the host
+name alone; a prefix that belongs to a radio module (Espressif, Tuya) names no
+maker at all, because the same chip sits in a lamp and in a camera. A second
+import keeps the first time each device was seen (keyed by MAC, else address)
+and the row names how many are new. A device can carry a note the operator wrote,
+shown in its hover tip; it follows that device across imports and leaves with the
+scan. The place the ring is drawn around can come from the browser's location,
+one click on the globe, or typed coordinates (latitude first, a decimal comma
+accepted), and all three write the same stored place — a refused location
+permission no longer means an empty layer. The positions are schematic: a LAN
+device has no geography, and the row says so. Scan only networks you are
+authorized to use.
 
 Street Level is a docked, collapsible right-rail panel (`#street-level-panel`,
 layer token `0`, option owner `street-level`, panel `ui` token `t`) that starts

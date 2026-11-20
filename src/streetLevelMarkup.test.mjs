@@ -4,6 +4,11 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { expandApplicationHtml } from '../build/application-html.js';
+import {
+  elementInner,
+  queryElement,
+  queryElements,
+} from './testSupport/htmlMarkup.mjs';
 import { readStylesheet } from './testSupport/readStylesheet.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -16,23 +21,37 @@ const panelChrome = read('src/ui/panelChrome.js');
 const layoutController = read('src/ui/panelLayoutController.js');
 
 test('Street Level is a collapsible right-rail panel that starts collapsed', () => {
-  assert.match(
-    html,
-    /<div id="street-level-panel" class="panel-collapsible collapsed" data-panel-id="street-level-panel">/,
+  // Tags are read, not spelled: Prettier wraps attributes onto their own
+  // lines, and that must not read as a template change.
+  const panel = queryElement(html, { id: 'street-level-panel' });
+  assert.equal(panel?.tag, 'div');
+  assert.deepEqual(panel.classes, ['panel-collapsible', 'collapsed']);
+  assert.equal(panel.attrs['data-panel-id'], 'street-level-panel');
+
+  assert.ok(
+    queryElement(html, {
+      tag: 'button',
+      classes: ['panel-collapse-btn'],
+      attrs: { 'data-collapse-target': 'street-level-panel' },
+    }),
+    'the collapse button targets the panel',
   );
-  assert.match(
-    html,
-    /<button class="panel-collapse-btn" data-collapse-target="street-level-panel"/,
+
+  assert.ok(
+    queryElements(html, { tag: 'span', classes: ['panel-title'] }).some(
+      (span) => elementInner(html, span) === 'STREET LEVEL',
+    ),
+    'the panel is titled',
   );
-  assert.match(
-    html,
-    /<span class="panel-title" data-i18n>STREET LEVEL<\/span>/,
-  );
+
   // Provider-neutral header: no vendor mark; the inner restores its scroll.
   assert.doesNotMatch(html, /sl-mark|mly-mark/);
-  assert.match(
-    html,
-    /<div class="street-level-panel-inner" data-rail-scroller>/,
+  assert.ok(
+    queryElement(html, {
+      classes: ['street-level-panel-inner'],
+      attrs: { 'data-rail-scroller': '' },
+    }),
+    'the panel body is the rail scroller',
   );
   assert.doesNotMatch(
     html,
@@ -58,16 +77,20 @@ test('the panel is registered with panel chrome, cockpit entry and the right rai
 });
 
 test('the key gate holds every filter, with the error line outside it', () => {
-  const start = html.indexOf('<fieldset id="sl-controls"');
-  assert.ok(start > 0);
-  const gate = html.slice(start, html.indexOf('</fieldset>', start));
-  assert.match(gate, /data-sl-pano="all"/);
-  assert.match(gate, /id="sl-since"/);
-  assert.ok(html.indexOf('id="sl-error"') < start);
+  const gate = queryElement(html, { id: 'sl-controls' });
+  assert.ok(gate, 'the key gate is in the markup');
+  assert.equal(gate.tag, 'fieldset');
+  const inner = elementInner(html, gate);
+  assert.match(inner, /data-sl-pano="all"/);
+  assert.match(inner, /id="sl-since"/);
+  assert.ok(
+    html.indexOf('id="sl-error"') < gate.start,
+    'the error line sits above the gate',
+  );
   // The chips stay outside the gate, so their key tooltip is reachable.
-  assert.match(html, /<div id="sl-provider-chips" class="sl-chips"><\/div>/);
-  assert.doesNotMatch(gate, /sl-provider-chips/);
-  assert.match(html, /id="sl-error"[^>]*role="alert"/);
+  assert.ok(queryElement(html, { id: 'sl-provider-chips' }));
+  assert.doesNotMatch(inner, /sl-provider-chips/);
+  assert.equal(queryElement(html, { id: 'sl-error' }).attrs.role, 'alert');
 });
 
 test('each radiogroup is one tab stop, on its checked button', () => {
@@ -77,7 +100,7 @@ test('each radiogroup is one tab stop, on its checked button', () => {
   ]) {
     const radios = [
       ...html.matchAll(
-        new RegExp(`<button [^>]*${group}="([a-z]+)"[^>]*>`, 'g'),
+        new RegExp(`<button\\s[^>]*${group}="([a-z]+)"[^>]*>`, 'g'),
       ),
     ];
     assert.ok(radios.length >= 2, group);

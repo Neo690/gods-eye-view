@@ -650,6 +650,29 @@ const layers = [
     context: false,
     noQuery: "one operator's imported file; never shared or queried",
   },
+  {
+    id: 'conflict-events',
+    aliases: ['conflict events', 'acled', 'armed conflict', 'conflict toll'],
+    context: false,
+    noQuery: 'the deadliest events are listed in the layer panel',
+  },
+  {
+    id: 'insider',
+    aliases: ['insider filings', 'form 4', 'sec filings'],
+    context: false,
+    noQuery: 'the newest filings are listed in the layer panel',
+  },
+  {
+    id: 'device-sweep',
+    aliases: ['device sweep', 'hidden camera', 'rogue device', 'camera sweep'],
+    fr: ['balayage des appareils', 'caméra cachée', 'appareil intrus'],
+    es: ['barrido de dispositivos', 'cámara oculta', 'dispositivo intruso'],
+    ru: ['обход устройств', 'скрытая камера', 'постороннее устройство'],
+    zh: ['设备扫描', '隐藏摄像头', '可疑设备'],
+    ar: ['مسح الأجهزة', 'كاميرا خفية', 'جهاز دخيل'],
+    context: false,
+    noQuery: "one operator's imported scan; never shared or queried",
+  },
 ];
 
 /**

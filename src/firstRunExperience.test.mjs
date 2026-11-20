@@ -1060,10 +1060,12 @@ test('the voice TOOL SCHEMA matches the pinned contract — the mission mapping 
   // alias hints to their descriptions. Camera advisories extends the manifest
   // with its own aliases and noQuery hint. GhostMaps adds its generated layer
   // enum value and spoken aliases on top of both, and OSM Places does the same.
-  assert.equal(block.length, 33038, 'serialized tool schema length drifted');
+  // The conflict-events, insider and device-sweep layers add their own aliases
+  // and noQuery hints to the generated layer enums.
+  assert.equal(block.length, 33316, 'serialized tool schema length drifted');
   assert.equal(
     crypto.createHash('sha256').update(block).digest('hex'),
-    'ac0f4e1bb486f4d7e2a5b1b7c373056bca38d5dd870215bc2a5c95fdf2c9243e',
+    'ab2015a9754ce95788225b99c00fb642ab3fd3128230fd2a351116175554fa05',
     'the first-run missions must ride EXISTING tools: no schema edit, no cache bust',
   );
   const instructions = fs.readFileSync(

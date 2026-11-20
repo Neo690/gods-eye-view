@@ -61,6 +61,12 @@ jobs:
       - name: Check adopted formatting
         run: npm run format:check
 
+      # The code is the source of every message key, so a string added without
+      # its five translations only fails here: a review that never opens a
+      # locale file would otherwise merge an English-only screen.
+      - name: Check translation catalogs
+        run: npm run i18n
+
       - name: Check package boundaries
         run: npm run check:boundaries
 

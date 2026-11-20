@@ -81,6 +81,7 @@ const PANEL_GROUPS = [
       'iot-sensors',
       'netmon',
       'private-wifi',
+      'device-sweep',
     ],
   },
   {

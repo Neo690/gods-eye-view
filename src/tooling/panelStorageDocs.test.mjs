@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { queryElement } from '../testSupport/htmlMarkup.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -81,9 +82,13 @@ test('the documented outcomes hold: default, stored open, stored shut, and a sha
     path.join(root, 'src/ui/templates/layer-panels.html'),
     'utf8',
   );
-  assert.match(
-    html,
-    /<div id="cctv-panel" class="panel-collapsible collapsed"/,
+  // Read the tags: Prettier may wrap a tag's attributes onto separate lines,
+  // and that must not look like a change to the panel's default.
+  const cctvPanel = queryElement(html, { id: 'cctv-panel' });
+  assert.equal(cctvPanel?.tag, 'div', 'the CCTV panel is in the markup');
+  assert.deepEqual(
+    cctvPanel.classes,
+    ['panel-collapsible', 'collapsed'],
     'the CCTV panel starts collapsed in the markup',
   );
 
