@@ -516,3 +516,9 @@ export function parseInventory(text, { limit = SCAN_MAX_DEVICES } = {}) {
 
   return { format, devices: [...byKey.values()], truncated };
 }
+
+/**
+ * The reader's earlier name, kept for callers that imported it while it only
+ * understood nmap. Same function, same result.
+ */
+export const parseNmapScan = parseInventory;

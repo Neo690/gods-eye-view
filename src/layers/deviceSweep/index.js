@@ -26,6 +26,7 @@ export {
   SCAN_MAX_DEVICES,
   classifyDevice,
   parseInventory,
+  parseNmapScan,
   vendorForMac,
 } from './scan.js';
 export {
