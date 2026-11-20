@@ -1,6 +1,6 @@
-import { formatNumber, msg, t } from '../../i18n/index.js';
+import { msg, t } from '../../i18n/index.js';
 import { createViewportPointsLayer } from '../viewportPoints/engine.js';
-import { SCAN_MAX_DEVICES, parseInventory } from './scan.js';
+import { importScanFile } from './importScan.js';
 import { openNoteDialog } from './notes.js';
 import {
   DEVICE_SWEEP_COLOURS,
@@ -171,49 +171,9 @@ export function createDeviceSweepLayer({
   let placePicker = null;
   let pickingPlace = false;
 
-  /**
-   * Read one picked file into the store. Everything that can go wrong here is
-   * the operator's file, not the network, so the row reports it in its own
-   * line instead of marking the feed degraded.
-   */
+  /** Read the picked file, then let the row show what it did. */
   async function importFile(file) {
-    try {
-      const text = await file?.text?.();
-      const parsed = parseInventory(String(text ?? ''));
-      if (!parsed.format) {
-        feedback = t('That file is not an inventory this layer reads');
-      } else if (!parsed.devices.length) {
-        feedback = t('No devices found in that scan');
-      } else {
-        const { added } = store.write({
-          devices: parsed.devices,
-          name: file.name,
-        });
-        const suffix = [
-          added
-            ? t('{count} new since your last scan', {
-                count: formatNumber(added),
-              })
-            : '',
-          parsed.truncated
-            ? t('capped at {limit}', { limit: SCAN_MAX_DEVICES })
-            : '',
-        ].filter(Boolean);
-        feedback = [
-          t('Imported {count} devices from {name}', {
-            count: formatNumber(parsed.devices.length),
-            name: file.name || t('the selected file'),
-          }),
-          ...suffix,
-        ].join(' · ');
-      }
-    } catch (error) {
-      console.warn('[Data:device-sweep] import failed:', error);
-      feedback =
-        error?.code === 'too-large' || error?.code === 'unavailable'
-          ? t('The scan is too large for this device')
-          : t('That scan could not be saved');
-    }
+    feedback = await importScanFile({ file, store });
     refreshPanel();
   }
 
