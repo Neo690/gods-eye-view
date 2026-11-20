@@ -19,6 +19,8 @@
   "Board cleared.": "Ardoise effacée.",
   "{owner} is using the pointer — close it first.": "{owner} utilise le pointeur — fermez-le d'abord.",
   "{label} · Detailed outline unavailable": "{label} · contour détaillé indisponible",
+  "Startup is still at “{stage}” after {seconds} s. Reload to try again; the console stays usable.": "Le démarrage est toujours sur « {stage} » après {seconds} s. Rechargez pour réessayer ; la console reste utilisable.",
+  "no answer within {seconds} s": "pas de réponse en {seconds} s",
   "Flying to Austin, TX...": "Vol vers Austin, TX...",
   "Restoring shared view...": "Restauration de la vue partagée...",
   "Configuring viewer...": "Configuration de la visionneuse...",

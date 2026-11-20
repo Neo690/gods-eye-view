@@ -39,6 +39,8 @@
   "Board cleared.": "تم مسح اللوحة.",
   "{owner} is using the pointer — close it first.": "{owner} يستخدم المؤشر — أغلقه أولاً.",
   "{label} · Detailed outline unavailable": "{label} · المخطط التفصيلي غير متاح",
+  "Startup is still at “{stage}” after {seconds} s. Reload to try again; the console stays usable.": "ما زال التشغيل عند «{stage}» بعد {seconds} ث. أعد التحميل للمحاولة مجددًا؛ تبقى لوحة التحكم قابلة للاستخدام.",
+  "no answer within {seconds} s": "لا ردّ خلال {seconds} ث",
   "Flying to Austin, TX...": "الطيران إلى أوستن، تكساس...",
   "Restoring shared view...": "استعادة العرض المشترك...",
   "Configuring viewer...": "تهيئة العارض...",

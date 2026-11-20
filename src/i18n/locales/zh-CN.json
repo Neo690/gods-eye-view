@@ -29,6 +29,8 @@
   "Board cleared.": "画板已清除。",
   "{owner} is using the pointer — close it first.": "{owner} 正在使用指针——请先关闭它。",
   "{label} · Detailed outline unavailable": "{label} · 无法获取详细轮廓",
+  "Startup is still at “{stage}” after {seconds} s. Reload to try again; the console stays usable.": "启动仍停在「{stage}」，已 {seconds} 秒。请重新加载重试；控制台仍可使用。",
+  "no answer within {seconds} s": "{seconds} 秒内无响应",
   "Flying to Austin, TX...": "正在飞往德克萨斯州奥斯汀…",
   "Restoring shared view...": "正在恢复分享视图…",
   "Configuring viewer...": "正在配置视图…",

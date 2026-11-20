@@ -14,6 +14,8 @@
   "Sentinel: {state}": "Часовой: {state}",
   "Global disasters source unavailable": "Источник мировых катастроф недоступен",
   "{title} · {when}": "{title} · {when}",
+  "Startup is still at “{stage}” after {seconds} s. Reload to try again; the console stays usable.": "Запуск всё ещё на шаге «{stage}» после {seconds} с. Перезагрузите страницу, чтобы повторить; пульт остаётся доступным.",
+  "no answer within {seconds} s": "нет ответа за {seconds} с",
   "Flying to Austin, TX...": "Перелёт в Остин, Техас...",
   "Restoring shared view...": "Восстановление общего вида...",
   "Initializing systems...": "Инициализация систем...",

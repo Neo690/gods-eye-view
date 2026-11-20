@@ -3,22 +3,32 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-const source = readFileSync(
-  new URL('../app/startupChrome.js', import.meta.url),
-  'utf8',
-)
-  .replace(/^import .*;\n/gm, '')
-  .replace('export function', 'function');
+// Neither module can be imported here: both pull in browser code. Their text is
+// evaluated in one context instead, so the chrome calls the real withinBudget
+// of startupGuard.js on the fixture's clock rather than a stand-in for it.
+function load(path) {
+  return readFileSync(new URL(path, import.meta.url), 'utf8')
+    .replace(/^import .*;\n/gm, '')
+    .replace(/^export /gm, '');
+}
+
+const guardSource = load('../app/startupGuard.js');
+const chromeSource = load('../app/startupChrome.js');
 
 function fixture() {
   const timers = new Map();
   const listeners = new Map();
   const events = [];
+  const logs = [];
   let restored;
   let nextTimer = 0;
   const controller = new AbortController();
   const context = {
-    console,
+    console: {
+      error: console.error,
+      warn: (message) => logs.push(String(message)),
+    },
+    t: (message) => message,
     setTimeout(fn, delay) {
       const id = ++nextTimer;
       timers.set(id, { fn, delay });
@@ -36,7 +46,8 @@ function fixture() {
     },
   };
   vm.createContext(context);
-  vm.runInContext(source, context);
+  vm.runInContext(guardSource, context);
+  vm.runInContext(chromeSource, context);
   const stop = context.startApplicationChrome({
     initializeSettings: context.initKeySetup,
     loadingScreen: {
@@ -55,9 +66,11 @@ function fixture() {
   return {
     events,
     listeners,
+    logs,
     stop,
     restored,
     controller,
+    budgetMs: vm.runInContext('RESTORE_BUDGET_MS', context),
     fire(delay) {
       for (const [id, task] of timers) {
         if (task.delay === delay) {
@@ -65,6 +78,9 @@ function fixture() {
           task.fn();
         }
       }
+    },
+    delays() {
+      return [...timers.values()].map((task) => task.delay);
     },
     timers,
   };
@@ -86,6 +102,37 @@ test('welcome waits for restoration, minimum delay, and the cover transition', a
   assert.deepEqual(f.events, ['hidden', 'welcome']);
   await f.stop();
   assert.deepEqual(f.events.slice(-2), ['welcome:destroy', 'settings:destroy']);
+  assert.equal(f.timers.size, 0);
+});
+
+test('a restoration that never answers no longer holds the cover', async () => {
+  const f = fixture();
+  assert.equal(f.budgetMs, 10000, 'restoration has its own deadline');
+  f.fire(1000);
+  await flush();
+  assert.deepEqual(f.events, [], 'the cover still waits inside the budget');
+  assert.ok(
+    f.delays().includes(f.budgetMs),
+    'the deadline is armed while restoration runs',
+  );
+
+  f.fire(f.budgetMs);
+  await flush();
+  assert.deepEqual(
+    f.events,
+    ['hidden'],
+    'the cover comes down on the deadline',
+  );
+  assert.match(
+    f.logs.join('\n'),
+    new RegExp(`restoration still pending after ${f.budgetMs} ms`),
+  );
+
+  // An answer that lands afterwards changes nothing on screen and cannot throw.
+  f.restored();
+  await flush();
+  assert.deepEqual(f.events, ['hidden']);
+  await f.stop();
   assert.equal(f.timers.size, 0);
 });
 

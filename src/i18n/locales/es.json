@@ -17,6 +17,8 @@
   "Initializing photorealistic world...": "Inicializando el mundo fotorrealista...",
   "Configuring viewer...": "Configurando el visor...",
   "Google 3D Tiles unavailable ({detail}). Loading the keyless globe...": "Google 3D Tiles no disponibles ({detail}). Cargando el globo sin clave...",
+  "Startup is still at “{stage}” after {seconds} s. Reload to try again; the console stays usable.": "El inicio sigue en «{stage}» tras {seconds} s. Recarga para reintentar; la consola sigue disponible.",
+  "no answer within {seconds} s": "sin respuesta en {seconds} s",
   "Flying to Austin, TX...": "Volando a Austin, TX...",
   "Restoring shared view...": "Restaurando la vista compartida...",
   "LOADING LIVE DATA": "CARGANDO DATOS EN VIVO",

@@ -1935,6 +1935,22 @@ tools through the reusable application lifecycle. Map defaults, layer order,
 share restoration, voice setup and the running debug handle retain their behavior.
 The welcome card still waits for restoration and the loading-cover transition.
 
+Startup waits are bounded. The photoreal tileset load gets 12 seconds and the
+imagery stack 15; a provider that never answers is named on the cover
+(`Google 3D Tiles unavailable (no answer within 12 s). Loading the keyless
+globe...`) and the degraded path is taken instead of holding the startup behind
+it. A result that lands after its budget is destroyed rather than leaked, and a
+late failure is dropped. A startup that is still running after 30 seconds names
+the step it stopped at on the cover and lifts it, so the console behind a stall
+is usable rather than frozen. A page whose module graph never loads runs no
+code, so nothing can speak for it; reloading is the only answer there.
+
+The welcome card's wait for style restoration is bounded separately. It begins
+after the application publishes `ready`, so the startup guard has already stood
+down, and a share link that never answers used to leave the cover up in front of
+a finished console. Restoration now gets 10 seconds before the cover comes down
+anyway; a restoration that lands afterwards still applies its styles.
+
 Startup failure cleans up acquired resources. Explicit application destruction
 aborts construction, cancels pending playback/annotations and delayed welcome UI,
 then releases controls, layers and the viewer. Destruction is terminal; the

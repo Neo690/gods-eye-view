@@ -1981,6 +1981,7 @@
       "src/app/sourceComposition.js",
       "src/app/sources.js",
       "src/app/startupChrome.js",
+      "src/app/startupGuard.js",
       "src/app/stateChannel.js",
       "src/app/surfaceServices.js",
       "src/app/tools.js",

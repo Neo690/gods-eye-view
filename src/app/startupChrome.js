@@ -1,4 +1,16 @@
 import { initFirstRunExperience } from '../firstRunExperience.js';
+import { withinBudget } from './startupGuard.js';
+
+/**
+ * How long the loading cover waits for the style restoration.
+ *
+ * This wait begins after the application has published `ready`, so the startup
+ * guard in startupGuard.js has already stood down: nothing else bounds it. A
+ * share link or a style provider that never answers would otherwise leave the
+ * cover up in front of a console that is fully built. Restoration reads local
+ * storage first, so anything past this budget is a stall, not slow work.
+ */
+export const RESTORE_BUDGET_MS = 10000;
 
 /** Reveal welcome controls only after restoration and the loading transition. */
 export function startApplicationChrome({
@@ -8,6 +20,7 @@ export function startApplicationChrome({
   signal,
   initializeWelcome = initFirstRunExperience,
   initializeSettings,
+  restoreBudgetMs = RESTORE_BUDGET_MS,
 }) {
   let disposed = false;
   let firstRun;
@@ -23,7 +36,18 @@ export function startApplicationChrome({
     clearTimeout(revealTimer);
     loadingScreen.removeEventListener('transitionend', revealFirstRun);
   };
-  void Promise.all([styleManager.initialRestorePromise, minimumDelay])
+  const restoration = withinBudget(
+    styleManager.initialRestorePromise,
+    restoreBudgetMs,
+    {
+      onTimeout: () => {
+        console.warn(
+          `[Startup] style restoration still pending after ${restoreBudgetMs} ms`,
+        );
+      },
+    },
+  );
+  void Promise.all([restoration, minimumDelay])
     .catch(() => {
       /* Restoration reports its own outcome through the controls. */
     })

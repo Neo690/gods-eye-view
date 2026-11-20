@@ -14,6 +14,11 @@ import {
   governorRequestRender,
 } from '../renderGovernor.js';
 import { describeError } from './errors.js';
+import {
+  STACK_BUDGET_MS,
+  TILESET_BUDGET_MS,
+  withinBudget,
+} from './startupGuard.js';
 import { t } from '../i18n/index.js';
 
 /** Construct the application globe using the caller's local configuration. */
@@ -64,10 +69,27 @@ export async function createApplicationScene({
     googleApiKey || googleTokens || cesiumToken
       ? t('Loading Google 3D Tiles...')
       : t('Loading the keyless globe...');
-  const photoreal = await loadPhotorealisticTileset(Cesium, {
+  // No answer is an answer: a provider that never replies is the keyless
+  // globe's turn, and the row says why instead of waiting behind a cover.
+  const load = loadPhotorealisticTileset(Cesium, {
     googleApiKey,
     googleTokens,
     cesiumToken,
+  });
+  const photoreal = await withinBudget(load, TILESET_BUDGET_MS, {
+    onTimeout: () => ({
+      tileset: null,
+      route: 'osm',
+      errors: [
+        new Error(
+          t('no answer within {seconds} s', {
+            seconds: Math.round(TILESET_BUDGET_MS / 1000),
+          }),
+        ),
+      ],
+    }),
+    // A tileset that lands after its budget still owns GPU memory.
+    onLate: (late) => late?.tileset?.destroy?.(),
   });
   const tileset = photoreal.tileset;
   // A provider can finish after cancellation; retain ownership of its result.
@@ -122,9 +144,20 @@ export async function createApplicationScene({
     onError: (message) => console.warn('[MapStack]', message),
   });
   defer(() => mapStackController.destroy());
-  await mapStackController.setStack(tileset ? 'photoreal' : 'esri-imagery', {
-    silent: true,
-  });
+  // The stack keeps loading on its own; the startup does not wait past its
+  // budget for a provider that may never answer.
+  await withinBudget(
+    mapStackController.setStack(tileset ? 'photoreal' : 'esri-imagery', {
+      silent: true,
+    }),
+    STACK_BUDGET_MS,
+    {
+      onTimeout: () =>
+        console.warn(
+          `[Init] Map stack still loading after ${STACK_BUDGET_MS} ms; continuing.`,
+        ),
+    },
+  );
 
   signal.throwIfAborted();
   return { viewer, tileset, mapStackController, operations };
