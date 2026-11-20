@@ -20,7 +20,6 @@ export function startApplicationChrome({
   signal,
   initializeWelcome = initFirstRunExperience,
   initializeSettings,
-  restoreBudgetMs = RESTORE_BUDGET_MS,
 }) {
   let disposed = false;
   let firstRun;
@@ -36,13 +35,17 @@ export function startApplicationChrome({
     clearTimeout(revealTimer);
     loadingScreen.removeEventListener('transitionend', revealFirstRun);
   };
+  // The deadline belongs to this screen, not to the session: teardown aborts it
+  // so a stall that outlives the chrome leaves no timer and warns about nothing.
+  const restorationDeadline = new AbortController();
   const restoration = withinBudget(
     styleManager.initialRestorePromise,
-    restoreBudgetMs,
+    RESTORE_BUDGET_MS,
     {
+      signal: restorationDeadline.signal,
       onTimeout: () => {
         console.warn(
-          `[Startup] style restoration still pending after ${restoreBudgetMs} ms`,
+          `[Startup] style restoration still pending after ${RESTORE_BUDGET_MS} ms`,
         );
       },
     },
@@ -68,6 +71,7 @@ export function startApplicationChrome({
   );
   return async () => {
     disposed = true;
+    restorationDeadline.abort();
     clearTimeout(delayTimer);
     clearTimeout(revealTimer);
     resolveDelay();

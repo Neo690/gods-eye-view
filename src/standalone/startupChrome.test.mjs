@@ -1,55 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
 
-// Neither module can be imported here: both pull in browser code. Their text is
-// evaluated in one context instead, so the chrome calls the real withinBudget
-// of startupGuard.js on the fixture's clock rather than a stand-in for it.
-function load(path) {
-  return readFileSync(new URL(path, import.meta.url), 'utf8')
-    .replace(/^import .*;\n/gm, '')
-    .replace(/^export /gm, '');
-}
+import {
+  RESTORE_BUDGET_MS,
+  startApplicationChrome,
+} from '../app/startupChrome.js';
 
-const guardSource = load('../app/startupGuard.js');
-const chromeSource = load('../app/startupChrome.js');
+/*
+ * Both modules import cleanly under Node, so this is the real chrome and the
+ * real withinBudget on a hand-fired clock: one less harness to keep in step
+ * with them.
+ */
 
-function fixture() {
-  const timers = new Map();
-  const listeners = new Map();
+/** The loading cover, the two initializers, and a clock the test fires. */
+function fixture(t) {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const events = [];
-  const logs = [];
-  let restored;
-  let nextTimer = 0;
+  const warnings = [];
+  t.mock.method(console, 'warn', (message) => warnings.push(String(message)));
+  const listeners = new Map();
   const controller = new AbortController();
-  const context = {
-    console: {
-      error: console.error,
-      warn: (message) => logs.push(String(message)),
-    },
-    t: (message) => message,
-    setTimeout(fn, delay) {
-      const id = ++nextTimer;
-      timers.set(id, { fn, delay });
-      return id;
-    },
-    clearTimeout(id) {
-      timers.delete(id);
-    },
-    initFirstRunExperience() {
-      events.push('welcome');
-      return { destroy: () => events.push('welcome:destroy') };
-    },
-    async initKeySetup() {
-      return { destroy: () => events.push('settings:destroy') };
-    },
-  };
-  vm.createContext(context);
-  vm.runInContext(guardSource, context);
-  vm.runInContext(chromeSource, context);
-  const stop = context.startApplicationChrome({
-    initializeSettings: context.initKeySetup,
+  let restored;
+  const stop = startApplicationChrome({
     loadingScreen: {
       classList: { add: (value) => events.push(value) },
       addEventListener: (type, listener) => listeners.set(type, listener),
@@ -62,112 +34,117 @@ function fixture() {
     },
     dataManager: {},
     signal: controller.signal,
+    initializeWelcome: () => {
+      events.push('welcome');
+      return { destroy: () => events.push('welcome:destroy') };
+    },
+    initializeSettings: () => ({
+      destroy: () => events.push('settings:destroy'),
+    }),
   });
   return {
     events,
+    warnings,
     listeners,
-    logs,
-    stop,
-    restored,
     controller,
-    budgetMs: vm.runInContext('RESTORE_BUDGET_MS', context),
-    fire(delay) {
-      for (const [id, task] of timers) {
-        if (task.delay === delay) {
-          timers.delete(id);
-          task.fn();
-        }
-      }
-    },
-    delays() {
-      return [...timers.values()].map((task) => task.delay);
-    },
-    timers,
+    stop,
+    restore: () => restored(),
+    tick: (ms) => t.mock.timers.tick(ms),
   };
 }
+
+/** Let every promise the chrome queued run before the next assertion. */
 async function flush() {
   for (let i = 0; i < 12; i++) await Promise.resolve();
 }
 
-test('welcome waits for restoration, minimum delay, and the cover transition', async () => {
-  const f = fixture();
-  f.fire(1000);
+test('welcome waits for restoration, minimum delay, and the cover transition', async (t) => {
+  const f = fixture(t);
+  f.tick(1000);
   await flush();
   assert.deepEqual(f.events, []);
-  f.restored();
+  f.restore();
   await flush();
   assert.deepEqual(f.events, ['hidden']);
   f.listeners.get('transitionend')();
-  f.fire(900);
+  f.tick(900);
   assert.deepEqual(f.events, ['hidden', 'welcome']);
   await f.stop();
   assert.deepEqual(f.events.slice(-2), ['welcome:destroy', 'settings:destroy']);
-  assert.equal(f.timers.size, 0);
+  assert.deepEqual(f.warnings, []);
 });
 
-test('a restoration that never answers no longer holds the cover', async () => {
-  const f = fixture();
-  assert.equal(f.budgetMs, 10000, 'restoration has its own deadline');
-  f.fire(1000);
+test('a restoration that never answers no longer holds the cover', async (t) => {
+  const f = fixture(t);
+  assert.equal(RESTORE_BUDGET_MS, 10000, 'restoration has its own deadline');
+  f.tick(1000);
   await flush();
   assert.deepEqual(f.events, [], 'the cover still waits inside the budget');
-  assert.ok(
-    f.delays().includes(f.budgetMs),
-    'the deadline is armed while restoration runs',
-  );
 
-  f.fire(f.budgetMs);
+  f.tick(RESTORE_BUDGET_MS);
   await flush();
   assert.deepEqual(
     f.events,
     ['hidden'],
     'the cover comes down on the deadline',
   );
-  assert.match(
-    f.logs.join('\n'),
-    new RegExp(`restoration still pending after ${f.budgetMs} ms`),
-  );
+  assert.equal(f.warnings.length, 1);
+  assert.match(f.warnings[0], /restoration still pending after 10000 ms/);
 
   // An answer that lands afterwards changes nothing on screen and cannot throw.
-  f.restored();
+  f.restore();
   await flush();
   assert.deepEqual(f.events, ['hidden']);
   await f.stop();
-  assert.equal(f.timers.size, 0);
 });
 
-test('reduced motion uses the bounded fallback after the cover hides', async () => {
-  const f = fixture();
-  f.restored();
-  f.fire(1000);
+test('teardown leaves neither the deadline nor its warning behind', async (t) => {
+  const f = fixture(t);
+  f.tick(1000);
   await flush();
-  f.fire(900);
+  await f.stop();
+  f.tick(RESTORE_BUDGET_MS);
+  await flush();
+  assert.deepEqual(
+    f.warnings,
+    [],
+    'a screen that is gone is not warned about a stall nobody sees',
+  );
+  assert.deepEqual(f.events, ['settings:destroy']);
+});
+
+test('reduced motion uses the bounded fallback after the cover hides', async (t) => {
+  const f = fixture(t);
+  f.restore();
+  f.tick(1000);
+  await flush();
+  f.tick(900);
   assert.deepEqual(f.events, ['hidden', 'welcome']);
   await f.stop();
 });
 
-test('shutdown while restore is pending never reveals late welcome UI', async () => {
-  const f = fixture();
+test('shutdown while restore is pending never reveals late welcome UI', async (t) => {
+  const f = fixture(t);
   f.controller.abort();
   await f.stop();
-  f.restored();
+  f.restore();
   await flush();
-  f.fire(1000);
-  f.fire(900);
+  f.tick(1000);
+  f.tick(900);
   assert.deepEqual(f.events, ['settings:destroy']);
   assert.equal(f.listeners.size, 0);
-  assert.equal(f.timers.size, 0);
+  assert.deepEqual(f.warnings, []);
 });
 
-test('shutdown during the cover transition cancels the listener and fallback', async () => {
-  const f = fixture();
-  f.restored();
-  f.fire(1000);
+test('shutdown during the cover transition cancels the listener and fallback', async (t) => {
+  const f = fixture(t);
+  f.restore();
+  f.tick(1000);
   await flush();
   const transition = f.listeners.get('transitionend');
   f.controller.abort();
   await f.stop();
   transition();
-  f.fire(900);
+  f.tick(900);
   assert.deepEqual(f.events, ['hidden', 'settings:destroy']);
 });

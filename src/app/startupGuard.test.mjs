@@ -43,6 +43,33 @@ test('a result that lands after the budget is handed on instead of leaked', asyn
   assert.deepEqual(seen, [{ tileset: 'landed late' }]);
 });
 
+test('an owner that goes away takes its deadline with it', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const seen = [];
+  const owner = new AbortController();
+  const answer = withinBudget(new Promise(() => {}), 1000, {
+    signal: owner.signal,
+    onTimeout: () => seen.push('timeout'),
+    onLate: () => seen.push('late'),
+  });
+  owner.abort();
+  assert.equal(await answer, undefined);
+  t.mock.timers.tick(1000);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(seen, [], 'no deadline and no warning after abort');
+
+  const already = new AbortController();
+  already.abort();
+  assert.equal(
+    await withinBudget(new Promise(() => {}), 1000, {
+      signal: already.signal,
+      onTimeout: () => 'unreachable',
+    }),
+    undefined,
+    'an owner that was gone before the wait started is honoured too',
+  );
+});
+
 /** A clock the test fires by hand, so no assertion waits on a real timer. */
 function fakeClock() {
   let pending = null;

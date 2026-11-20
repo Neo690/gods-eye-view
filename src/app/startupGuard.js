@@ -27,25 +27,45 @@ export const TIMED_OUT = Symbol('startup-budget-expired');
  * tileset it can destroy instead of leaking), and a late failure is dropped
  * rather than surfacing as an unhandled rejection.
  *
+ * An aborted `signal` settles the wait with nothing and calls neither hook. The
+ * owner has gone away, so its deadline must not outlive it: a torn-down screen
+ * should leave behind no timer, and no warning about a stall nobody will see.
+ *
  * @template T
  * @param {Promise<T>|T} work
  * @param {number} ms
- * @param {{onTimeout?: () => any, onLate?: (value: T) => void}} [options]
+ * @param {{onTimeout?: () => any, onLate?: (value: T) => void, signal?: AbortSignal}} [options]
  * @returns {Promise<T|any>}
  */
-export async function withinBudget(work, ms, { onTimeout, onLate } = {}) {
+export async function withinBudget(
+  work,
+  ms,
+  { onTimeout, onLate, signal } = {},
+) {
   const pending = Promise.resolve(work);
   let timer;
+  let onAbort;
+  const waits = [
+    pending,
+    new Promise((resolve) => {
+      timer = setTimeout(() => resolve(TIMED_OUT), ms);
+    }),
+  ];
+  if (signal) {
+    waits.push(
+      new Promise((resolve) => {
+        onAbort = () => resolve(undefined);
+        if (signal.aborted) onAbort();
+        else signal.addEventListener('abort', onAbort, { once: true });
+      }),
+    );
+  }
   let settled;
   try {
-    settled = await Promise.race([
-      pending,
-      new Promise((resolve) => {
-        timer = setTimeout(() => resolve(TIMED_OUT), ms);
-      }),
-    ]);
+    settled = await Promise.race(waits);
   } finally {
     clearTimeout(timer);
+    if (onAbort) signal.removeEventListener('abort', onAbort);
   }
   if (settled !== TIMED_OUT) return settled;
   pending.then(

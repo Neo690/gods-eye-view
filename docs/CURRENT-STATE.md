@@ -1949,7 +1949,9 @@ The welcome card's wait for style restoration is bounded separately. It begins
 after the application publishes `ready`, so the startup guard has already stood
 down, and a share link that never answers used to leave the cover up in front of
 a finished console. Restoration now gets 10 seconds before the cover comes down
-anyway; a restoration that lands afterwards still applies its styles.
+anyway; a restoration that lands afterwards still applies its styles, and
+teardown clears the deadline, so a destroyed screen leaves no timer and no stall
+warning behind.
 
 Startup failure cleans up acquired resources. Explicit application destruction
 aborts construction, cancels pending playback/annotations and delayed welcome UI,
