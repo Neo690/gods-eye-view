@@ -370,10 +370,17 @@ const ARP_PROC_COLUMNS = /^IP address\s+HW type\s+Flags\s+HW address\b/i;
 const IPV4_ANYWHERE = /\b(\d{1,3}(?:\.\d{1,3}){3})\b/;
 const MAC_ANYWHERE = /\b([0-9a-f]{1,2}(?:[:-][0-9a-f]{1,2}){5})\b/i;
 
-/** Column words a lease export repeats; none of them is a host name. */
+/**
+ * Column words a lease export repeats; none of them is a host name.
+ *
+ * Routers localize the export, and the lease state sits in the column where a
+ * name would: unaccented `Dynamique`, `Dynamisch`, `dinamica` or `statica` is a
+ * plain ASCII word, so without these it would be read as the device's own
+ * name. The accented and non-Latin spellings are the same vocabulary, kept
+ * beside them; the host-name shape below admits ASCII only, so those never
+ * reach this set — the state is already skipped by its shape.
+ */
 const LEASE_WORDS = new Set([
-  'dynamic',
-  'static',
   'dhcp',
   'lease',
   'leases',
@@ -386,6 +393,32 @@ const LEASE_WORDS = new Set([
   'inactive',
   'yes',
   'no',
+  'dynamic',
+  'static',
+  // French
+  'dynamique',
+  'statique',
+  // Spanish
+  'dinámica',
+  'estática',
+  // German
+  'dynamisch',
+  'statisch',
+  // Italian, and the unaccented Spanish and Portuguese forms with it
+  'dinamico',
+  'dinamica',
+  'estatico',
+  'statico',
+  'statica',
+  // Portuguese
+  'dinâmico',
+  'estático',
+  // Russian
+  'динамический',
+  'статический',
+  // Chinese
+  '动态',
+  '静态',
 ]);
 
 function lines(text) {

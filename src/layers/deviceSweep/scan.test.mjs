@@ -182,6 +182,23 @@ test('a lease list keeps the address, the MAC and the name it carries', () => {
   assert.equal(camera.verdict, 'camera');
 });
 
+/** A French export writes the lease state where a host name would go. */
+const FRENCH_LEASES = [
+  '192.168.1.20,aa:bb:cc:dd:ee:01,Dynamique,cam-entree',
+  '192.168.1.21    AA-BB-CC-DD-EE-02    Statique',
+  '',
+].join('\n');
+
+test('a localized lease state is never read as a host name', () => {
+  const result = parseInventory(FRENCH_LEASES);
+  assert.equal(result.format, 'leases');
+  assert.deepEqual(
+    result.devices.map((device) => device.hostname),
+    ['cam-entree', ''],
+    'the name after the state is kept; the state alone is not a name',
+  );
+});
+
 test('a file that is not an inventory is refused, not guessed at', () => {
   assert.equal(parseInventory('name,colour\nfoo,red\n').format, null);
   assert.deepEqual(parseInventory('').devices, []);
