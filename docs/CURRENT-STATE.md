@@ -1940,7 +1940,10 @@ imagery stack 15; a provider that never answers is named on the cover
 (`Google 3D Tiles unavailable (no answer within 12 s). Loading the keyless
 globe...`) and the degraded path is taken instead of holding the startup behind
 it. A result that lands after its budget is destroyed rather than leaked, and a
-late failure is dropped. A startup that is still running after 30 seconds names
+late failure is dropped. Destroying the startup aborts both of those waits, so
+neither deadline outlives it, the stack's stall warning is never printed behind
+a closed console, and a tileset that arrives afterwards is still destroyed. A
+startup that is still running after 30 seconds names
 the step it stopped at on the cover and lifts it, so the console behind a stall
 is usable rather than frozen. A page whose module graph never loads runs no
 code, so nothing can speak for it; reloading is the only answer there.

@@ -70,6 +70,28 @@ test('an owner that goes away takes its deadline with it', async (t) => {
   );
 });
 
+test('a result that lands after the abort still gets its owner', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const disposed = [];
+  let release;
+  const work = new Promise((resolve) => {
+    release = resolve;
+  });
+  const owner = new AbortController();
+  const waiting = withinBudget(work, 1000, {
+    signal: owner.signal,
+    onTimeout: () => disposed.push('timeout'),
+    onLate: (value) => disposed.push(value),
+  });
+  owner.abort();
+  assert.equal(await waiting, undefined, 'the wait is over at once');
+  // No longer waiting is not the same as not owning: the tileset still has to
+  // be destroyed rather than left to hold its GPU memory.
+  release('tileset');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(disposed, ['tileset']);
+});
+
 /** A clock the test fires by hand, so no assertion waits on a real timer. */
 function fakeClock() {
   let pending = null;

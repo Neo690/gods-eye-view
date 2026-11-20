@@ -18,6 +18,9 @@ export const STARTUP_BUDGET_MS = 30000;
 /** What a budget returns when the work did not answer in time. */
 export const TIMED_OUT = Symbol('startup-budget-expired');
 
+/** What a budget settles with when its owner stopped waiting. */
+const ABANDONED = Symbol('startup-budget-abandoned');
+
 /**
  * Wait for `work`, but not forever.
  *
@@ -27,9 +30,12 @@ export const TIMED_OUT = Symbol('startup-budget-expired');
  * tileset it can destroy instead of leaking), and a late failure is dropped
  * rather than surfacing as an unhandled rejection.
  *
- * An aborted `signal` settles the wait with nothing and calls neither hook. The
- * owner has gone away, so its deadline must not outlive it: a torn-down screen
- * should leave behind no timer, and no warning about a stall nobody will see.
+ * An aborted `signal` settles the wait with nothing and skips `onTimeout`: the
+ * owner has gone away, so its deadline must not outlive it, and a torn-down
+ * screen should leave behind no timer and no warning about a stall nobody will
+ * see. The work keeps its owner either way — `onLate` still receives a result
+ * that lands afterwards, because no longer waiting for it does not dispose of
+ * it — the tileset case this exists for is a tileset that must be destroyed.
  *
  * @template T
  * @param {Promise<T>|T} work
@@ -54,7 +60,7 @@ export async function withinBudget(
   if (signal) {
     waits.push(
       new Promise((resolve) => {
-        onAbort = () => resolve(undefined);
+        onAbort = () => resolve(ABANDONED);
         if (signal.aborted) onAbort();
         else signal.addEventListener('abort', onAbort, { once: true });
       }),
@@ -67,12 +73,14 @@ export async function withinBudget(
     clearTimeout(timer);
     if (onAbort) signal.removeEventListener('abort', onAbort);
   }
-  if (settled !== TIMED_OUT) return settled;
+  if (settled !== TIMED_OUT && settled !== ABANDONED) return settled;
+  // Either way the caller has stopped waiting, so the result has no reader
+  // left: `onLate` destroys it instead. Only a timeout takes a fallback.
   pending.then(
     (value) => onLate?.(value),
     () => {},
   );
-  return onTimeout?.();
+  return settled === TIMED_OUT ? onTimeout?.() : undefined;
 }
 
 /**
