@@ -1,0 +1,47 @@
+name: Device vendors
+
+# The camera shortlist in src/layers/deviceSweep/scan.js prints a maker's name,
+# and a wrong attribution is worse than none: it sends an operator looking for
+# the wrong product. Every prefix in it claims an MA-L block the IEEE assigns to
+# an appliance maker, and the registries are re-read here.
+#
+# That read needs the public registries, which is why this is not part of CI on
+# pull requests: a registry hiccup there would turn into a red pipeline
+# reviewers learn to ignore. A monthly run is fresh enough for a name, and
+# GitHub mails the repository admins when a scheduled run fails — which is the
+# whole point of running it at all.
+on:
+  schedule:
+    # 06:17 UTC on the first: off the hour, so the job does not queue behind
+    # every other workflow that fires at midnight.
+    - cron: '17 6 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: device-vendors
+  cancel-in-progress: true
+
+jobs:
+  vendors:
+    name: IEEE prefix check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.14.0
+
+      # The script imports one source module and nothing else: three CSVs and
+      # no dependencies, so the locked install the rest of CI needs is skipped
+      # and a registry failure is the only thing this job can fail on.
+      - name: Re-check every prefix against the registries
+        run: node scripts/check-device-vendors.mjs

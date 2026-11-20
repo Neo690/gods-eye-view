@@ -13,9 +13,11 @@
 //     shortlist names.
 //
 // It exits 1 on any mismatch, so it can be run as a gate when the shortlist is
-// edited. It is deliberately NOT part of CI: it needs the public registries,
-// and a network hiccup must not turn into a red pipeline that reviewers learn
-// to ignore.
+// edited. It is deliberately NOT part of pull-request CI: it needs the public
+// registries, and a network hiccup must not turn into a red pipeline that
+// reviewers learn to ignore. `.github/workflows/device-vendors.yml` runs it
+// monthly instead, where a failure is a mail to the maintainers rather than a
+// blocked merge, and where a table nobody edits still gets looked at.
 //
 // After a successful run, update the "read YYYY-MM-DD" note above the table in
 // scan.js, which is what tells a later reader how fresh the check is.
