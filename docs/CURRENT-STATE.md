@@ -1956,6 +1956,16 @@ screen unchanged. The stall line is written through the banner's one
 label writer (`setSplitFlapText`) and its leftover detail is cleared. A page whose module graph never loads runs no
 code, so nothing can speak for it; reloading is the only answer there.
 
+That stall is a degraded mode, not only a sentence. The guard reports the
+phases that never settled, and every control whose phase is missing — a host
+marked `data-requires` — is disabled with `aria-disabled` and a
+`Unavailable until you reload` title, so the SCENES panel, the drawing tool and
+file import are off rather than pressable and inert. The banner names what went
+with them (`Unavailable: scenes, drawing and voice.`) and being persistent it
+carries its own way out: RELOAD starts the boot again, DISMISS takes the notice
+down. Before the shell exists the same two controls sit in the fallback banner,
+so even a stall that never built the console can be cleared or retried.
+
 The welcome card's wait for style restoration is bounded separately. It begins
 after the application publishes `ready`, so the startup guard has already stood
 down, and a share link that never answers used to leave the cover up in front of

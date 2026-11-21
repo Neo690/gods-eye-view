@@ -118,7 +118,7 @@
       </div>
     </div>
     <div class="pp-toggle-group">
-      <button class="pp-toggle-btn" id="draw-toggle" title="Draw on the world — click vertices, double-click or Enter to finish, Esc to cancel" aria-pressed="false" data-i18n-title>
+      <button class="pp-toggle-btn" data-requires="tools" id="draw-toggle" title="Draw on the world — click vertices, double-click or Enter to finish, Esc to cancel" aria-pressed="false" data-i18n-title>
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">draw</span>
         <span class="pp-label" data-i18n>Draw</span>
       </button>
@@ -143,7 +143,7 @@
         <span class="draw-hint" id="draw-hint" aria-live="polite"></span>
       </div>
     </div>
-    <div class="pp-toggle-group" id="geo-import-group">
+    <div class="pp-toggle-group" data-requires="tools" id="geo-import-group">
       <button class="pp-toggle-btn" id="geo-import-button" type="button" title="Show your own GeoJSON, KML, KMZ or GPX files on the globe (or drop them onto it). File bytes stay on this device; overlays can appear in map screenshots shared with voice." data-i18n-title>
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">upload_file</span>
         <span class="pp-label" data-i18n>Import</span>

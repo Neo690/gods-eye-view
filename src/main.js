@@ -1,4 +1,5 @@
 import { createStandaloneApplication } from './standalone/application.js';
+import { applyDegradedControls } from './app/degradedMode.js';
 import { guardStartup } from './app/startupGuard.js';
 import { describeError } from './standalone/errors.js';
 import { installInAppApi } from './data/inAppApi.js';
@@ -36,6 +37,27 @@ application.start().catch((error) => {
 const globalLoadingStatus = document.getElementById('global-loading-status');
 const globalLoadingLabel = document.getElementById('global-loading-label');
 const globalLoadingDetail = document.getElementById('global-loading-detail');
+const globalLoadingActions = document.getElementById('global-loading-actions');
+
+// A stall notice is not a message to wait out: it stays until the operator
+// acts, so it carries the two actions that end it.
+document
+  .getElementById('global-loading-reload')
+  ?.addEventListener('click', () => globalThis.location?.reload());
+document
+  .getElementById('global-loading-dismiss')
+  ?.addEventListener('click', () => {
+    // The shell owns the banner once it exists; before it does, hiding the
+    // elements is all there is to hide (see the fallback below).
+    const shell = application.getComponents()?.controls?.styleManager;
+    if (typeof shell?.clearGlobalStatusNotice === 'function') {
+      shell.clearGlobalStatusNotice();
+      return;
+    }
+    if (globalLoadingStatus) globalLoadingStatus.hidden = true;
+    if (globalLoadingActions) globalLoadingActions.hidden = true;
+  });
+
 guardStartup({
   application,
   cover: loadingScreen,
@@ -45,16 +67,20 @@ guardStartup({
   // on every tick — so the sentence goes through the shell's persistent notice,
   // which outranks the loading summary. A stall in a phase that never built the
   // shell falls back to the elements themselves, which nothing else drives yet.
-  notify: (message) => {
+  // `missing` is every phase the stall left unbuilt: their controls are in the
+  // markup already, so they are turned off rather than left to answer nothing.
+  notify: (message, { missing = [] } = {}) => {
+    applyDegradedControls({ missing });
     const shell = application.getComponents()?.controls?.styleManager;
     if (typeof shell?.showGlobalStatusNotice === 'function') {
-      shell.showGlobalStatusNotice(message);
+      shell.showGlobalStatusNotice(message, { actions: true });
       return;
     }
     if (!globalLoadingStatus || !globalLoadingLabel) return;
     setSplitFlapText(globalLoadingLabel, message, { immediate: true });
     if (globalLoadingDetail) globalLoadingDetail.textContent = '';
     globalLoadingStatus.hidden = false;
+    if (globalLoadingActions) globalLoadingActions.hidden = false;
   },
 });
 

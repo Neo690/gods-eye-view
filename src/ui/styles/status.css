@@ -260,6 +260,31 @@
 #global-loading-status[hidden] {
   display: none;
 }
+/* The banner ignores the pointer so it never covers the globe; a stall notice
+   carries the two actions that dismiss or reload it, so its row does not. */
+#global-loading-actions {
+  display: inline-flex;
+  gap: 6px;
+  pointer-events: auto;
+}
+#global-loading-actions[hidden] {
+  display: none;
+}
+#global-loading-actions button {
+  padding: 3px 8px;
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  border-radius: 4px;
+  background: rgba(0, 212, 255, 0.1);
+  color: inherit;
+  font: inherit;
+  letter-spacing: 1.2px;
+  cursor: pointer;
+}
+#global-loading-actions button:hover,
+#global-loading-actions button:focus-visible {
+  border-color: var(--glass-border-hover);
+  background: rgba(0, 212, 255, 0.2);
+}
 #global-loading-label {
   color: rgba(184, 244, 255, 0.92);
 }

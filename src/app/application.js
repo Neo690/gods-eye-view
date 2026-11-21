@@ -3,6 +3,13 @@ const START_ORDER = ['scene', 'controls', 'data', 'tools'];
 const STOP_ORDER = ['tools', 'controls', 'data', 'scene'];
 
 /**
+ * The startup phases, in order. A phase that never settled leaves every later
+ * one unbuilt, and the startup guard names them so the console can say what
+ * its degraded boot is missing instead of offering controls that do nothing.
+ */
+export const STARTUP_PHASES = Object.freeze([...START_ORDER]);
+
+/**
  * Own application startup and teardown without importing an application entry.
  * Constructors receive earlier components, an AbortSignal and defer(cleanup).
  * Register cleanup immediately after acquiring each resource, before any await.

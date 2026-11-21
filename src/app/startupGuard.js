@@ -1,4 +1,6 @@
 import { t } from '../i18n/index.js';
+import { STARTUP_PHASES } from './application.js';
+import { unavailableFeatures } from './degradedMode.js';
 
 /**
  * How long one network-shaped startup step may wait before its degraded path is
@@ -101,12 +103,14 @@ export async function withinBudget(
  * @param {{classList: {add: Function}, setAttribute?: Function}} [options.cover]
  * @param {{textContent: string, style?: object}} [options.status] The cover's
  *   status line, which already names the step in progress.
- * @param {(message: string) => void} [options.notify] Where the stall message
- *   goes. The cover is lifted on a stall, so a line written into it is read by
+ * @param {(message: string, stall: {phase: string|null,
+ *   missing: string[]}) => void} [options.notify] Where the stall message goes.
+ *   The cover is lifted on a stall, so a line written into it is read by
  *   nobody: the app hands this to its status banner, whose polite live region
- *   stays on screen. The guard knows only that someone wants the sentence; how
- *   the banner shows it is the banner's business. Without it the cover's line
- *   takes the message, which is what the guard did before there was a banner.
+ *   stays on screen. `missing` is the list of phases the stall left unbuilt,
+ *   which is what the console turns into disabled controls. The guard knows
+ *   only that someone wants the sentence; how the banner shows it is the
+ *   banner's business. Without it the cover's line takes the message.
  * @param {number} [options.budgetMs]
  * @param {{set: Function, clear: Function}} [options.timers] Test seam.
  * @returns {() => void} Stop the guard.
@@ -137,11 +141,18 @@ export function guardStartup({
     console.warn(
       `[Startup] still in ${phase ?? 'startup'} after ${budgetMs} ms`,
     );
-    const message = t(
-      'Startup is still at “{stage}” after {seconds} s. Reload to try again; the console stays usable.',
-      { stage, seconds },
-    );
-    if (typeof notify === 'function') notify(message);
+    // The phases that never settled: everything from the stalled one onwards.
+    // The console is already on screen, so it has to say which of its controls
+    // arrived without the component behind them.
+    const built = application.getComponents?.() ?? {};
+    const missing = STARTUP_PHASES.filter((name) => !built[name]);
+    const features = unavailableFeatures(missing);
+    const message =
+      t(
+        'Startup is still at “{stage}” after {seconds} s. Reload to try again; the console stays usable.',
+        { stage, seconds },
+      ) + (features ? ` ${t('Unavailable: {features}.', { features })}` : '');
+    if (typeof notify === 'function') notify(message, { phase, missing });
     // Without a banner, the cover's line is all that is left: clear any failure
     // colour from an earlier step before it takes the sentence.
     else if (status) {

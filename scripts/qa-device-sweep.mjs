@@ -22,8 +22,9 @@
  *     in the console);
  *  7. a third boot where one startup phase never settles (`?qaStall=tools`, a
  *     QA-only seam): after its 30 s the guard names the step in the visible
- *     status banner, lifts the cover, and the console behind it still answers a
- *     real click.
+ *     status banner, lifts the cover, disables the controls whose component
+ *     never arrived, offers RELOAD and DISMISS, and the console behind it still
+ *     answers a real click once the notice is dismissed.
  *  8. a fourth boot stalling on `controls`, the phase that builds the shell
  *     (`?qaStall=controls`): the banner exists but no shell feedback owns it, so
  *     the guard's sentence is written into the elements themselves — that is
@@ -623,6 +624,48 @@ async function main() {
       // writes this banner, and a stall line it wipes would be news nobody read.
       await assertStallPersists(page);
 
+      // A half-built console says what it lost and turns those controls off;
+      // the notice it cannot wait out carries the two actions that end it.
+      const degraded = await page.evaluate(() => {
+        const actions = document.getElementById('global-loading-actions');
+        const sceneStart = document.getElementById('scene-start-btn');
+        return {
+          actionsHidden: actions?.hidden ?? null,
+          buttons: [...(actions?.querySelectorAll('button') ?? [])].map(
+            (button) => button.textContent.trim(),
+          ),
+          sceneMarked:
+            document.getElementById('scene-panel')?.dataset?.degraded ?? null,
+          sceneStartDisabled: sceneStart?.disabled ?? null,
+          sceneStartTitle: sceneStart?.title ?? '',
+        };
+      });
+      assert.match(
+        stall.banner,
+        /Unavailable: scenes, drawing and voice\./,
+        'the notice names what the stall left without its component',
+      );
+      assert.equal(
+        degraded.actionsHidden,
+        false,
+        'a persistent notice offers a way out',
+      );
+      assert.deepEqual(degraded.buttons, ['RELOAD', 'DISMISS']);
+      assert.equal(degraded.sceneMarked, 'true');
+      assert.equal(
+        degraded.sceneStartDisabled,
+        true,
+        'a control whose component never arrived is off',
+      );
+      assert.match(degraded.sceneStartTitle, /Unavailable until you reload/);
+
+      // Dismiss ends the notice; RELOAD is left alone (it would leave the page).
+      await page.$eval('#global-loading-dismiss', (button) => button.click());
+      await page.waitForFunction(
+        () => document.getElementById('global-loading-status')?.hidden === true,
+        { timeout: 10_000 },
+      );
+
       // Usable, not merely visible: a real control behind the lifted cover.
       await page.$eval(`${ROW} .data-toggle-btn`, (button) => button.click());
       await page.waitForFunction(
@@ -668,6 +711,23 @@ async function main() {
       );
       assert.equal(stall.state, null, 'no shell owns data-state yet');
       await assertStallPersists(page);
+      // No shell exists to own the notice, so the fallback must offer the same
+      // way out: the actions row is in the markup either way.
+      assert.equal(
+        await page.$eval('#global-loading-actions', (row) => row.hidden),
+        false,
+        'a stall before the shell can still be dismissed or reloaded',
+      );
+      assert.equal(
+        await page.$eval('#draw-toggle', (button) => button.disabled),
+        true,
+        'the drawing tool needs the phase this boot never reached',
+      );
+      await page.$eval('#global-loading-dismiss', (button) => button.click());
+      await page.waitForFunction(
+        () => document.getElementById('global-loading-status')?.hidden === true,
+        { timeout: 10_000 },
+      );
       await page.close();
     });
 

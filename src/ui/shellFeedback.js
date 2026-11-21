@@ -138,6 +138,9 @@ export class ShellFeedback {
     this._globalLoadingDetail = document.getElementById(
       'global-loading-detail',
     );
+    this._globalLoadingActions = document.getElementById(
+      'global-loading-actions',
+    );
     this._trafficSyncChip = document.getElementById('traffic-sync-chip');
     this._trafficSyncLabel = document.getElementById('traffic-sync-label');
     this._trafficSyncProgress = document.getElementById(
@@ -232,6 +235,16 @@ export class ShellFeedback {
     }
     const localized = localizeLoadingPresentation(presentation);
     this._globalLoadingStatus.hidden = !presentation;
+    // The action row belongs to the persistent notice that asked for it, not
+    // to whatever the banner happens to be showing: a manager failure that
+    // outranks the notice must not inherit its controls.
+    const noticeOnScreen =
+      Boolean(presentation) &&
+      presentation.label === this._globalStatusNotice?.label;
+    if (this._globalLoadingActions)
+      this._globalLoadingActions.hidden = !(
+        noticeOnScreen && this._globalStatusNotice?.actions === true
+      );
     if (!presentation) {
       delete this._globalLoadingStatus.dataset.state;
       return;
@@ -251,6 +264,14 @@ export class ShellFeedback {
     const now = performance.now();
     this._globalStatusNotice = createGlobalStatusNotice(message, now, options);
     this._updateGlobalLoadingFeedback(now);
+  }
+
+  /** Drop a persistent notice, and its Reload/Dismiss row with it. */
+  clearGlobalStatusNotice() {
+    if (this.destroyed) return;
+    this._globalStatusNotice = null;
+    if (this._globalLoadingActions) this._globalLoadingActions.hidden = true;
+    this._updateGlobalLoadingFeedback(performance.now());
   }
 
   _startTrafficChipTicker() {

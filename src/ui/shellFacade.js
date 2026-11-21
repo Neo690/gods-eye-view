@@ -1228,9 +1228,16 @@ export class ShellFacade {
    * stall line, for as long as the page cannot get past a step.
    *
    * @param {string} message Already localized by the caller.
+   * @param {{actions?: boolean}} [options] `actions` also shows the banner's
+   *   Reload/Dismiss row, for a notice the operator cannot wait out.
    */
-  showGlobalStatusNotice(message) {
-    this._showGlobalStatusNotice(message, { persistent: true });
+  showGlobalStatusNotice(message, options = {}) {
+    this._showGlobalStatusNotice(message, { persistent: true, ...options });
+  }
+
+  /** Take a persistent notice (and its action row) off the banner. */
+  clearGlobalStatusNotice() {
+    this._feedback.clearGlobalStatusNotice();
   }
 
   /**

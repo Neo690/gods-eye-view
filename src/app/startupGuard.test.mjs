@@ -117,11 +117,15 @@ function fakeClock() {
   };
 }
 
-function fakeApplication(state = { status: 'starting', phase: 'scene' }) {
+function fakeApplication(
+  state = { status: 'starting', phase: 'scene' },
+  components = {},
+) {
   const listeners = new Set();
   return {
     state,
     getState: () => state,
+    getComponents: () => ({ ...components }),
     subscribe(listener) {
       listeners.add(listener);
       listener(state);
@@ -176,6 +180,32 @@ test('a startup that outlives its budget names the step, tells the app and lifts
   );
   assert.ok(cover.classes.has('hidden'), 'the console behind is revealed');
   assert.equal(cover.attributes.get('aria-hidden'), 'true');
+  stop();
+});
+
+test('a stall reports the phases it left unbuilt, and says what is off', () => {
+  const clock = fakeClock();
+  const spoken = [];
+  const stop = guardStartup({
+    application: fakeApplication(
+      { status: 'starting', phase: 'data' },
+      { scene: {}, controls: {} },
+    ),
+    cover: fakeCover(),
+    status: { textContent: 'Loading live data...', style: {} },
+    notify: (message, stall) => spoken.push({ message, stall }),
+    budgetMs: 30000,
+    timers: clock,
+  });
+
+  clock.fire();
+
+  assert.deepEqual(spoken[0].stall, { phase: 'data', missing: ['data', 'tools'] });
+  assert.match(
+    spoken[0].message,
+    /Unavailable: live data, scenes, drawing and voice\./,
+    'the notice names every feature the stall left without its component',
+  );
   stop();
 });
 

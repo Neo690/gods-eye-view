@@ -130,7 +130,7 @@ export function createLoadingFeedbackState() {
 export function createGlobalStatusNotice(
   message,
   nowMs = 0,
-  { state = 'error', detail = '', persistent = false } = {},
+  { state = 'error', detail = '', persistent = false, actions = false } = {},
 ) {
   const label = String(message || '').trim();
   if (!label) return null;
@@ -139,6 +139,9 @@ export function createGlobalStatusNotice(
     label,
     detail: String(detail || '').trim(),
     persistent: !!persistent,
+    // A notice that cannot be waited out needs a way out of itself: the banner
+    // then shows its Reload/Dismiss controls alongside the sentence.
+    actions: !!actions,
     dwellMs: persistent ? null : LOADING_FAILURE_DWELL_MS,
     // A finite notice starts its dwell only when it first wins presentation.
     // Otherwise a higher-priority manager failure could consume the whole
