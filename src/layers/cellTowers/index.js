@@ -39,14 +39,20 @@ export function createCellTowersLayer({
     pixelSize: 6,
     refreshMs: 300000,
   });
-  // Radio sites are fixed: expose them to consumers that walk a layer (the
-  // Sentinel patrol), the way the moving layers expose their tracks. The
-  // viewport engine already holds the rows; this is only a rename of its
-  // analyst snapshot into the coordinate shape those consumers read.
-  layer.getAllPositions = (maxCount = 500) =>
-    layer.getAnalystRecords(maxCount).map(({ lat, lon }) => ({
+  // Radio sites are fixed: opt into the Sentinel patrol contract with the
+  // rows the viewport engine already holds. The all-positions alias stays for
+  // consumers written before the explicit contract existed.
+  layer.getPatrolSites = (maxCount = 500) =>
+    layer.getAnalystRecords(maxCount).map(({ id, label, lat, lon }) => ({
+      id,
+      label,
       latitude: lat,
       longitude: lon,
+    }));
+  layer.getAllPositions = (maxCount = 500) =>
+    layer.getPatrolSites(maxCount).map(({ latitude, longitude }) => ({
+      latitude,
+      longitude,
     }));
   return layer;
 }

@@ -83,20 +83,35 @@ test('radio sites draw what the proxy returned for the view', async () => {
   assert.equal(h.primitives.length, 0);
 });
 
-test('the fixed sites are exposed to a patrolling consumer, capped', async () => {
+test('the fixed sites expose the patrol contract, capped', async () => {
   const h = harness(async () => ({ rows: sites }));
   h.layer.enable();
   assert.equal(await h.layer.update(), true);
-  assert.deepEqual(h.layer.getAllPositions(), [
-    { latitude: 48.85861, longitude: 2.34639 },
-    { latitude: 48.86, longitude: 2.35 },
+  assert.deepEqual(h.layer.getPatrolSites(), [
+    {
+      id: '829977',
+      label: '829977',
+      latitude: 48.85861,
+      longitude: 2.34639,
+    },
+    {
+      id: '829978',
+      label: '829978',
+      latitude: 48.86,
+      longitude: 2.35,
+    },
   ]);
-  assert.deepEqual(h.layer.getAllPositions(1), [
-    { latitude: 48.85861, longitude: 2.34639 },
+  assert.deepEqual(h.layer.getPatrolSites(1), [
+    {
+      id: '829977',
+      label: '829977',
+      latitude: 48.85861,
+      longitude: 2.34639,
+    },
   ]);
   h.layer.destroy();
   assert.deepEqual(
-    h.layer.getAllPositions(),
+    h.layer.getPatrolSites(),
     [],
     'a destroyed layer walks nowhere',
   );
