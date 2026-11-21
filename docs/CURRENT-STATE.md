@@ -4105,7 +4105,10 @@ console, and two whose startup stops on one phase through `?qaStall`. A
 `tools` stall leaves a finished console behind the lifted cover and the layer
 still answers a real click; a `controls` stall happens before the shell
 exists, so the guard's sentence is read in the banner's own elements, with no
-`data-state` set by anything.
+`data-state` set by anything. The same nine steps run in CI
+(`Device Sweep browser gate`), so a change that breaks the list, the degraded
+console or the watchdog fails a pull request instead of waiting for somebody
+to remember the gate exists.
 Scan only networks you are authorized to use.
 
 Street Level is a docked, collapsible right-rail panel (`#street-level-panel`,
