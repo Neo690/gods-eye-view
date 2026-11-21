@@ -47,7 +47,7 @@ import {
   syncSpiderNoteOverlay,
 } from './spider.js';
 import {
-  angularDistance,
+  pickInspectionSite,
   rankInspectionTargets,
   stepPatrol,
   CRUISE_RAD_PER_S,
@@ -164,6 +164,10 @@ export function createAiAgentLayer({
   const watchState = { previous: null, seen: new Set() };
   const recentEvents = [];
   const visitedAt = {};
+  // Sites the spider has already scanned, keyed the way `siteKey` rounds them.
+  // A layer's nearest record is always the one it just left, so this is what
+  // makes the next pass through that layer land somewhere else.
+  const visitedSites = {};
   // Alerts already scanned in this edition. A new GhostMaps commit (or a
   // changed feature count) starts the tour over from the most severe one.
   const visitedAlerts = new Set();
@@ -347,10 +351,13 @@ export function createAiAgentLayer({
   }
 
   /**
-   * Where the spider would stand to inspect one layer: the nearest positioned
-   * record it actually holds. A layer whose records carry no position (road
-   * traffic, an unconfigured feed) has nowhere to walk to, so it is skipped
-   * rather than inspected from a made-up spot.
+   * Where the spider would stand to inspect one layer: a record it actually
+   * holds, preferring a site it has not scanned recently. Without that memory
+   * the nearest record is always the one the spider just left, so a static
+   * catalog (bases, towers, fixed cameras) was inspected at the same address
+   * on every pass. A layer whose records carry no position (road traffic, an
+   * unconfigured feed) has nowhere to walk to and is skipped rather than
+   * inspected from a made-up spot.
    */
   function inspectionPoint(layerId) {
     const module = manager?.layers?.get?.(layerId)?.module;
@@ -361,18 +368,11 @@ export function createAiAgentLayer({
     } catch {
       return null; // a throwing reader is the same as no reader
     }
-    let best = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < rows.length; i++) {
-      const latDeg = Number(rows[i]?.latitude);
-      const lonDeg = Number(rows[i]?.longitude);
-      if (!Number.isFinite(latDeg) || !Number.isFinite(lonDeg)) continue;
-      const distance = angularDistance(spider, { latDeg, lonDeg });
-      if (!Number.isFinite(distance) || distance >= bestDistance) continue;
-      bestDistance = distance;
-      best = { latDeg, lonDeg };
-    }
-    return best;
+    return pickInspectionSite(rows, {
+      from: spider,
+      now: nowSource(),
+      visitedSites,
+    });
   }
 
   /** Every enabled layer the spider could walk to, with what it knows of it. */
@@ -392,6 +392,7 @@ export function createAiAgentLayer({
         count: record.count,
         latDeg: point.latDeg,
         lonDeg: point.lonDeg,
+        siteKey: point.key,
         severity:
           event && nowSource() - event.at < EVENT_MEMORY_MS
             ? eventSeverity(event)
@@ -710,6 +711,7 @@ export function createAiAgentLayer({
       return;
     }
     visitedAt[target.layerId] = now;
+    if (target.siteKey) visitedSites[target.siteKey] = now;
     spider.scanning = false;
     spider.note = '';
     syncNote();

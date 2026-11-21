@@ -192,6 +192,96 @@ export const UNVISITED_BONUS = 80;
 export const REPEAT_PENALTY = 240;
 
 /**
+ * How long a site the spider has inspected stays out of the rotation.
+ *
+ * The ranking remembers when it last looked at a LAYER, but a layer can hold
+ * thousands of records and the nearest one to the spider is always the one it
+ * just left — so without a per-site memory every return to that layer lands on
+ * the same address. One patrol cycle across the enabled layers takes longer
+ * than the layer memory window, so the site needs its own, longer cooldown.
+ */
+export const SITE_COOLDOWN_MS = 20 * 60 * 1000;
+
+/** Two decimals ≈ 1 km: the same place, without demanding identical rows. */
+export const SITE_KEY_DECIMALS = 2;
+
+/** A stable key for "the same place", so one address is not visited twice. */
+export function siteKey(latDeg, lonDeg) {
+  const lat = Number(latDeg);
+  const lon = Number(lonDeg);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return '';
+  return `${lat.toFixed(SITE_KEY_DECIMALS)},${lon.toFixed(SITE_KEY_DECIMALS)}`;
+}
+
+/**
+ * The record to inspect next inside one layer.
+ *
+ * Prefers the nearest record whose site has not been visited within
+ * `cooldownMs`; when every site is cooling, the one whose last visit is oldest
+ * (never visited first). Ties break on the site key, so the walk stays
+ * reproducible. This is what makes the spider rotate through a static catalog
+ * instead of returning to the same nearest point on every pass.
+ *
+ * @param {Array<{latitude:number, longitude:number}>} rows positions held by
+ *   the layer.
+ * @param {{from?:{latDeg:number, lonDeg:number}, now?:number,
+ *   visitedSites?:Record<string, number>, cooldownMs?:number}} [context]
+ * @returns {{latDeg:number, lonDeg:number, key:string, cooldown:boolean}|null}
+ */
+export function pickInspectionSite(rows, context = {}) {
+  const now = Number.isFinite(context.now) ? context.now : Date.now();
+  const visited = context.visitedSites ?? {};
+  const cooldownMs = Number.isFinite(context.cooldownMs)
+    ? context.cooldownMs
+    : SITE_COOLDOWN_MS;
+  let fresh = null;
+  let oldest = null;
+  for (const row of rows ?? []) {
+    const rawLat = row?.latitude;
+    const rawLon = row?.longitude;
+    // `Number(null)` is 0, which would plant a positionless record on the
+    // equator, so an absent coordinate is rejected before the cast.
+    if (rawLat == null || rawLon == null || rawLat === '' || rawLon === '')
+      continue;
+    const latDeg = Number(rawLat);
+    const lonDeg = Number(rawLon);
+    if (!Number.isFinite(latDeg) || !Number.isFinite(lonDeg)) continue;
+    const key = siteKey(latDeg, lonDeg);
+    if (!key) continue;
+    const seenAt = Number(visited[key]);
+    const cooling = Number.isFinite(seenAt) && now - seenAt < cooldownMs;
+    const distance = context.from
+      ? angularDistance(context.from, { latDeg, lonDeg })
+      : 0;
+    const sortable = Number.isFinite(distance) ? distance : Infinity;
+    if (!cooling) {
+      if (
+        !fresh ||
+        sortable < fresh.distance ||
+        (sortable === fresh.distance && key < fresh.key)
+      ) {
+        fresh = { latDeg, lonDeg, key, distance: sortable, cooldown: false };
+      }
+    } else if (
+      !oldest ||
+      seenAt < oldest.seenAt ||
+      (seenAt === oldest.seenAt && key < oldest.key)
+    ) {
+      oldest = { latDeg, lonDeg, key, seenAt, cooldown: true };
+    }
+  }
+  if (fresh) {
+    const { distance, ...site } = fresh;
+    return site;
+  }
+  if (oldest) {
+    const { seenAt, ...site } = oldest;
+    return site;
+  }
+  return null;
+}
+
+/**
  * Rank inspection targets: the most significant layer first.
  *
  * Deterministic by construction — no randomness, and ties break on the layer

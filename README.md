@@ -461,7 +461,7 @@ _Ask for radio near anywhere and the globe starts broadcasting — every station
 
 ## 🤖 The Sentinel
 
-**DATA ▸ Sentinel** gives your world a watchful light: a glowing orb that travels the enabled layers one by one. Every cycle it ranks them by severity, feed health, freshness, distance and how long ago it looked at each, glides along a great circle to the nearest record of the winner at a bounded turn rate, scans the ground on arrival and reports what that layer holds, in your language. A feed that breaks — or an event that escalates — pulls it off its route to look at that layer first. The patrol is local and deterministic: it never turns a layer on, and it never moves your camera.
+**DATA ▸ Sentinel** gives your world a watchful light: a glowing orb that travels the enabled layers one by one. Every cycle it ranks them by severity, feed health, freshness, distance and how long ago it looked at each, then glides along a great circle to a record of the winner at a bounded turn rate, scans the ground on arrival and reports what that layer holds, in your language. It remembers the sites it has scanned, so a static catalog (bases, towers, fixed cameras) is not inspected at the same nearest address on every pass: a site rests for twenty minutes and the next pass takes the next one, or the longest-unvisited when all are cooling. A feed that breaks — or an event that escalates — pulls it off its route to look at that layer first. The patrol is local and deterministic: it never turns a layer on, and it never moves your camera.
 
 Its look is a pure heartbeat: a white core with a cyan rim whose halo breathes on the clock — calm to peak and back — drawn into four inline pulse frames, so there is still no sprite asset and no build step.
 
