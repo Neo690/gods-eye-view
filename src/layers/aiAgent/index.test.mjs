@@ -852,6 +852,95 @@ test('the spider remembers the site it scanned and picks another one next pass',
   assert.equal(doc.body.children.length, 0);
 });
 
+test('corrupt or unavailable session storage leaves the patrol forgetful but working', () => {
+  // Each run owns its clock, viewer, layer and site set: no state can leak
+  // from the corrupt-read case into the quota-write case.
+  const runPatrol = (storage) => {
+    const sites = [
+      { latitude: 0, longitude: 0.2 },
+      { latitude: 0, longitude: 0.8 },
+    ];
+    let clock = 1_000_000;
+    const viewer = fakeViewer({ latDeg: 0, lonDeg: 0 });
+    const manager = {
+      getAll: () => [
+        {
+          id: 'towers',
+          name: 'Radio Sites',
+          enabled: true,
+          stats: { count: sites.length, loading: false, error: null },
+        },
+      ],
+      layers: new Map([
+        [
+          'towers',
+          {
+            enabled: true,
+            module: { getPatrolSites: () => sites },
+          },
+        ],
+      ]),
+    };
+    const layer = createAiAgentLayer({
+      docScope: fakeDocument(),
+      now: () => clock,
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+      }),
+      storage,
+    });
+    layer.attachDataManager(manager);
+    layer.init(viewer);
+    layer.enable();
+    const advance = (frames) => {
+      for (let i = 0; i < frames; i++) {
+        clock += 250;
+        viewer.scene.preUpdate.raiseEvent();
+      }
+    };
+    for (let frame = 0; frame < 200 && !layer.getStats().scanning; frame++)
+      advance(1);
+    const stats = layer.getStats();
+    // Finish the scan: this is where the layer writes its memory, so a
+    // throwing setItem must be caught rather than abort the patrol.
+    for (let frame = 0; frame < 40 && layer.getStats().scanning; frame++)
+      advance(1);
+    layer.disable();
+    layer.destroy();
+    return stats;
+  };
+
+  let malformed;
+  assert.doesNotThrow(() => {
+    malformed = runPatrol({
+      getItem: () => '{not json',
+      setItem: () => {},
+    });
+  }, 'a malformed read does not abort the patrol');
+  assert.deepEqual([malformed.latDeg, malformed.lonDeg], [0, 0.2]);
+
+  let quotaWrites = 0;
+  let disabled;
+  assert.doesNotThrow(() => {
+    disabled = runPatrol({
+      getItem: () => {
+        throw new Error('storage disabled by policy');
+      },
+      setItem: () => {
+        quotaWrites++;
+        throw new Error('quota exceeded');
+      },
+    });
+  }, 'a quota write does not abort the patrol');
+  assert.ok(
+    quotaWrites > 0,
+    'the quota write is attempted after a completed scan',
+  );
+  assert.deepEqual([disabled.latDeg, disabled.lonDeg], [0, 0.2]);
+});
+
 test('GhostMaps alerts are toured most severe first, with the card open', async () => {
   const doc = fakeDocument();
   let clock = 1_500_000;
