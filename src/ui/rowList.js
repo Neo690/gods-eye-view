@@ -52,6 +52,25 @@ export function syncRowList(container, list) {
     const bodyText = String(item.text ?? '');
     if (lead && lead.textContent !== leadText) lead.textContent = leadText;
     if (text && text.textContent !== bodyText) text.textContent = bodyText;
+    // An entry may offer one extra action beside its main one: reaching a
+    // device without moving the camera, say. It is a sibling button, not a
+    // nested one, so both keep their own label, focus and disabled state.
+    let action = entry.querySelector('.data-row-list-action');
+    if (item.action) {
+      if (!action) {
+        action = document.createElement('button');
+        action.type = 'button';
+        action.className = 'data-row-list-action';
+        action.dataset.listActionId = item.id;
+        entry.appendChild(action);
+      }
+      set(action, 'textContent', item.action.label || '');
+      set(action, 'title', item.action.title || item.action.label || '');
+      set(action, 'disabled', Boolean(item.action.disabled));
+      action.hidden = false;
+    } else if (action) {
+      action.remove();
+    }
     set(button, 'disabled', Boolean(item.disabled));
     // A boolean `checked` turns the row into a switch: `role="switch"` with
     // `aria-checked` is what a screen reader announces as on/off, where

@@ -4091,7 +4091,12 @@ that device's slot, which is the one thing a Cesium marker offered the mouse
 and nothing else. The list does not wait for a place: a scan imported before
 the operator says where they are is still readable, its entries disabled and
 saying `Set your place to centre this device` until the ring has a slot to fly
-to, because the inventory is the operator's as soon as it is read.
+to, because the inventory is the operator's as soon as it is read. Each entry
+also carries a second, smaller action that needs no slot: COPY ADDRESS puts the
+address on the clipboard without moving the camera, because reading a scan is
+often about acting on it elsewhere. A NEW chip narrows the list to the devices
+the last scan added (`missingFromLastScan`) and leaves each device's slot
+number alone, so centring from the shortlist still flies to the right place.
 The browser gate for all of it is `scripts/qa-device-sweep.mjs`: it turns the
 layer on, types a place, picks an nmap report and a refused file through the
 layer's own file input, then boots three more pages — one with every

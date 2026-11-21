@@ -257,7 +257,15 @@ test('the row offers a globe click and coordinates beside MY LOCATION', () => {
   const { layer } = layerHarness();
   assert.deepEqual(
     layer.getRowControls().chips.map(({ id }) => id),
-    ['import', 'place', 'place-pick', 'place-coordinates', 'note', 'clear'],
+    [
+      'import',
+      'place',
+      'place-pick',
+      'place-coordinates',
+      'only-new',
+      'note',
+      'clear',
+    ],
   );
   layer.destroy();
 });

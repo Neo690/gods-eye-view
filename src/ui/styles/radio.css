@@ -960,6 +960,38 @@ html:not([lang='en'])
   display: none;
 }
 
+/* A row may carry a second, smaller action (copy a device's address). The
+   entry button keeps the whole width when there is none. */
+.data-row-list > li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.data-row-list-action {
+  flex: none;
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.data-row-list-action:hover,
+.data-row-list-action:focus-visible {
+  color: var(--text-secondary);
+  border-color: var(--glass-border-hover);
+}
+
+.data-row-list-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .data-row-list-item {
   counter-increment: gev-step;
   display: flex;

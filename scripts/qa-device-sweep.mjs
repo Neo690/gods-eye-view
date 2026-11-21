@@ -164,12 +164,15 @@ function readList(page) {
       label: container?.getAttribute('aria-label') ?? null,
       entries: [...(container?.children ?? [])].map((entry) => {
         const button = entry.querySelector('button');
+        const action = entry.querySelector('.data-row-list-action');
         return {
           button: button?.tagName ?? null,
           disabled: button?.disabled ?? null,
           title: button?.title ?? '',
           lead: entry.querySelector('.data-row-list-lead')?.textContent ?? '',
           text: entry.querySelector('.data-row-list-text')?.textContent ?? '',
+          action: action?.textContent ?? null,
+          actionDisabled: action?.disabled ?? null,
         };
       }),
     };
@@ -341,6 +344,7 @@ async function main() {
         'place',
         'place-pick',
         'place-coordinates',
+        'only-new',
         'note',
         'clear',
       ]);
@@ -395,6 +399,14 @@ async function main() {
         /Set your place to centre this device/,
         'and each says what it needs',
       );
+      // Reading a scan also means acting on it elsewhere: copying an address
+      // needs no slot on the globe, so it stays available while centring waits.
+      assert.ok(
+        list.entries.every(
+          (entry) => entry.action === 'Copy address' && !entry.actionDisabled,
+        ),
+        'a device address can be copied before the sweep is placed',
+      );
     });
 
     // ── 3. A place, typed the way an operator types it. ────────────────────
@@ -445,6 +457,14 @@ async function main() {
         list.entries.every((entry) => !entry.disabled),
         'a place turns the entries back on',
       );
+      const filter = await page.evaluate(
+        (selector) =>
+          document
+            .querySelector(`${selector} [data-chip-id="only-new"]`)
+            ?.getAttribute('aria-pressed') ?? null,
+        ROW,
+      );
+      assert.equal(filter, 'false', 'the NEW shortlist chip is there, off by default');
 
       // The panel starts collapsed, which the chip clicks above did not care
       // about; a Tab does. Open it so the entry is really focusable.

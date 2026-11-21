@@ -22,6 +22,7 @@ import {
 } from './place.js';
 import {
   createDeviceSweepSource,
+  missingFromLastScan,
   orderedSweepDevices,
   sweepPointFor,
 } from './source.js';
@@ -180,6 +181,9 @@ export function createDeviceSweepLayer({
   let viewer = null;
   let placePicker = null;
   let pickingPlace = false;
+  // The row's one filter: the devices a scan added, which are the ones worth
+  // walking over to look at. It never changes the ring's slot numbering.
+  let onlyNew = false;
 
   /**
    * Read the picked file, then let the row show what it did. A file the store
@@ -285,6 +289,24 @@ export function createDeviceSweepLayer({
     refreshPanel();
   }
 
+  /**
+   * Put a device's address on the clipboard, without moving the camera.
+   *
+   * Reading a scan is often about acting on it elsewhere — a note, a ticket, a
+   * router's admin page — and centring the globe is the wrong thing to do to a
+   * screen the operator is reading.
+   */
+  async function copyAddress(address) {
+    try {
+      await navigator.clipboard.writeText(address);
+      feedback = t('Address copied');
+    } catch (error) {
+      console.warn('[Data:device-sweep] clipboard unavailable:', error);
+      feedback = t('Could not copy the address');
+    }
+    refreshPanel();
+  }
+
   const layer = createViewportPointsLayer({
     id: 'device-sweep',
     name: 'Device Sweep',
@@ -320,22 +342,38 @@ export function createDeviceSweepLayer({
       // readable before the sweep has a place — the ring draws nothing yet, but
       // the inventory is still the operator's — so the entries stay, disabled
       // and saying what they need, until there is a slot to fly to.
-      const list = orderedSweepDevices(devices, importedAt).map(
-        (device, index) => {
-          const item = deviceSweepItem(device, { importedAt, index });
-          if (!place) {
-            return {
-              ...item,
-              disabled: true,
-              title: t('Set your place to centre this device'),
-            };
-          }
+      const ring = orderedSweepDevices(devices, importedAt);
+      // Filtering keeps each device's index into the ring: the slot a device
+      // occupies is its position in the whole sweep, not in the shortlist.
+      const entries = onlyNew
+        ? ring.flatMap((device, index) =>
+            missingFromLastScan(device, importedAt) ? [{ device, index }] : [],
+          )
+        : ring.map((device, index) => ({ device, index }));
+      const list = entries.map(({ device, index }) => {
+        const item = deviceSweepItem(device, { importedAt, index });
+        // Copying an address needs no slot, so it is the one action an unplaced
+        // entry keeps; centring waits for a place, because there is nowhere to
+        // fly to yet.
+        const action = {
+          label: t('Copy address'),
+          title: t('Copy address'),
+          onClick: () => void copyAddress(item.lead),
+        };
+        if (!place) {
           return {
             ...item,
-            onClick: () => centerDevice(item.lead, sweepPointFor(place, index)),
+            action,
+            disabled: true,
+            title: t('Set your place to centre this device'),
           };
-        },
-      );
+        }
+        return {
+          ...item,
+          action,
+          onClick: () => centerDevice(item.lead, sweepPointFor(place, index)),
+        };
+      });
       return {
         list: {
           ariaLabel: t('Devices in this sweep'),
@@ -379,6 +417,18 @@ export function createDeviceSweepLayer({
               }),
           },
           {
+            id: 'only-new',
+            label: t('NEW'),
+            title: t('Not in your last scan'),
+            active: onlyNew,
+            disabled: !importedAt,
+            onClick: () => {
+              onlyNew = !onlyNew;
+              feedback = '';
+              refreshPanel();
+            },
+          },
+          {
             id: 'note',
             label: t('NOTE'),
             disabled: row.note.disabled,
@@ -391,6 +441,7 @@ export function createDeviceSweepLayer({
             disabled: row.clear.disabled,
             onClick: () => {
               forgetPending();
+              onlyNew = false;
               store.clear();
               feedback = t('Scan removed from this device');
               refreshPanel();

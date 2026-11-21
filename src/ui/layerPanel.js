@@ -637,6 +637,17 @@ export class LayerPanel {
     list.className = className;
     list.hidden = true;
     this._bind(list, 'click', (event) => {
+      // The secondary action is read first: it sits beside the entry's main
+      // button, and pressing it must not also centre anything.
+      const actionButton = event.target?.closest?.('.data-row-list-action');
+      if (actionButton) {
+        if (actionButton.disabled) return;
+        const item = this._rowControlsFor(layerId)?.[key]?.items?.find(
+          (entry) => entry.id === actionButton.dataset.listActionId,
+        );
+        if (typeof item?.action?.onClick === 'function') item.action.onClick();
+        return;
+      }
       const button = event.target?.closest?.('.data-row-list-item');
       if (!button || button.disabled) return;
       const item = this._rowControlsFor(layerId)?.[key]?.items?.find(
