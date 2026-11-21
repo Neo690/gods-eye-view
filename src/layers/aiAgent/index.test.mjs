@@ -18,6 +18,7 @@ import {
   stepPatrol,
   wrapLongitude,
   ARRIVE_RAD,
+  REST_MS,
   SCAN_MS,
 } from './patrol.js';
 import { eventSeverity, watchLayers, worstSeverity } from './watch.js';
@@ -416,7 +417,10 @@ test('the orb pulse cycles through the sprite frames', () => {
   const calm = orbPulseGeometry(0, 4);
   const peak = orbPulseGeometry(2, 4);
   assert.notEqual(calm.haloRadius, peak.haloRadius);
-  assert.ok(peak.haloRadius - calm.haloRadius <= 18 * Math.max(1, PULSE_INTENSITY) + 0.001);
+  assert.ok(
+    peak.haloRadius - calm.haloRadius <=
+      18 * Math.max(1, PULSE_INTENSITY) + 0.001,
+  );
   // Headless: no canvas means no frames, never a throw.
   assert.deepEqual(spiderSpriteFrames({ doc: undefined }), []);
 });
@@ -574,12 +578,21 @@ test('the inspection note rides the world-overlay host, never an entity label', 
   assert.equal(withEntry.entriesBySource[SPIDER_NOTE_SOURCE], 1);
 
   // Moving on clears the caption instead of drawing an empty one.
-  syncSpiderNoteOverlay({ state: { note: '', latDeg: 12, lonDeg: 34 }, host: overlayHost });
+  syncSpiderNoteOverlay({
+    state: { note: '', latDeg: 12, lonDeg: 34 },
+    host: overlayHost,
+  });
   const cleared = getWorldOverlayDiagnostics();
   assert.equal(cleared.entriesBySource[SPIDER_NOTE_SOURCE] ?? 0, 0);
 
-  syncSpiderNoteOverlay({ state: { note: 'Cyclones', severity: 'emergency' }, host: overlayHost });
-  syncSpiderNoteOverlay({ state: { note: '   ', severity: 'info' }, host: overlayHost });
+  syncSpiderNoteOverlay({
+    state: { note: 'Cyclones', severity: 'emergency' },
+    host: overlayHost,
+  });
+  syncSpiderNoteOverlay({
+    state: { note: '   ', severity: 'info' },
+    host: overlayHost,
+  });
   assert.equal(
     getWorldOverlayDiagnostics().entriesBySource[SPIDER_NOTE_SOURCE] ?? 0,
     0,
@@ -591,7 +604,9 @@ test('the inspection note rides the world-overlay host, never an entity label', 
 
 test('a note source that never existed removes without creating one', () => {
   destroySpiderNoteOverlay(overlayHost);
-  assert.doesNotThrow(() => syncSpiderNoteOverlay({ state: {}, host: overlayHost }));
+  assert.doesNotThrow(() =>
+    syncSpiderNoteOverlay({ state: {}, host: overlayHost }),
+  );
   assert.equal(
     getWorldOverlayDiagnostics().entriesBySource[SPIDER_NOTE_SOURCE] ?? 0,
     0,
@@ -756,6 +771,87 @@ test('the spider walks to an enabled layer and reports what it holds', async () 
   assert.equal(doc.body.children.length, 0);
 });
 
+test('the spider remembers the site it scanned and picks another one next pass', async () => {
+  const doc = fakeDocument();
+  const viewer = fakeViewer({ latDeg: 0, lonDeg: 0 });
+  let clock = 1_000_000;
+  // A is the nearest site; B is the only other site of the same layer. If the
+  // scanned site were not remembered, the next pass would land on A again.
+  const sites = [
+    { latitude: 0, longitude: 0.2 },
+    { latitude: 0, longitude: 0.8 },
+  ];
+  const layer = createAiAgentLayer({
+    docScope: doc,
+    now: () => clock,
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({}) }),
+  });
+  const manager = {
+    getAll: () => [
+      {
+        id: 'towers',
+        name: 'Radio Sites',
+        enabled: true,
+        stats: { count: sites.length, loading: false, error: null },
+      },
+    ],
+    layers: new Map([
+      [
+        'towers',
+        {
+          enabled: true,
+          module: { getAllPositions: () => sites },
+        },
+      ],
+    ]),
+  };
+  layer.attachDataManager(manager);
+  assert.equal(layer.init(viewer), true);
+  assert.equal(layer.enable(), true);
+  const advance = (frames) => {
+    for (let i = 0; i < frames; i++) {
+      clock += 250;
+      viewer.scene.preUpdate.raiseEvent();
+    }
+  };
+  const waitForScan = () => {
+    for (let frame = 0; frame < 200; frame++) {
+      if (layer.getStats().scanning) return layer.getStats();
+      advance(1);
+    }
+    return layer.getStats();
+  };
+
+  const first = waitForScan();
+  assert.equal(first.target, 'towers');
+  assert.equal(first.scanning, true, 'the spider reached its first site');
+  assert.deepEqual(
+    [first.latDeg, first.lonDeg],
+    [0, 0.2],
+    'it scanned the nearest site',
+  );
+
+  // Spend the scan and the rest that follows it, then let the spider choose
+  // its next target on the same layer.
+  advance(SCAN_MS / 250 + REST_MS / 250 + 1);
+  const second = waitForScan();
+  assert.equal(second.target, 'towers', 'the layer is patrolled again');
+  assert.equal(second.scanning, true, 'the spider reached its second site');
+  assert.deepEqual(
+    [second.latDeg, second.lonDeg],
+    [0, 0.8],
+    'the site just scanned was recorded, so another one wins',
+  );
+  assert.notDeepEqual(
+    [second.latDeg, second.lonDeg],
+    [first.latDeg, first.lonDeg],
+  );
+
+  assert.equal(layer.disable(), true);
+  assert.equal(layer.destroy(), true);
+  assert.equal(doc.body.children.length, 0);
+});
+
 test('GhostMaps alerts are toured most severe first, with the card open', async () => {
   const doc = fakeDocument();
   let clock = 1_500_000;
@@ -826,9 +922,7 @@ test('GhostMaps alerts are toured most severe first, with the card open', async 
         stats: { count: alerts.length, error: null },
       },
     ],
-    layers: new Map([
-      ['s2-ghostmaps', { enabled: true, module: ghostMaps }],
-    ]),
+    layers: new Map([['s2-ghostmaps', { enabled: true, module: ghostMaps }]]),
   };
   // The device synthesiser, as the page supplies it: this is the real wiring
   // (voice.js) rather than a stub of the layer's own announcement path.
@@ -1026,7 +1120,9 @@ test('the tour can be held and picked up where it stopped', async () => {
   assert.equal(layer.getStats().alert, 'cip:1');
   const feed = doc.body.children[0].querySelector('.gev-ai-agent-feed');
   assert.ok(
-    feed.children.some((row) => /MassStabbing · 11 killed/.test(row.textContent)),
+    feed.children.some((row) =>
+      /MassStabbing · 11 killed/.test(row.textContent),
+    ),
     'the card is still readable while held',
   );
 
@@ -1045,7 +1141,6 @@ test('the tour can be held and picked up where it stopped', async () => {
   layer.disable();
   layer.destroy();
 });
-
 
 test('a feed that breaks diverts the spider and words one brief', async () => {
   const doc = fakeDocument();
@@ -1185,7 +1280,9 @@ test('the layer refuses a second init and never claims a count it lacks', () => 
 test('alert reading time follows the headline, with a floor and a ceiling', () => {
   assert.equal(alertReadMs(''), ALERT_READ_BASE_MS);
   const short = alertReadMs('Vandalism');
-  const long = alertReadMs('MassStabbing · 11 killed, 40 wounded in the market');
+  const long = alertReadMs(
+    'MassStabbing · 11 killed, 40 wounded in the market',
+  );
   assert.ok(long > short, 'a longer headline is held longer');
   assert.equal(alertReadMs('x'.repeat(400)), ALERT_READ_MAX_MS);
 });
