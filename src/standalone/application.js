@@ -22,6 +22,7 @@ export function createStandaloneApplication({
   sources = {},
   streetLevelProviders,
   allowQaRegistration = false,
+  stallPhase = null,
 }) {
   if (constructed)
     throw new Error('The standalone application already owns this page');
@@ -85,5 +86,7 @@ export function createStandaloneApplication({
       createStandaloneData({ ...context, allowQaRegistration, catalog }),
     createTools: (context) =>
       createStandaloneTools({ ...context, loadingScreen, placeSearch, voice }),
+    // A QA-only phase that never settles; see createApplication.
+    stallPhase,
   });
 }

@@ -51,6 +51,33 @@ test('constructors are validated before allocating anything', () => {
   assert.throws(() => createApplication({}), /Missing scene constructor/);
 });
 
+test('a stalled phase is never constructed, and the state names where it stopped', async () => {
+  const { app, events } = fixture({ stallPhase: 'tools' });
+  let settled = false;
+  app.start().then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+  // Long enough for the three synchronous phases, and nowhere near enough for
+  // a stall that is a promise with no resolver.
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.deepEqual(events, ['start:Scene', 'start:Controls', 'start:Data']);
+  assert.deepEqual(
+    app.getState(),
+    { status: 'starting', phase: 'tools' },
+    'the state is where the guard reads the stall from',
+  );
+  assert.equal(
+    settled,
+    false,
+    'start() never settles, so nothing lifts the cover',
+  );
+});
+
 test('startup shares one promise and teardown keeps data alive for controls', async () => {
   const { app, events } = fixture({
     createTools({ scene, controls, data, defer }) {

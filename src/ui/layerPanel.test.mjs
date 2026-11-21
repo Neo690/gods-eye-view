@@ -94,6 +94,73 @@ test('partial feed controls distinguish incomplete records from stale data and o
   assert.equal(button.textContent, 'OFF');
 });
 
+test('a row that answers an operator action becomes a polite live region', async () => {
+  const { LayerPanel } = await import('./layerPanel.js');
+  const { railFixture } = await import('./railTestFixture.mjs');
+  const f = railFixture();
+  const previousDocument = globalThis.document;
+  globalThis.document = f.document;
+  const layers = [
+    {
+      id: 'device-sweep',
+      name: 'Device Sweep',
+      icon: '*',
+      source: 'Your own nmap scan',
+      enabled: true,
+      showInTogglePanel: true,
+      stats: {},
+    },
+    {
+      id: 'flights',
+      name: 'Live Flights',
+      icon: '*',
+      source: 'ADS-B',
+      enabled: true,
+      showInTogglePanel: true,
+      stats: {},
+    },
+  ];
+  const panel = new LayerPanel({
+    getLayers: () => layers,
+    isEnabled: () => true,
+    setEnabled() {},
+    setLayerParams() {},
+    hasRowControls: () => true,
+    subscribeRowControls() {},
+    getRowControls: (id) => ({
+      info:
+        id === 'device-sweep'
+          ? 'Imported 4 devices from home-nmap.xml'
+          : '12 in view · ADS-B',
+      announce: id === 'device-sweep',
+    }),
+  });
+  const infoOf = (id) =>
+    f
+      .find((node) => node.dataset.layerId === id)
+      .querySelector('.data-toggle-controls-info');
+  try {
+    panel.mount(f.container);
+    const sweep = infoOf('device-sweep');
+    assert.equal(
+      sweep.textContent,
+      'Imported 4 devices from home-nmap.xml',
+      'the line itself is unchanged',
+    );
+    assert.equal(sweep.getAttribute('role'), 'status');
+    assert.equal(sweep.getAttribute('aria-live'), 'polite');
+    assert.equal(sweep.getAttribute('aria-atomic'), 'true');
+    // A count a provider row repaints on every refresh is not an answer to an
+    // action, so it stays a plain line instead of talking over the globe.
+    const flights = infoOf('flights');
+    assert.equal(flights.getAttribute('role'), null);
+    assert.equal(flights.getAttribute('aria-live'), null);
+  } finally {
+    panel.destroy();
+    globalThis.document = previousDocument;
+  }
+});
+
 test('readout rows contain only toggles and metadata; ordinary rows retain controls', async () => {
   const { LayerPanel } = await import('./layerPanel.js');
   const { railFixture } = await import('./railTestFixture.mjs');

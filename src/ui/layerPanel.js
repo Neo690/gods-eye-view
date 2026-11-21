@@ -601,6 +601,19 @@ export class LayerPanel {
       if (node.title !== title) node.title = title;
       const hidden = !text;
       if (node.hidden !== hidden) node.hidden = hidden;
+      // A layer whose line answers an operator action declares `announce` once
+      // for itself: a line that is only painted is read by nobody. Every other
+      // row stays a plain line, so the counts a provider repaints on each
+      // refresh are not announced over the globe. The policy cannot change
+      // while a row is mounted, so the attributes are only ever set.
+      if (
+        controls?.announce === true &&
+        node.getAttribute('role') !== 'status'
+      ) {
+        node.setAttribute('role', 'status');
+        node.setAttribute('aria-live', 'polite');
+        node.setAttribute('aria-atomic', 'true');
+      }
     }
   }
 

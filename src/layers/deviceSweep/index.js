@@ -254,6 +254,11 @@ export function createDeviceSweepLayer({
     pointColour: deviceSweepColour,
     legend: DEVICE_SWEEP_LEGEND,
     hoverTip: deviceSweepHoverTip,
+    // The row is the only place an import, a refusal or a placed sweep is
+    // reported, so its line has to be spoken, not only painted. That holds for
+    // every rendering of this layer, which is why it is a property of the layer
+    // and not a flag on the row it builds.
+    announceInfo: true,
     // The data only changes when the operator imports or moves; a camera move
     // is what re-reads it, so the interval can be long.
     refreshMs: 600000,

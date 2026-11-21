@@ -215,6 +215,21 @@ test('universal notice lifecycle clears on dispose and uses the one top-center l
   assert.match(html, /<div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>/);
 });
 
+test('the loading cover names its own step in a polite live region', () => {
+  // The cover is what a slow start looks at for up to 30 s, and every phase it
+  // names ("Configuring viewer...", the degraded keyless path, a restore) was
+  // painted into a plain paragraph. A stall moves its line to the banner, but
+  // the steps before one have to reach a screen reader where they are written.
+  const html = expandApplicationHtml(
+    readFileSync(new URL('../index.html', import.meta.url), 'utf8'),
+  );
+  assert.match(
+    html,
+    /<p class="loader-status" role="status" aria-live="polite" aria-atomic="true" data-i18n>/,
+    'the cover line must be announced, not only painted',
+  );
+});
+
 test('normalizes lifecycle and refresh loading without owning manager state', () => {
   assert.equal(normalizeLayerLoading({ lifecycleState: 'enabling' }).loading, true);
   assert.equal(normalizeLayerLoading({ lifecycleState: 'disabling' }).disabling, true);

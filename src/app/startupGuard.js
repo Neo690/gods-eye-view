@@ -101,6 +101,12 @@ export async function withinBudget(
  * @param {{classList: {add: Function}, setAttribute?: Function}} [options.cover]
  * @param {{textContent: string, style?: object}} [options.status] The cover's
  *   status line, which already names the step in progress.
+ * @param {(message: string) => void} [options.notify] Where the stall message
+ *   goes. The cover is lifted on a stall, so a line written into it is read by
+ *   nobody: the app hands this to its status banner, whose polite live region
+ *   stays on screen. The guard knows only that someone wants the sentence; how
+ *   the banner shows it is the banner's business. Without it the cover's line
+ *   takes the message, which is what the guard did before there was a banner.
  * @param {number} [options.budgetMs]
  * @param {{set: Function, clear: Function}} [options.timers] Test seam.
  * @returns {() => void} Stop the guard.
@@ -109,6 +115,7 @@ export function guardStartup({
   application,
   cover,
   status,
+  notify,
   budgetMs = STARTUP_BUDGET_MS,
   // Wrapped, not passed by reference: a browser's setTimeout throws
   // "Illegal invocation" when it is called as a method of another object.
@@ -130,13 +137,13 @@ export function guardStartup({
     console.warn(
       `[Startup] still in ${phase ?? 'startup'} after ${budgetMs} ms`,
     );
-    if (status) {
-      if (status.style) status.style.color = '';
-      status.textContent = t(
-        'Startup is still at “{stage}” after {seconds} s. Reload to try again; the console stays usable.',
-        { stage, seconds },
-      );
-    }
+    const message = t(
+      'Startup is still at “{stage}” after {seconds} s. Reload to try again; the console stays usable.',
+      { stage, seconds },
+    );
+    if (status?.style) status.style.color = '';
+    if (typeof notify === 'function') notify(message);
+    else if (status) status.textContent = message;
     // The cover is the only thing between the operator and the console.
     cover?.classList.add('hidden');
     cover?.setAttribute?.('aria-hidden', 'true');

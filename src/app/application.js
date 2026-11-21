@@ -6,7 +6,13 @@ const STOP_ORDER = ['tools', 'controls', 'data', 'scene'];
  * Own application startup and teardown without importing an application entry.
  * Constructors receive earlier components, an AbortSignal and defer(cleanup).
  * Register cleanup immediately after acquiring each resource, before any await.
- * @param {{createScene:Function,createControls:Function,createData:Function,createTools:Function}} constructors
+ * @param {{createScene:Function,createControls:Function,createData:Function,
+ *   createTools:Function}} constructors
+ * @param {string} [options.stallPhase] A phase that never settles: its factory is
+ *   never called and the loop waits forever. The startup guard's stall path has
+ *   no other way into a browser — every real phase settles or is synchronous —
+ *   and `?qaStall=<phase>` sets this from the page's address, so a gate can
+ *   drive it end to end. Inert when absent.
  * @returns {{start:Function,destroy:Function,subscribe:Function,getState:Function,getComponents:Function}}
  */
 export function createApplication({
@@ -14,6 +20,7 @@ export function createApplication({
   createControls,
   createData,
   createTools,
+  stallPhase = null,
 }) {
   const factories = {
     scene: createScene,
@@ -72,6 +79,10 @@ export function createApplication({
         controller.signal.throwIfAborted();
         let acceptingCleanup = true;
         try {
+          // QA seam: a step that never resolves. Stopped before its factory, so
+          // the phases before it stay built — the state the guard exists for, a
+          // finished console behind a cover that will not lift.
+          if (phase === stallPhase) await new Promise(() => {});
           components[phase] = await factories[phase]({
             ...components,
             signal: controller.signal,

@@ -1944,8 +1944,16 @@ late failure is dropped. Destroying the startup aborts both of those waits, so
 neither deadline outlives it, the stack's stall warning is never printed behind
 a closed console, and a tileset that arrives afterwards is still destroyed. A
 startup that is still running after 30 seconds names
-the step it stopped at on the cover and lifts it, so the console behind a stall
-is usable rather than frozen. A page whose module graph never loads runs no
+the step it stopped at on the status banner and lifts the cover, so the console
+behind a stall is usable rather than frozen. The message goes to
+`#global-loading-status`, which carries `role="status"` and is a polite live
+region: the cover is hidden and `aria-hidden` once lifted, so a line written
+into it at that moment is read by nobody. Before the budget expires, the cover's
+own line is itself a polite live region (`.loader-status` carries `role="status"`,
+`aria-live="polite"` and `aria-atomic="true"`), so the step a slow start is on
+is heard as it changes instead of being painted for nobody, with the text on
+screen unchanged. The stall line is written through the banner's one
+label writer (`setSplitFlapText`) and its leftover detail is cleared. A page whose module graph never loads runs no
 code, so nothing can speak for it; reloading is the only answer there.
 
 The welcome card's wait for style restoration is bounded separately. It begins
@@ -3915,7 +3923,8 @@ its criteria cannot be silently ignored.
 | Fire Perimeters 🔥 | NIFC WFIGS current interagency perimeters (keyless, paged past the 2000-record cap); InciWeb catalog + incident page origin and update time checks for verified incident-page links | `src/layers/perimeters/` via `src/app/layers/perimeters.js` | `/api/fire-perimeters` + `/api/fire-perimeters/inciweb/*` | 5 min (server caches: catalog 1 h; publication 30 min) |
 | Radiation ☢ (`radiation`) | Ambient gamma dose rate: BfS ODL (Germany, hourly, keyless), Health Canada FPSN (keyless), plus Safecast, radmon.org and uRADMonitor volunteer Geiger counts converted to µSv/h and marked estimated — five networks in one aggregated snapshot, each row tagged with its network (uRADMonitor reads only the units of the account in `URADMONITOR_USER_ID`/`URADMONITOR_USER_HASH`, so it is skipped when those keys are unset) | `src/layers/radiation/` via `src/app/layers/radiation.js` | `/api/radiation` | 10 min (server cache 5 min; a failed network keeps serving its last snapshot for up to 1 h, flagged degraded) |
 | Network Monitor 📡 (`netmon`) | Operator-declared nodes in `GEV_NETMON_TARGETS` (`label\|host\|port\|lat\|lon`), probed by this app's own server with a plain, payload-free TCP connect — no third-party upstream; positions are declared, never resolved from host names | `src/layers/netmon/` via `src/app/layers/netmon.js` | `/api/netmon` | 60s poll (server probe deadline 5 s; server cache 30 s, one in-flight refresh) |
-| Device Sweep 🔎 (`device-sweep`) | An inventory the operator ran themselves — nmap XML, normal or greppable, an ARP table (`arp -a`, `/proc/net/arp`) or a router DHCP lease list — read in the page: maker from a shortlist checked against the IEEE MA-L registry, RTSP and recorder ports, camera-like host names, and one marker per device around the operator's own place, ranked flagged-first; the place comes from MY LOCATION, one click on the globe or typed coordinates, and the markers are a schematic ring, never a room plan | `src/layers/deviceSweep/` via `src/app/layers/constructCatalog.js` | — (nothing leaves the page) | on import, on a place change, and on camera movement |
+| Device Sweep 🔎 (`device-sweep`) | An inventory the operator ran themselves — nmap XML, normal or greppable, an ARP table (`arp -a`, `/proc/net/arp`) or a router DHCP lease list — read in the page: maker from a shortlist checked against the IEEE MA-L registry, RTSP and recorder ports, camera-like host names, and one marker per device around the operator's own place, ranked flagged-first, with devices the latest scan no longer sees kept and
+dimmed; the place comes from MY LOCATION, one click on the globe or typed coordinates, and the markers are a schematic ring, never a room plan | `src/layers/deviceSweep/` via `src/app/layers/constructCatalog.js` | — (nothing leaves the page) | on import, on a place change, and on camera movement |
 
 A railway station card opens on click and names only what the map records —
 operator, network and platform count appear when present, absent instead of
@@ -4008,18 +4017,49 @@ evidence: a MAC prefix from a shortlist re-checked against the IEEE MA-L
 registry, an open RTSP or recorder port, a camera-like host name. ARP tables and
 lease exports carry no ports, so their verdicts rest on the MAC and the host
 name alone; a prefix that belongs to a radio module (Espressif, Tuya) names no
-maker at all, because the same chip sits in a lamp and in a camera. A second
+maker at all, because the same chip sits in a lamp and in a camera. The
+shortlist's answer is recomputed from the MAC on every read instead of being
+stored — only a name the file itself carried is written down — so correcting the
+shortlist corrects the scans already imported, including withdrawing a maker it
+no longer vouches for. A second
 import keeps the first time each device was seen (keyed by MAC, else address)
-and the row names how many are new. A device can carry a note the operator wrote,
-shown in its hover tip; it follows that device across imports and leaves with the
-scan. A table has to look like one, so a file holding a single address-and-MAC
+and the row names how many are new. It also keeps the last time each device was
+seen, so a device the new file does not mention is still drawn — dim grey, at
+the back of the ring, counted in the row — instead of disappearing, because a
+camera that stopped answering is the finding. That is also why a file that names
+almost none of the stored sweep — under a quarter of it — is not written straight
+away: the row asks, saying how many of the sweep the file holds and what
+importing it would do, the import chip becomes IMPORT ANYWAY, and CANCEL drops
+the file; nothing is stored until the operator answers, and the file held for
+the answer is the one that was read. A re-scan of the same network names nearly
+all of it and goes straight in, and a first import has nothing to contradict, so
+it is never questioned. The stored payload is v3 (`lastSeen` on each row, no
+derived maker); a v1 or v2 payload reads as-is, every device dated by the import
+that carried it, so an upgrade greys nothing until a scan moves on. Every time it
+shows is an age, not a stamp: a device's hover tip says `Last seen: 3 days ago`
+and the row says `last import 3 days ago`, both spoken by
+`Intl.RelativeTimeFormat` in the reader's language, because a sweep from this
+morning and one from three days ago are not the same finding. Nothing under a
+minute is said at all — `now` is not an age, and whatever just happened is
+already the row's feedback line.
+A device can carry a note the operator wrote,
+shown in its hover tip; it follows that device across imports, waits through a
+scan that did not mention the device, and leaves with the scan. A table has to look like one, so a file holding a single address-and-MAC
 row is refused rather than read as a one-device inventory. The place the ring is
 drawn around can come from the browser's location,
 one click on the globe, or typed coordinates (latitude first, a decimal comma
 accepted), and all three write the same stored place — a refused location
 permission no longer means an empty layer. The positions are schematic: a LAN
-device has no geography, and the row says so. Scan only networks you are
-authorized to use.
+device has no geography, and the row says so. The row's line of feedback — what
+an import added, a file it refused, a sweep it placed, a location it could not
+reach — is a polite live region (`role="status"`, `aria-atomic`), because the
+row is the only place an action is answered and a line that is only painted is
+read by nobody; a provider row that repaints its counts stays a plain line.
+The browser gate for all of it is `scripts/qa-device-sweep.mjs`: it turns the
+layer on, types a place, picks an nmap report and a refused file through the
+layer's own file input, and boots a second page with every cross-origin
+request cut off to prove the bounded startup still reaches the console.
+Scan only networks you are authorized to use.
 
 Street Level is a docked, collapsible right-rail panel (`#street-level-panel`,
 layer token `0`, option owner `street-level`, panel `ui` token `t`) that starts

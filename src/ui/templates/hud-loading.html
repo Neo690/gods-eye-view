@@ -6,6 +6,10 @@
     <div class="loader-content">
       <span class="loader-logo brand-logo" data-logo-gaze data-logo-src="/logo.svg" aria-hidden="true"><img src="/logo.svg" alt="" /></span>
       <h2 translate="no">GOD'S EYE <span class="title-accent">VIEW</span></h2>
-      <p class="loader-status" data-i18n>Initializing photorealistic world...</p>
+      <!-- The only line the cover ever speaks: it names the step in progress and
+           the degraded path taken when a step times out. A polite live region, so
+           a slow start is heard and not just painted; nothing here changes how
+           the line looks. -->
+      <p class="loader-status" role="status" aria-live="polite" aria-atomic="true" data-i18n>Initializing photorealistic world...</p>
     </div>
   </div>

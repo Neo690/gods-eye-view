@@ -91,6 +91,9 @@ export function cameraBounds(viewer) {
  * @param {(context: {refresh: () => void}) => {chips?: Array<object>, detail?: string}}
  *   [config.extras] Row controls a local-data layer owns itself (importing a
  *   file, clearing it). Called on every panel refresh, so it must only read.
+ * @param {boolean} [config.announceInfo] Make the info line a live region. For
+ *   a layer whose line answers an operator action, never for one that repaints
+ *   counts: it is a property of the layer, set once, not of one rendering.
  * @param {{show:(text:string,x:number,y:number)=>void,hide:()=>void,
  *   destroy:()=>void}|null} [config.tipView] Test seam: the hover-tip view.
  *   Built lazily from the DOM when unset.
@@ -112,6 +115,7 @@ export function createViewportPointsLayer({
   maxSpanDeg = MAX_SPAN_DEG,
   requiresKeyId,
   emptyHint,
+  announceInfo = false,
   extras,
   hoverTip = null,
   tipView = null,
@@ -495,6 +499,7 @@ export function createViewportPointsLayer({
             'Positions come from the provider, not from measurements taken here. Zoom in for a denser answer.',
           ),
         legend: Array.isArray(legend) ? legend : [],
+        announce: announceInfo,
       };
     },
 
