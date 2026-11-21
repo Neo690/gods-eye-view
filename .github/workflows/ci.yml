@@ -157,6 +157,10 @@ jobs:
     timeout-minutes: 30
     env:
       GEV_REQUIRE_ALLOCATION_GATE: '0'
+      # The browser is installed explicitly below. npm refuses dependency
+      # install scripts, so Puppeteer's postinstall never fetches one.
+      PUPPETEER_SKIP_DOWNLOAD: '1'
+      PREVIEW_PORT: '4173'
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -184,21 +188,36 @@ jobs:
           done
           exit 1
 
+      # npm 11 does not run dependency install scripts unless they are trusted,
+      # so the Puppeteer postinstall above is skipped and the gate would fail
+      # with "Could not find Chrome". Ask for the browser at the version the
+      # lockfile pins; this is the same binary the postinstall would have left.
+      - name: Install the browser the gate drives
+        run: npx puppeteer browsers install chrome
+
+      # Text metrics decide where a click lands and how a chip wraps; a bare
+      # runner has fewer fonts than a desktop and can measure differently.
+      - name: Install fonts for deterministic text metrics
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fonts-liberation
+
       - name: Build production bundle
         run: npm run build
 
       - name: Start the preview server
         run: |
-          npx vite preview --port 4173 --strictPort > preview.log 2>&1 &
+          npx vite preview --port "$PREVIEW_PORT" --strictPort > preview.log 2>&1 &
           for attempt in $(seq 1 90); do
-            curl -sf http://localhost:4173/ > /dev/null && exit 0
+            curl -sf "http://localhost:$PREVIEW_PORT/" > /dev/null && exit 0
             sleep 2
           done
           cat preview.log
           exit 1
 
       - name: Device Sweep gate
-        run: node scripts/qa-device-sweep.mjs --url http://localhost:4173
+        timeout-minutes: 12
+        run: node scripts/qa-device-sweep.mjs --url "http://localhost:$PREVIEW_PORT"
 
       - name: Preview server log
         if: failure()
