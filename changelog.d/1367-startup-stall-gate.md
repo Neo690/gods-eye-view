@@ -19,6 +19,13 @@
   banner up until it is cleared; `main.js` uses it whenever the shell exists and
   falls back to the elements only for a stall in a phase that never built the
   shell. `data-state` is the shell's alone again.
+- A fourth boot stalls on `controls`, the phase that builds the shell, so the
+  status banner is in the document with no loading feedback driving it. That is
+  the one path where `main.js` writes the banner's elements directly instead of
+  posting a shell notice, and the gate checks it end to end: the sentence names
+  the step the cover stopped at, the label took it, the stale detail is empty,
+  no `data-state` is set by anyone, the cover is lifted and `aria-hidden`, and
+  the line is still up 1.5 s later.
 - A unit test pins the seam itself: the stalled phase is never constructed, the
   application state reads `starting`/`tools` — what the guard names the stall
   from — and `start()` never settles.

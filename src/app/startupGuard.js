@@ -141,9 +141,13 @@ export function guardStartup({
       'Startup is still at “{stage}” after {seconds} s. Reload to try again; the console stays usable.',
       { stage, seconds },
     );
-    if (status?.style) status.style.color = '';
     if (typeof notify === 'function') notify(message);
-    else if (status) status.textContent = message;
+    // Without a banner, the cover's line is all that is left: clear any failure
+    // colour from an earlier step before it takes the sentence.
+    else if (status) {
+      if (status.style) status.style.color = '';
+      status.textContent = message;
+    }
     // The cover is the only thing between the operator and the console.
     cover?.classList.add('hidden');
     cover?.setAttribute?.('aria-hidden', 'true');

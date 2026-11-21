@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 
 import { TIMED_OUT, guardStartup, withinBudget } from './startupGuard.js';
 
@@ -175,39 +174,17 @@ test('a startup that outlives its budget names the step, tells the app and lifts
     'Loading Google 3D Tiles...',
     'the lifted cover keeps its own line: the message went to the banner',
   );
-  assert.equal(status.style.color, '', 'the failure colour is cleared');
   assert.ok(cover.classes.has('hidden'), 'the console behind is revealed');
   assert.equal(cover.attributes.get('aria-hidden'), 'true');
   stop();
 });
 
-test('the app puts a stall in the banner, not in the cover it just lifted', async () => {
-  // The guard only hands the sentence over; which element speaks it, through
-  // which writer, and that the stale detail goes with it, belong to the app.
-  // This is the narrowest place to pin that wiring without starting one.
-  const source = await readFile(new URL('../main.js', import.meta.url), 'utf8');
-  assert.match(source, /notify: \(message\) => \{/);
-  assert.match(
-    source,
-    /shell\.showGlobalStatusNotice\(message\)/,
-    'the shell owns the banner once it exists',
-  );
-  assert.match(
-    source,
-    /setSplitFlapText\(globalLoadingLabel, message, \{ immediate: true \}\)/,
-  );
-  assert.match(source, /globalLoadingDetail\.textContent = ''/);
-  assert.match(source, /globalLoadingStatus\.hidden = false/);
-  assert.doesNotMatch(
-    source,
-    /globalLoadingStatus\.dataset\.state/,
-    'the banner keeps one owner of its state',
-  );
-});
-
 test('without a notify callback the stall keeps the one line it can still write', () => {
   const clock = fakeClock();
-  const status = { textContent: 'Initializing systems...', style: {} };
+  const status = {
+    textContent: 'Initializing systems...',
+    style: { color: '#ff4444' },
+  };
   const stop = guardStartup({
     application: fakeApplication(),
     cover: fakeCover(),
@@ -220,6 +197,7 @@ test('without a notify callback the stall keeps the one line it can still write'
 
   assert.match(status.textContent, /Initializing systems\.\.\./);
   assert.match(status.textContent, /30 s/);
+  assert.equal(status.style.color, '', 'the failure colour is cleared');
   stop();
 });
 

@@ -79,9 +79,8 @@ export function createApplication({
         controller.signal.throwIfAborted();
         let acceptingCleanup = true;
         try {
-          // QA seam: a step that never resolves. Stopped before its factory, so
-          // the phases before it stay built — the state the guard exists for, a
-          // finished console behind a cover that will not lift.
+          // QA seam: stopped before its factory, so the phases before it stay
+          // built — a finished console behind a cover that will not lift.
           if (phase === stallPhase) await new Promise(() => {});
           components[phase] = await factories[phase]({
             ...components,

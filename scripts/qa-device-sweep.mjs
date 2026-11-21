@@ -23,6 +23,11 @@
  *     QA-only seam): after its 30 s the guard names the step in the visible
  *     status banner, lifts the cover, and the console behind it still answers a
  *     real click.
+ *  8. a fourth boot stalling on `controls`, the phase that builds the shell
+ *     (`?qaStall=controls`): the banner exists but no shell feedback owns it, so
+ *     the guard's sentence is written into the elements themselves — that is
+ *     main.js's fallback, and the message, the lifted cover and its persistence
+ *     are checked there.
  *
  * The scan is this gate's own fixture, written under `qa-artifacts/`; the file
  * is read in the page and never uploaded anywhere. Nothing here needs a key.
@@ -167,6 +172,85 @@ function readRow(selector) {
 function bannerText(page) {
   return page.evaluate(
     () => document.getElementById('global-loading-status')?.textContent ?? '',
+  );
+}
+
+/**
+ * Boot a page whose startup stops on `phase`, and wait for the guard to speak.
+ *
+ * Every real phase settles or is synchronous, so `qaStall` is the only way into
+ * the guard's stall path from a browser. Returns the banner and the cover as
+ * they read once it has, and how long it took.
+ */
+async function stallBoot(browser, { phase, name, errors, monitors }) {
+  const page = await browser.newPage();
+  monitors.push(watchPage(page, { name, errors }));
+  await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+  const url = new URL(appUrl.href);
+  url.searchParams.set('qaStall', phase);
+  const openedAt = Date.now();
+  await page.goto(url.href, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(
+    () =>
+      /Startup is still at/.test(
+        document.getElementById('global-loading-status')?.textContent ?? '',
+      ),
+    { timeout: 90_000, polling: 500 },
+  );
+  const stall = await page.evaluate(() => {
+    const status = document.getElementById('global-loading-status');
+    const cover = document.getElementById('loading-screen');
+    return {
+      banner: status?.textContent ?? '',
+      label: document.getElementById('global-loading-label')?.textContent ?? '',
+      detail:
+        document.getElementById('global-loading-detail')?.textContent ?? '',
+      state: status?.dataset?.state ?? null,
+      onScreen: status?.hidden === false,
+      role: status?.getAttribute('role') ?? null,
+      live: status?.getAttribute('aria-live') ?? null,
+      coverLifted: cover?.classList.contains('hidden') === true,
+      coverAria: cover?.getAttribute('aria-hidden'),
+      stage: document.querySelector('.loader-status')?.textContent ?? '',
+      // False when the stall came before the panel that builds the row.
+      shellBuilt: Boolean(
+        document.querySelector('#data-toggles [data-layer-id] .data-toggle-btn'),
+      ),
+    };
+  });
+  return { page, stall, waited: Date.now() - openedAt };
+}
+
+/** What every stall must say, whatever step it stopped at. */
+function assertStallSpoken(stall, waited) {
+  assert.ok(
+    waited >= 29_000,
+    `the guard gave the startup its full 30 s budget (waited ${waited} ms)`,
+  );
+  assert.match(stall.banner, /Startup is still at “/);
+  assert.match(stall.banner, /after 30 s/, 'it says how long it waited');
+  assert.ok(
+    stall.stage.trim() && stall.banner.includes(stall.stage.trim()),
+    `the banner names the step the cover stopped at (${stall.stage.trim()})`,
+  );
+  assert.equal(stall.role, 'status', 'the banner is a status region');
+  assert.equal(stall.onScreen, true, 'the message is shown, not only written');
+  assert.equal(stall.live, 'polite', 'and it is announced');
+  assert.equal(stall.coverLifted, true, 'the cover is lifted');
+  assert.equal(
+    stall.coverAria,
+    'true',
+    'and taken out of the reading order with it',
+  );
+}
+
+/** The line a moment later: whatever ticks this banner must not wipe it. */
+async function assertStallPersists(page) {
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  assert.match(
+    await bannerText(page),
+    /Startup is still at/,
+    'the stall line stays up',
   );
 }
 
@@ -437,80 +521,22 @@ async function main() {
 
     // ── 7. A startup step that never settles. ──────────────────────────────
     await step('a stalled step is named in the banner, the cover lifts and the console answers', async () => {
-      const stalledPage = await browser.newPage();
-      const stalledMonitor = watchPage(stalledPage, {
+      // `tools` is the last phase: what the cover hides is a finished console.
+      const { page, stall, waited } = await stallBoot(browser, {
+        phase: 'tools',
         name: 'stalled-startup',
         errors,
+        monitors,
       });
-      monitors.push(stalledMonitor);
-      await stalledPage.setViewport({
-        width: 1440,
-        height: 900,
-        deviceScaleFactor: 1,
-      });
-      // Every real startup phase settles or is synchronous, so `qaStall` is the
-      // only way into the guard's stall path from a browser. `tools` is the last
-      // phase: what the cover hides is a finished console.
-      const stalledUrl = new URL(appUrl.href);
-      stalledUrl.searchParams.set('qaStall', 'tools');
-      const openedAt = Date.now();
-      await stalledPage.goto(stalledUrl.href, {
-        waitUntil: 'domcontentloaded',
-      });
-      await stalledPage.waitForFunction(
-        () =>
-          /Startup is still at/.test(
-            document.getElementById('global-loading-status')?.textContent ?? '',
-          ),
-        { timeout: 90_000, polling: 500 },
-      );
-      const waited = Date.now() - openedAt;
-      assert.ok(
-        waited >= 29_000,
-        `the guard gave the startup its full 30 s budget (waited ${waited} ms)`,
-      );
-      const stalled = await stalledPage.evaluate(() => {
-        const status = document.getElementById('global-loading-status');
-        const cover = document.getElementById('loading-screen');
-        return {
-          banner: status?.textContent ?? '',
-          state: status?.dataset?.state ?? null,
-          onScreen: status?.hidden === false,
-          live: status?.getAttribute('aria-live') ?? null,
-          coverLifted: cover?.classList.contains('hidden') === true,
-          coverAria: cover?.getAttribute('aria-hidden'),
-          stage: document.querySelector('.loader-status')?.textContent ?? '',
-        };
-      });
-      assert.match(stalled.banner, /Startup is still at “/);
-      assert.match(stalled.banner, /after 30 s/, 'it says how long it waited');
-      assert.ok(
-        stalled.stage.trim() && stalled.banner.includes(stalled.stage.trim()),
-        `the banner names the step the cover stopped at (${stalled.stage.trim()})`,
-      );
-      assert.equal(stalled.state, 'error', 'the banner reads as a failure');
-      assert.equal(stalled.onScreen, true, 'the message is shown, not only written');
-      assert.equal(stalled.live, 'polite', 'and it is announced');
-      assert.equal(stalled.coverLifted, true, 'the cover is lifted');
-      assert.equal(
-        stalled.coverAria,
-        'true',
-        'and taken out of the reading order with it',
-      );
+      assertStallSpoken(stall, waited);
+      assert.equal(stall.state, 'error', 'the banner reads as a failure');
       // A message that survives its own tick: the shell's loading feedback also
       // writes this banner, and a stall line it wipes would be news nobody read.
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      assert.match(
-        await bannerText(stalledPage),
-        /Startup is still at/,
-        'the stall line stays up',
-      );
+      await assertStallPersists(page);
 
       // Usable, not merely visible: a real control behind the lifted cover.
-      await stalledPage.$eval(`${ROW} .data-toggle-btn`, (button) =>
-        button.click(),
-      );
-      await stalledPage.waitForFunction(
+      await page.$eval(`${ROW} .data-toggle-btn`, (button) => button.click());
+      await page.waitForFunction(
         (selector) =>
           document
             .querySelector(selector)
@@ -519,12 +545,41 @@ async function main() {
         { timeout: 30_000 },
         ROW,
       );
-      const row = await stalledPage.evaluate(readRow, ROW);
+      const row = await page.evaluate(readRow, ROW);
       assert.equal(row.toggle, 'ON', 'the console behind the cover answers');
       // Same origin, same storage: the sweep the earlier steps imported is the
       // one this row reads back, which is what makes the row live, not painted.
       assert.match(row.info, /6 devices/, 'and its row reads the stored sweep');
-      await stalledPage.close();
+      await page.close();
+    });
+
+    // ── 8. A stall before the shell exists. ────────────────────────────────
+    await step('a stall before the console is built still writes the banner', async () => {
+      // `controls` builds the shell, whose loading feedback owns the banner's
+      // text and `data-state`. Stalling there leaves the banner with nobody
+      // driving it: the one path where main.js's `notify` writes the elements
+      // itself instead of posting a shell notice.
+      const { page, stall, waited } = await stallBoot(browser, {
+        phase: 'controls',
+        name: 'early-stall',
+        errors,
+        monitors,
+      });
+      assertStallSpoken(stall, waited);
+      assert.equal(stall.shellBuilt, false, 'this boot never reached the shell');
+      assert.match(
+        stall.label,
+        /Startup is still at/,
+        'the fallback wrote the banner label itself',
+      );
+      assert.equal(
+        stall.detail.trim(),
+        '',
+        'the stale loading detail is cleared with it',
+      );
+      assert.equal(stall.state, null, 'no shell owns data-state yet');
+      await assertStallPersists(page);
+      await page.close();
     });
 
     await step('no uncaught page errors in any boot', () => {

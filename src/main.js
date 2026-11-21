@@ -32,9 +32,7 @@ application.start().catch((error) => {
 });
 
 // A startup that stalls must say where and let the operator in, rather than
-// leaving the cover up over a console that is already built. The cover comes
-// down with the message, so the message goes to the status banner, which stays
-// on screen as a polite live region and is announced rather than merely shown.
+// leaving the cover up over a console that is already built.
 const globalLoadingStatus = document.getElementById('global-loading-status');
 const globalLoadingLabel = document.getElementById('global-loading-label');
 const globalLoadingDetail = document.getElementById('global-loading-detail');

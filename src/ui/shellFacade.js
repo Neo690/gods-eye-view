@@ -1222,17 +1222,15 @@ export class ShellFacade {
   /**
    * Show a message in the universal status banner and keep it there.
    *
-   * The banner's visibility and its `data-state` belong to the shell, which
-   * recomputes both on every tick: a line written straight into the element is
-   * hidden and unstyled by the next one. A persistent notice is the supported
-   * way in for a message that has to stay — the startup guard's stall line,
-   * which matters for as long as the page cannot get past a step.
+   * The shell recomputes the banner's text, visibility and `data-state` on every
+   * tick, so only a persistent notice survives the next one. That is what a
+   * message that matters until something changes needs — the startup guard's
+   * stall line, for as long as the page cannot get past a step.
    *
    * @param {string} message Already localized by the caller.
-   * @param {{state?: string, detail?: string}} [options]
    */
-  showGlobalStatusNotice(message, options = {}) {
-    this._showGlobalStatusNotice(message, { persistent: true, ...options });
+  showGlobalStatusNotice(message) {
+    this._showGlobalStatusNotice(message, { persistent: true });
   }
 
   /**
