@@ -3305,6 +3305,10 @@
   "Only {matched} of your {total} devices are in this file. Import it anyway? Your scan would stay, greyed, and this one would be added to it.": "这个文件只包含你 {total} 台设备中的 {matched} 台。仍要导入吗？你已有的扫描会保留并置灰，这次的结果会加进去。",
   "{count} not in your last scan": "{count} 个不在上次扫描中",
   "Note: {note}": "备注：{note}",
+  "Devices in this sweep": "本次扫描的设备",
+  "No open ports": "无开放端口",
+  "Centered on {device}": "已居中到 {device}",
+  "The globe is not ready yet": "地球尚未就绪",
   "No scan yet · your own spaces only · stays on this device": "尚无扫描 · 仅限你自己的空间 · 保存在本设备",
   "That file is not an inventory this layer reads": "该文件不是此图层可读取的清单"
 }

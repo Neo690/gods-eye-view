@@ -1,5 +1,5 @@
 import { formatNumber, formatRelativeTime, msg, t } from '../../i18n/index.js';
-import { missingFromLastScan } from './source.js';
+import { missingFromLastScan, portSummary } from './source.js';
 
 /**
  * What the device sweep shows: a point's colour, its hover text and its row.
@@ -164,6 +164,39 @@ export function deviceSweepHoverTip(point, { now = Date.now() } = {}) {
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+/**
+ * One line of the row's device list: the address, then the maker, the verdict,
+ * the open ports, the age and whether the last scan left it out.
+ *
+ * The globe's markers answer the mouse only, so this row is where a keyboard
+ * or a thumb learns the same thing. The lead is what the marker is labelled
+ * with — the address — and the rest is the hover tip compressed to one line.
+ *
+ * @param {object} device one classified, stored device
+ * @param {{importedAt?: number|null, now?: number, index?: number}} [options]
+ * @returns {{id:string, lead:string, text:string}|null}
+ */
+export function deviceSweepItem(
+  device,
+  { importedAt = null, now = Date.now(), index = 0 } = {},
+) {
+  if (!device) return null;
+  const lead = device.ip || device.hostname || device.mac || '';
+  return {
+    id: device.mac || device.ip || `device-${index}`,
+    lead,
+    text: [
+      device.vendor,
+      deviceVerdictLabel(device.verdict),
+      portSummary(device) || t('No open ports'),
+      deviceAge(device.lastSeen ?? device.firstSeen, now),
+      missingFromLastScan(device, importedAt) ? t('Not in your last scan') : '',
+    ]
+      .filter(Boolean)
+      .join(' · '),
+  };
 }
 
 /**

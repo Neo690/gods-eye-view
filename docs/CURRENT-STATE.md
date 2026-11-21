@@ -4055,10 +4055,20 @@ an import added, a file it refused, a sweep it placed, a location it could not
 reach — is a polite live region (`role="status"`, `aria-atomic`), because the
 row is the only place an action is answered and a line that is only painted is
 read by nobody; a provider row that repaints its counts stays a plain line.
+The same sweep is a list under the row: one real button per device, in the
+ring's order, naming its address, maker, verdict, open ports, age and whether
+the last scan left it out. Enter on one — or a thumb — flies the camera to
+that device's slot, which is the one thing a Cesium marker offered the mouse
+and nothing else.
 The browser gate for all of it is `scripts/qa-device-sweep.mjs`: it turns the
 layer on, types a place, picks an nmap report and a refused file through the
-layer's own file input, and boots a second page with every cross-origin
-request cut off to prove the bounded startup still reaches the console.
+layer's own file input, then boots three more pages — one with every
+cross-origin request cut off, proving the bounded startup still reaches the
+console, and two whose startup stops on one phase through `?qaStall`. A
+`tools` stall leaves a finished console behind the lifted cover and the layer
+still answers a real click; a `controls` stall happens before the shell
+exists, so the guard's sentence is read in the banner's own elements, with no
+`data-state` set by anything.
 Scan only networks you are authorized to use.
 
 Street Level is a docked, collapsible right-rail panel (`#street-level-panel`,

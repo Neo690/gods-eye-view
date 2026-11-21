@@ -7,6 +7,7 @@ import {
   DEVICE_SWEEP_LEGEND,
   deviceSweepColour,
   deviceSweepHoverTip,
+  deviceSweepItem,
   deviceSweepRow,
 } from './presentation.js';
 import {
@@ -19,7 +20,11 @@ import {
   flyToSweepPlace,
   openCoordinateDialog,
 } from './place.js';
-import { createDeviceSweepSource } from './source.js';
+import {
+  createDeviceSweepSource,
+  orderedSweepDevices,
+  sweepPointFor,
+} from './source.js';
 import { createDeviceSweepStore } from './store.js';
 
 export {
@@ -33,6 +38,7 @@ export {
   SWEEP_RING_STEP_DEG,
   createDeviceSweepSource,
   devicesInBounds,
+  orderedSweepDevices,
   sweepPointFor,
 } from './source.js';
 export {
@@ -61,6 +67,7 @@ export {
   DEVICE_SWEEP_LEGEND,
   deviceSweepColour,
   deviceSweepHoverTip,
+  deviceSweepItem,
   deviceSweepRow,
   deviceVerdictLabel,
 } from './presentation.js';
@@ -261,6 +268,23 @@ export function createDeviceSweepLayer({
     refreshPanel();
   }
 
+  /**
+   * Look at one device on the ring. The positions are schematic, but the point
+   * is the slot the marker occupies, so centring it is centring what the row
+   * names — the one thing a mouse on a Cesium marker can do that a keyboard
+   * could not.
+   */
+  function centerDevice(name, point) {
+    forgetPending();
+    if (!flyToSweepPlace(viewer, point, { rangeM: 900 })) {
+      feedback = t('The globe is not ready yet');
+      refreshPanel();
+      return;
+    }
+    feedback = t('Centered on {device}', { device: name });
+    refreshPanel();
+  }
+
   const layer = createViewportPointsLayer({
     id: 'device-sweep',
     name: 'Device Sweep',
@@ -290,7 +314,28 @@ export function createDeviceSweepLayer({
         feedback,
         pickingPlace,
       });
+      // One entry per device, in the ring's own order. Cesium's markers answer
+      // the mouse only; this list is the same sweep a keyboard or a thumb can
+      // reach, and each entry flies the camera to that device's slot.
+      const list = place
+        ? orderedSweepDevices(devices, importedAt).map((device, index) => {
+            const item = deviceSweepItem(device, {
+              importedAt,
+              index,
+            });
+            return {
+              ...item,
+              onClick: () =>
+                centerDevice(item.lead, sweepPointFor(place, index)),
+            };
+          })
+        : [];
       return {
+        list: {
+          ariaLabel: t('Devices in this sweep'),
+          ordered: false,
+          items: list,
+        },
         chips: [
           {
             id: 'import',

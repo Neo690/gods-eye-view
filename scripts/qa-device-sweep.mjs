@@ -9,8 +9,9 @@
  *  2. a place typed into the layer's own dialog flies the camera there, so the
  *     schematic ring lands inside the view;
  *  3. the layer's real `<input type="file">` takes an nmap XML report: the
- *     counter reads 4, and the feedback line names the file, the count and how
- *     many devices were new;
+ *     counter reads 4, the feedback line names the file, the count and how many
+ *     devices were new, and the row lists the same four as buttons — the
+ *     keyboard's way to the markers — one of which centres its device;
  *  4. a file that is not an inventory is refused in that same line and leaves
  *     the counter alone;
  *  5. an nmap report from another network is asked about in the row instead of
@@ -377,6 +378,94 @@ async function main() {
       assert.match(row.info, /^4 in view/);
       assert.match(row.info, /Imported 4 devices from home-nmap\.xml/);
       assert.match(row.info, /4 new since your last scan/);
+
+      // The globe's markers answer the mouse only. The row carries the same
+      // sweep as real buttons, so a keyboard or a thumb can read it and reach
+      // one device without hunting a point on the globe.
+      const list = await page.evaluate((selector) => {
+        const container = document.querySelector(
+          `${selector} .data-row-list--sequence`,
+        );
+        return {
+          tag: container?.tagName ?? null,
+          label: container?.getAttribute('aria-label') ?? null,
+          entries: [...(container?.children ?? [])].map((entry) => ({
+            button: entry.querySelector('button')?.tagName ?? null,
+            lead:
+              entry.querySelector('.data-row-list-lead')?.textContent ?? '',
+            text:
+              entry.querySelector('.data-row-list-text')?.textContent ?? '',
+          })),
+        };
+      }, ROW);
+      assert.equal(list.tag, 'UL', 'a set of devices, not a sequence');
+      assert.equal(list.label, 'Devices in this sweep');
+      assert.equal(list.entries.length, 4, 'one entry per device');
+      assert.ok(
+        list.entries.every((entry) => entry.button === 'BUTTON'),
+        'each entry is a real button, so Tab reaches it',
+      );
+      assert.match(
+        list.entries[0].text,
+        /Camera-like/,
+        'the flagged device leads the list, as it leads the ring',
+      );
+      assert.match(
+        list.entries[0].lead,
+        /^192\.168\.1\.(10|20)$/,
+        'the two camera-like addresses lead',
+      );
+
+      // The panel starts collapsed, which the chip clicks above did not care
+      // about; a Tab does. Open it so the entry is really focusable.
+      const collapsed = await page.$eval('#data-panel', (panel) =>
+        panel.classList.contains('collapsed'),
+      );
+      if (collapsed) {
+        await page.$eval('#data-panel .panel-collapse-btn', (button) =>
+          button.click(),
+        );
+        await page.waitForFunction(
+          () =>
+            !document
+              .getElementById('data-panel')
+              ?.classList.contains('collapsed'),
+          { timeout: 10_000 },
+        );
+      }
+
+      // The keyboard path to the globe: focus the entry and press Enter, the
+      // way a button is activated, rather than calling the handler directly.
+      const first = `${ROW} .data-row-list--sequence .data-row-list-item`;
+      await page.focus(first);
+      assert.equal(
+        await page.evaluate(
+          (selector) =>
+            document.activeElement ===
+            document.querySelector(
+              `${selector} .data-row-list--sequence button`,
+            ),
+          ROW,
+        ),
+        true,
+        'the entry took the focus, so Enter can press it',
+      );
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(
+        (selector) =>
+          document
+            .querySelector(selector)
+            ?.querySelector('.data-toggle-controls-info')
+            ?.textContent?.includes('Centered on') === true,
+        { timeout: 15_000 },
+        ROW,
+      );
+      const centered = await page.evaluate(readRow, ROW);
+      assert.match(
+        centered.info,
+        new RegExp(`Centered on ${list.entries[0].lead.replace(/\./g, '\\.')}`),
+        'the entry that took the Enter key is the one it centred',
+      );
     });
 
     // ── 4. A file that is not an inventory. ────────────────────────────────

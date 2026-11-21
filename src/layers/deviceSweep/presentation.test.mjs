@@ -8,8 +8,10 @@ import {
   deviceAge,
   deviceSweepColour,
   deviceSweepHoverTip,
+  deviceSweepItem,
   deviceSweepRow,
 } from './presentation.js';
+import { orderedSweepDevices } from './source.js';
 
 /** A fixed clock: an age in a test must not depend on when the test ran. */
 const NOW = Date.parse('2026-11-20T09:00:00Z');
@@ -200,6 +202,43 @@ test('a device says when it was last seen, as an age', () => {
     ),
     /Last seen/,
     'a device seen seconds ago needs no age',
+  );
+});
+
+test('a row entry names the address, the maker, the verdict, the ports and the age', () => {
+  const item = deviceSweepItem(
+    { ...camera, lastSeen: NOW - 3 * DAY },
+    { importedAt: NOW - 3 * DAY, now: NOW, index: 0 },
+  );
+  assert.equal(item.lead, '192.168.1.42');
+  assert.match(item.text, /Hikvision/);
+  assert.match(item.text, /Camera-like/);
+  assert.match(item.text, /554\/tcp/);
+  assert.match(item.text, /3 days ago/);
+  assert.doesNotMatch(item.text, /Not in your last scan/);
+
+  const quiet = deviceSweepItem(
+    { ...lamp, lastSeen: NOW - 10 * DAY },
+    { importedAt: NOW, now: NOW, index: 7 },
+  );
+  assert.match(quiet.text, /No open ports/);
+  assert.match(quiet.text, /Not in your last scan/);
+  assert.equal(deviceSweepItem(null), null);
+});
+
+test('the row list follows the ring: flagged first, quiet devices last', () => {
+  const ordered = orderedSweepDevices(
+    [
+      { ...printer, lastSeen: 1000, ip: '192.168.1.61' },
+      { ...camera, lastSeen: 2000, ip: '192.168.1.42' },
+      { ...lamp, lastSeen: 1000, ip: '10.0.0.9' },
+    ],
+    2000,
+  );
+  assert.deepEqual(
+    ordered.map((device) => device.ip),
+    ['192.168.1.42', '192.168.1.61', '10.0.0.9'],
+    'the camera first, then the answered devices, then the quiet ones',
   );
 });
 

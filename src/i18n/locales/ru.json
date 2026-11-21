@@ -3533,6 +3533,10 @@
   "Only {matched} of your {total} devices are in this file. Import it anyway? Your scan would stay, greyed, and this one would be added to it.": "В этом файле только {matched} из ваших {total} устройств. Всё равно импортировать? Ваш скан останется затемнённым, а этот добавится к нему.",
   "{count} not in your last scan": "{count} вне последнего сканирования",
   "Note: {note}": "Заметка: {note}",
+  "Devices in this sweep": "Устройства этого сканирования",
+  "No open ports": "Нет открытых портов",
+  "Centered on {device}": "Центр на {device}",
+  "The globe is not ready yet": "Глобус ещё не готов",
   "No scan yet · your own spaces only · stays on this device": "Сканирования ещё нет · только свои пространства · остаётся на этом устройстве",
   "That file is not an inventory this layer reads": "Этот файл не является инвентаризацией, которую читает эта функция"
 }

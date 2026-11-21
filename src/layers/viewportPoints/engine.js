@@ -88,9 +88,10 @@ export function cameraBounds(viewer) {
  * @param {number} [config.pixelSize]
  * @param {number} [config.refreshMs] Interval the data manager re-reads at.
  * @param {number} [config.maxSpanDeg] Widest view one request may cover.
- * @param {(context: {refresh: () => void}) => {chips?: Array<object>, detail?: string}}
- *   [config.extras] Row controls a local-data layer owns itself (importing a
- *   file, clearing it). Called on every panel refresh, so it must only read.
+ * @param {(context: {refresh: () => void}) => {chips?: Array<object>,
+ *   detail?: string, list?: object}} [config.extras] Row controls a local-data
+ *   layer owns itself (importing a file, clearing it, listing its records).
+ *   Called on every panel refresh, so it must only read.
  * @param {boolean} [config.announceInfo] Make the info line a live region. For
  *   a layer whose line answers an operator action, never for one that repaints
  *   counts: it is a property of the layer, set once, not of one rendering.
@@ -465,6 +466,7 @@ export function createViewportPointsLayer({
           : '';
       return {
         chips,
+        list: extra?.list ?? null,
         info:
           // Without provider choices the attribution IS the source; naming it
           // twice would read like a duplicate, not a citation.

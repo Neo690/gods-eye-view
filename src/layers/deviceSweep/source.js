@@ -71,10 +71,36 @@ export function sweepPointFor(place, index) {
   };
 }
 
-function portSummary(device) {
+/** The open ports as one line, as the hover tip and the row list write them. */
+export function portSummary(device) {
   return (Array.isArray(device?.ports) ? device.ports : [])
     .map((port) => `${port.port}/${port.protocol}`)
     .join(', ');
+}
+
+/**
+ * Devices in the order the ring gives them: the ones the latest scan answered
+ * for first, then by verdict, score and address, with the devices it left out
+ * at the back so the point cap never drops a live device for a quiet one.
+ *
+ * The row's list and the ring both read this, so the entry an operator presses
+ * is the marker they were looking at.
+ *
+ * @param {Array<object>} devices
+ * @param {number|null} [importedAt]
+ * @returns {Array<object>} a new array, never the stored one
+ */
+export function orderedSweepDevices(devices, importedAt = null) {
+  return (Array.isArray(devices) ? devices : [])
+    .slice()
+    .sort(
+      (a, b) =>
+        Number(missingFromLastScan(a, importedAt)) -
+          Number(missingFromLastScan(b, importedAt)) ||
+        priorFor(a) - priorFor(b) ||
+        Number(b?.score ?? 0) - Number(a?.score ?? 0) ||
+        String(a?.ip ?? '').localeCompare(String(b?.ip ?? '')),
+    );
 }
 
 /**
@@ -97,16 +123,7 @@ export function devicesInBounds(
   const rows = [];
   let matched = 0;
   if (!place || !bounds) return { rows, matched, truncated: false };
-  const ordered = (Array.isArray(devices) ? devices : [])
-    .slice()
-    .sort(
-      (a, b) =>
-        Number(missingFromLastScan(a, importedAt)) -
-          Number(missingFromLastScan(b, importedAt)) ||
-        priorFor(a) - priorFor(b) ||
-        Number(b?.score ?? 0) - Number(a?.score ?? 0) ||
-        String(a?.ip ?? '').localeCompare(String(b?.ip ?? '')),
-    );
+  const ordered = orderedSweepDevices(devices, importedAt);
   for (const [index, device] of ordered.entries()) {
     const point = sweepPointFor(place, index);
     if (point.lat < bounds.south || point.lat > bounds.north) continue;

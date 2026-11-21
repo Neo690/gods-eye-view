@@ -3457,6 +3457,10 @@
   "Only {matched} of your {total} devices are in this file. Import it anyway? Your scan would stay, greyed, and this one would be added to it.": "Solo {matched} de tus {total} dispositivos están en este archivo. ¿Importarlo igualmente? Tu escaneo se quedaría, atenuado, y este se añadiría.",
   "{count} not in your last scan": "{count} fuera de tu último escaneo",
   "Note: {note}": "Nota: {note}",
+  "Devices in this sweep": "Dispositivos de este barrido",
+  "No open ports": "Sin puertos abiertos",
+  "Centered on {device}": "Centrado en {device}",
+  "The globe is not ready yet": "El globo aún no está listo",
   "No scan yet · your own spaces only · stays on this device": "Aún no hay escaneo · solo tus propios espacios · permanece en este dispositivo",
   "That file is not an inventory this layer reads": "Ese archivo no es un inventario que esta capa lea"
 }
