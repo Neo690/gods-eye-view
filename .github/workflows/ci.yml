@@ -125,6 +125,19 @@ jobs:
       - name: Install the browser the gate drives
         run: npx puppeteer browsers install chrome
 
+      - name: Report the installed browser
+        run: |
+          node --input-type=module <<'EOF'
+          import { execFileSync } from 'node:child_process';
+          import { existsSync } from 'node:fs';
+          import puppeteer from 'puppeteer';
+          const path = await puppeteer.executablePath();
+          console.log(`Chrome executable: ${path}`);
+          if (!existsSync(path)) throw new Error(`Chrome is not installed at ${path}`);
+          const version = execFileSync(path, ['--version'], { encoding: 'utf8' });
+          console.log(version.trim());
+          EOF
+
       - name: Build production bundle with a dummy Mapillary token
         env:
           MAPILLARY_CLIENT_TOKEN: 'MLY|0|qa-fixture'
@@ -204,6 +217,19 @@ jobs:
       # lockfile pins; this is the same binary the postinstall would have left.
       - name: Install the browser the gate drives
         run: npx puppeteer browsers install chrome
+
+      - name: Report the installed browser
+        run: |
+          node --input-type=module <<'EOF'
+          import { execFileSync } from 'node:child_process';
+          import { existsSync } from 'node:fs';
+          import puppeteer from 'puppeteer';
+          const path = await puppeteer.executablePath();
+          console.log(`Chrome executable: ${path}`);
+          if (!existsSync(path)) throw new Error(`Chrome is not installed at ${path}`);
+          const version = execFileSync(path, ['--version'], { encoding: 'utf8' });
+          console.log(version.trim());
+          EOF
 
       # Text metrics decide where a click lands and how a chip wraps; a bare
       # runner has fewer fonts than a desktop and can measure differently.
