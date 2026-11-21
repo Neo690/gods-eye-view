@@ -174,7 +174,8 @@ jobs:
   device-sweep-browser:
     # The gate that caught a CSP-blocked inline script and two regressions of
     # the sweep: it builds the real bundle, cuts the module graph on purpose and
-    # drives the layer, the degraded console and both stalls in Chrome.
+    # drives the layer, the degraded console and both stalls in Chrome. The
+    # Sentinel rotation gate reuses this same Chrome/fonts/build/preview setup.
     name: Device Sweep browser gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -252,18 +253,36 @@ jobs:
           exit 1
 
       - name: Device Sweep gate
+        id: device-sweep-gate
         timeout-minutes: 12
         run: node scripts/qa-device-sweep.mjs --url "http://localhost:$PREVIEW_PORT"
+
+      # Reuse this job's Chrome, fonts, production build and preview server:
+      # the Sentinel gate needs the same browser environment, not a second
+      # installation of it.
+      - name: Sentinel rotation gate
+        id: sentinel-rotation-gate
+        timeout-minutes: 12
+        run: npm run qa:sentinel-rotation -- --url "http://localhost:$PREVIEW_PORT"
 
       - name: Preview server log
         if: failure()
         run: cat preview.log
 
-      - name: Upload gate evidence
-        if: failure()
+      - name: Upload Device Sweep gate evidence
+        if: failure() && steps.device-sweep-gate.outcome == 'failure'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: device-sweep-gate-evidence
+          path: qa-artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Sentinel rotation gate evidence
+        if: failure() && steps.sentinel-rotation-gate.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sentinel-rotation-gate-evidence
           path: qa-artifacts/
           if-no-files-found: ignore
           retention-days: 14
