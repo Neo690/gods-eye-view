@@ -162,6 +162,9 @@ export function createDeviceSweepLayer({
   placePickerFactory = createGlobePlacePicker,
 } = {}) {
   let feedback = '';
+  // A file that was read but not written: it does not look like this
+  // operator's own network, so the row asks before it is kept.
+  let pendingImport = null;
   // The panel hands over the reload to call after an import. Until the row has
   // rendered there is nothing to reload, and that first render reads the store.
   let refreshPanel = () => {};
@@ -171,14 +174,27 @@ export function createDeviceSweepLayer({
   let placePicker = null;
   let pickingPlace = false;
 
-  /** Read the picked file, then let the row show what it did. */
-  async function importFile(file) {
-    feedback = await importScanFile({ file, store });
+  /**
+   * Read the picked file, then let the row show what it did. A file the store
+   * does not recognise is held back with the question the row then displays;
+   * answering it calls this again with `confirm`, so the operator never picks
+   * the same file twice.
+   */
+  async function importFile(file, { confirm = false } = {}) {
+    const { line, pending } = await importScanFile({ file, store, confirm });
+    pendingImport = pending ?? null;
+    feedback = line;
     refreshPanel();
+  }
+
+  /** Drop a held-back file: doing anything else is an answer to the question. */
+  function forgetPending() {
+    pendingImport = null;
   }
 
   /** Record a place from any source: a fix, a globe click or typed numbers. */
   function setPlaceFrom(place, { fly = false } = {}) {
+    forgetPending();
     store.setPlace(place);
     feedback = t('Sweep place set for this device');
     if (fly) flyToSweepPlace(viewer, place);
@@ -220,6 +236,7 @@ export function createDeviceSweepLayer({
   }
 
   function armPlacePick() {
+    forgetPending();
     if (placeClickPicker().arm()) {
       pickingPlace = true;
       feedback = t('Click the globe where the sweep should sit');
@@ -236,6 +253,7 @@ export function createDeviceSweepLayer({
   }
 
   function saveNote(key, text) {
+    forgetPending();
     store.setNote(key, text);
     feedback = String(text ?? '').trim()
       ? t('Note saved on this device')
@@ -276,11 +294,18 @@ export function createDeviceSweepLayer({
         chips: [
           {
             id: 'import',
-            label: t('IMPORT SCAN'),
+            // The chip that asked the question is where it is answered, so a
+            // held-back file never needs the operator to pick it again.
+            label: pendingImport ? t('IMPORT ANYWAY') : t('IMPORT SCAN'),
             title: t(
               'For your own spaces only · scan only networks you are authorized to use',
             ),
-            onClick: () => openDeviceSweepPicker(),
+            onClick: () => {
+              const held = pendingImport;
+              pendingImport = null;
+              if (held) void importFile(held.file, { confirm: true });
+              else openDeviceSweepPicker();
+            },
           },
           {
             id: 'place',
@@ -314,11 +339,25 @@ export function createDeviceSweepLayer({
             label: t('CLEAR SCAN'),
             disabled: row.clear.disabled,
             onClick: () => {
+              forgetPending();
               store.clear();
               feedback = t('Scan removed from this device');
               refreshPanel();
             },
           },
+          ...(pendingImport
+            ? [
+                {
+                  id: 'import-cancel',
+                  label: t('CANCEL'),
+                  onClick: () => {
+                    pendingImport = null;
+                    feedback = t('Nothing imported');
+                    refreshPanel();
+                  },
+                },
+              ]
+            : []),
         ],
         detail: row.detail,
       };

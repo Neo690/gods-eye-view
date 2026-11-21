@@ -7,7 +7,10 @@ import { MAX_POINTS } from '../viewportPoints/records.js';
  * layer therefore draws the operator's own declared place, with one device per
  * slot on a small ring around it — a legible stand-in for the flat, never a
  * claim about which wall a device sits on. The ring is ordered by verdict, so
- * the flagged devices sit nearest the centre and survive the point cap.
+ * the flagged devices sit nearest the centre and survive the point cap, and a
+ * device the latest scan did not answer for keeps its slot at the back of the
+ * ring, flagged `missing` so the presentation can grey it instead of dropping
+ * something the operator may still be looking for.
  *
  * Like Private Wi-Fi, there is no fetch here and no route: the answer comes
  * from the operator's own stored file, and a view that does not contain the
@@ -29,6 +32,23 @@ const VERDICT_ORDER = Object.freeze({
 
 function priorFor(device) {
   return VERDICT_ORDER[device?.verdict] ?? 3;
+}
+
+/**
+ * True when the latest import did not answer for this device: it was stored by
+ * an earlier scan and the new file left it out. A store written before
+ * `lastSeen` existed dates every device by its own import, so an upgraded
+ * browser greys nothing until the next import moves on.
+ *
+ * @param {{lastSeen?: number}} device
+ * @param {number|null} importedAt
+ * @returns {boolean}
+ */
+export function missingFromLastScan(device, importedAt) {
+  const last = Number(device?.lastSeen);
+  return (
+    Number.isFinite(importedAt) && Number.isFinite(last) && last < importedAt
+  );
 }
 
 /**
@@ -64,7 +84,8 @@ function portSummary(device) {
  * @param {{lat:number, lon:number}|null} place
  * @param {{west:number,south:number,east:number,north:number}} bounds
  * @param {{importedAt?: number|null}} [options] `importedAt` dates the import,
- *   so a device first seen in it can be shown as new.
+ *   so a device first seen in it can be shown as new and one last seen before
+ *   it can be shown as missing from the scan.
  * @returns {{rows: Array<object>, matched: number, truncated: boolean}}
  */
 export function devicesInBounds(
@@ -80,6 +101,8 @@ export function devicesInBounds(
     .slice()
     .sort(
       (a, b) =>
+        Number(missingFromLastScan(a, importedAt)) -
+          Number(missingFromLastScan(b, importedAt)) ||
         priorFor(a) - priorFor(b) ||
         Number(b?.score ?? 0) - Number(a?.score ?? 0) ||
         String(a?.ip ?? '').localeCompare(String(b?.ip ?? '')),
@@ -106,8 +129,10 @@ export function devicesInBounds(
         score: Number(device.score) || 0,
         reasons: Array.isArray(device.reasons) ? device.reasons : [],
         firstSeen: Number.isFinite(device.firstSeen) ? device.firstSeen : null,
+        lastSeen: Number.isFinite(device.lastSeen) ? device.lastSeen : null,
         newSinceImport:
           Number.isFinite(importedAt) && device.firstSeen === importedAt,
+        missing: missingFromLastScan(device, importedAt),
         note: device.note || null,
         local: true,
       },

@@ -3,10 +3,17 @@ import test from 'node:test';
 
 import {
   DEVICE_SWEEP_COLOURS,
+  DEVICE_SWEEP_LEGEND,
+  DEVICE_SWEEP_MISSING_COLOUR,
+  deviceAge,
   deviceSweepColour,
   deviceSweepHoverTip,
   deviceSweepRow,
 } from './presentation.js';
+
+/** A fixed clock: an age in a test must not depend on when the test ran. */
+const NOW = Date.parse('2026-11-20T09:00:00Z');
+const DAY = 24 * 3600 * 1000;
 
 const camera = {
   ip: '192.168.1.42',
@@ -95,6 +102,105 @@ test('a marker is coloured by its verdict, and an unknown one is not themed', ()
   );
   assert.equal(deviceSweepColour({ meta: {} }), DEVICE_SWEEP_COLOURS.unknown);
   assert.equal(deviceSweepColour(null), DEVICE_SWEEP_COLOURS.unknown);
+});
+
+test('a device the last scan left out is greyed, and says so in its tip', () => {
+  assert.equal(
+    deviceSweepColour({ meta: { verdict: 'camera', missing: true } }),
+    DEVICE_SWEEP_MISSING_COLOUR,
+    'absence outranks the verdict colour',
+  );
+  const text = deviceSweepHoverTip({
+    id: 'a',
+    label: '192.168.1.42',
+    meta: { verdict: 'camera', ports: '554/tcp', missing: true },
+  });
+  assert.match(text, /Not in your last scan/);
+  assert.doesNotMatch(
+    deviceSweepHoverTip({ id: 'b', meta: { verdict: 'camera' } }),
+    /Not in your last scan/,
+  );
+});
+
+test('the legend names the grey it draws', () => {
+  assert.ok(
+    DEVICE_SWEEP_LEGEND.some(
+      (entry) => entry.color === DEVICE_SWEEP_MISSING_COLOUR,
+    ),
+    'a colour on the globe with no legend entry is a mystery',
+  );
+});
+
+test('the row counts what the latest import no longer sees', () => {
+  const row = deviceSweepRow({
+    devices: [
+      { ...camera, lastSeen: 2000 },
+      { ...printer, lastSeen: 1000 },
+    ],
+    place: { lat: 48.85, lon: 2.35 },
+    importedAt: 2000,
+  });
+  assert.equal(row.missing, 1);
+  assert.equal(row.count, 2, 'a quiet device is still counted');
+  assert.match(row.summary, /1 not in your last scan/);
+});
+
+test('a stored time is spoken as an age, and a fresh one is not spoken at all', () => {
+  assert.equal(deviceAge(null, NOW), '');
+  assert.equal(deviceAge(0, NOW), '', 'nothing was ever seen');
+  assert.equal(
+    deviceAge(NOW - 30_000, NOW),
+    '',
+    'a scan from this minute needs no age',
+  );
+  assert.equal(deviceAge(NOW - 5 * 60_000, NOW), '5 minutes ago');
+  assert.equal(deviceAge(NOW - 2 * 3600_000, NOW), '2 hours ago');
+  assert.equal(deviceAge(NOW - DAY, NOW), 'yesterday');
+  assert.equal(deviceAge(NOW - 3 * DAY, NOW), '3 days ago');
+  assert.equal(deviceAge(NOW - 400 * DAY, NOW), 'last year');
+  assert.equal(
+    deviceAge(NOW + 5_000, NOW),
+    '',
+    'a clock running ahead is not an age',
+  );
+});
+
+test('the row says how long ago the file was read, not when', () => {
+  const stale = deviceSweepRow({
+    devices: [camera],
+    place: { lat: 1, lon: 2 },
+    importedAt: NOW - 3 * DAY,
+    now: NOW,
+  });
+  assert.match(stale.summary, /last import 3 days ago/);
+
+  const fresh = deviceSweepRow({
+    devices: [camera],
+    place: { lat: 1, lon: 2 },
+    importedAt: NOW - 5_000,
+    now: NOW,
+  });
+  assert.doesNotMatch(fresh.summary, /last import/);
+});
+
+test('a device says when it was last seen, as an age', () => {
+  const text = deviceSweepHoverTip(
+    {
+      id: 'a',
+      label: '192.168.1.42',
+      meta: { verdict: 'camera', lastSeen: NOW - 3 * DAY },
+    },
+    { now: NOW },
+  );
+  assert.match(text, /Last seen: 3 days ago/);
+  assert.doesNotMatch(
+    deviceSweepHoverTip(
+      { id: 'b', meta: { verdict: 'camera', lastSeen: NOW - 1_000 } },
+      { now: NOW },
+    ),
+    /Last seen/,
+    'a device seen seconds ago needs no age',
+  );
 });
 
 test('the hover text shows the evidence, the verdict, the note and newness', () => {

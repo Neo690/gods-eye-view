@@ -161,14 +161,17 @@ function normalisePorts(ports) {
  * with nothing to say about itself is `unknown` rather than assumed safe.
  *
  * @param {{mac?:string, vendor?:string, hostname?:string, ports?:Array<object>}} device
+ * @param {{vendorOf?: (mac: string) => string}} [options] `vendorOf` resolves a
+ *   MAC to a maker; the default is this module's shortlist. A reader that
+ *   recomputes makers passes its own so the two answers cannot disagree.
  * @returns {{verdict:'camera'|'iot'|'network'|'unknown', score:number,
  *   reasons:Array<{code:string, detail:string}>}}
  */
-export function classifyDevice(device) {
+export function classifyDevice(device, { vendorOf = vendorForMac } = {}) {
   const reasons = [];
   const ports = normalisePorts(device?.ports);
   const declaredVendor = String(device?.vendor ?? '').trim();
-  const vendor = declaredVendor || vendorForMac(device?.mac);
+  const vendor = declaredVendor || vendorOf(device?.mac);
   const hostname = String(device?.hostname ?? '').trim();
   let score = 0;
   let adminSeen = false;
@@ -240,11 +243,15 @@ function makeDevice({ ip, mac = '', vendor = '', hostname = '', ports = [] }) {
   const normalisedMac = String(mac ?? '')
     .trim()
     .toUpperCase();
+  const scannedVendor = String(vendor ?? '').trim();
   const device = {
     ip: address,
     mac: normalisedMac,
     // nmap's OUI answer wins; our shortlist only fills a gap it left.
-    vendor: String(vendor ?? '').trim() || vendorForMac(normalisedMac),
+    vendor: scannedVendor || vendorForMac(normalisedMac),
+    // Kept apart from the answer above so the store can persist only what the
+    // file said and recompute the rest from the MAC on every read.
+    scannedVendor,
     hostname: String(hostname ?? '').trim(),
     ports: normalisePorts(ports),
   };

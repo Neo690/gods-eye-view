@@ -464,6 +464,230 @@ test('a broken or oversized store is a refusal with a reason, never a crash', ()
   );
 });
 
+test('a device the new scan leaves out stays, dated by the last scan that saw it', () => {
+  const storage = fakeStorage();
+  let clock = 1000;
+  const store = createDeviceSweepStore({ storage, now: () => clock });
+  const camera = { ip: '192.168.1.42', mac: '44:19:B6:11:22:33' };
+  const laptop = { ip: '192.168.1.10', mac: 'AA:BB:CC:00:00:01' };
+  store.write({ devices: [camera, laptop] });
+  store.setNote('44:19:B6:11:22:33', 'above the door');
+
+  clock = 2000;
+  const second = store.write({ devices: [laptop] });
+  assert.equal(second.added, 0, 'the laptop was already known');
+
+  const read = store.read();
+  assert.equal(read.importedAt, 2000);
+  const quiet = read.devices.find((device) => device.ip === '192.168.1.42');
+  assert.ok(quiet, 'a camera missing from the new file is not dropped');
+  assert.equal(
+    quiet.lastSeen,
+    1000,
+    'it is dated by the import that last saw it',
+  );
+  assert.equal(quiet.firstSeen, 1000);
+  assert.equal(quiet.note, 'above the door', 'its note stays with it');
+  assert.equal(
+    read.devices.find((device) => device.ip === '192.168.1.10').lastSeen,
+    2000,
+    'a device the new file still names is dated now',
+  );
+  assert.equal(read.devices.length, 2);
+});
+
+test('a note waits out a scan that missed its device, and is there when it returns', () => {
+  const storage = fakeStorage();
+  let clock = 1000;
+  const store = createDeviceSweepStore({ storage, now: () => clock });
+  const camera = { ip: '192.168.1.42', mac: '44:19:B6:11:22:33' };
+  const laptop = { ip: '192.168.1.10', mac: 'AA:BB:CC:00:00:01' };
+
+  store.write({ devices: [camera, laptop] });
+  store.setNote('44:19:B6:11:22:33', 'camera above the door');
+
+  // A scan of the same network that simply did not see the camera.
+  clock = 2000;
+  store.write({ devices: [laptop] });
+  assert.equal(
+    store.read().notes['44:19:B6:11:22:33'],
+    'camera above the door',
+    'a device missing from one scan must not take its note with it',
+  );
+
+  // It answers again.
+  clock = 3000;
+  const back = store.write({ devices: [camera, laptop] });
+  assert.equal(back.added, 0, 'a device that came back is not new');
+  const read = store.read();
+  const returned = read.devices.find(
+    (device) => device.ip === '192.168.1.42',
+  );
+  assert.equal(
+    returned.note,
+    'camera above the door',
+    'the operator wrote it once, not once per sighting',
+  );
+  assert.equal(returned.firstSeen, 1000, 'it is still the same device');
+  assert.equal(returned.lastSeen, 3000, 'the returning scan is its newest sighting');
+  assert.equal(read.notes['44:19:B6:11:22:33'], 'camera above the door');
+  assert.equal(read.devices.length, 2, 'no row was duplicated on the way back');
+});
+
+test('a payload written before lastSeen existed reads, and upgrades in place', () => {
+  const storage = fakeStorage();
+  storage.setItem(
+    DEVICE_SWEEP_STORAGE_KEY,
+    JSON.stringify({
+      v: 1,
+      at: 1700,
+      name: 'old.xml',
+      place: { lat: 48.85, lon: 2.35 },
+      hosts: [
+        ['192.168.1.42', '44:19:B6:11:22:33', 'Hikvision', '', '554/tcp', 900],
+      ],
+      notes: { '44:19:B6:11:22:33': 'gone quiet' },
+    }),
+  );
+  const store = createDeviceSweepStore({ storage, now: () => 2000 });
+  const [camera] = store.read().devices;
+  assert.equal(camera.firstSeen, 900);
+  assert.equal(
+    camera.lastSeen,
+    1700,
+    'a v1 device was last seen by the import that carried it',
+  );
+  assert.equal(camera.note, 'gone quiet');
+
+  assert.equal(
+    store.write({ devices: [{ ip: '192.168.1.10', mac: 'AA:BB:CC:00:00:01' }] })
+      .added,
+    1,
+  );
+  const payload = JSON.parse(storage.map.get(DEVICE_SWEEP_STORAGE_KEY));
+  assert.equal(payload.v, 3, 'the upgrade is written, not only read');
+  assert.equal(payload.hosts.length, 2, 'the old device came along');
+  const row = payload.hosts.find((entry) => entry[0] === '192.168.1.42');
+  assert.equal(row.length, 7);
+  assert.equal(row[6], 1700, 'its old sighting survives the first new import');
+});
+
+test('a maker the shortlist worked out is recomputed, never stored', () => {
+  const storage = fakeStorage();
+  const store = createDeviceSweepStore({ storage, now: () => 1000 });
+  // A lease export names no maker at all: whatever is known comes from the MAC.
+  const { devices } = parseInventory(
+    [
+      '192.168.1.42,44:19:b6:11:22:33,cam-entree',
+      '192.168.1.10,aa:bb:cc:00:00:01,laptop',
+    ].join('\n'),
+  );
+  store.write({ devices });
+
+  const payload = JSON.parse(storage.map.get(DEVICE_SWEEP_STORAGE_KEY));
+  assert.equal(payload.v, 3);
+  assert.equal(
+    payload.hosts[0][2],
+    '',
+    'the list\'s answer is not evidence from the file and is not written down',
+  );
+  assert.equal(
+    store.read().devices.find((device) => device.ip === '192.168.1.42')
+      .vendor,
+    'Hikvision',
+    'reading it back asks the shortlist again',
+  );
+});
+
+test('a maker the file itself named survives any shortlist correction', () => {
+  const storage = fakeStorage();
+  const store = createDeviceSweepStore({ storage, now: () => 1000 });
+  const fileVendor = 'Hangzhou Hikvision Digital Technology Co., Ltd.';
+  const { devices } = parseInventory(
+    `<nmaprun><host><status state="up"/>` +
+      `<address addr="192.168.1.42" addrtype="ipv4"/>` +
+      `<address addr="44:19:B6:11:22:33" addrtype="mac" vendor="${fileVendor}"/>` +
+      `<ports><port protocol="tcp" portid="80"><state state="open"/></port></ports>` +
+      `</host></nmaprun>`,
+  );
+  store.write({ devices });
+  assert.equal(
+    JSON.parse(storage.map.get(DEVICE_SWEEP_STORAGE_KEY)).hosts[0][2],
+    fileVendor,
+    "the file's own word is evidence and is kept",
+  );
+
+  const corrected = createDeviceSweepStore({
+    storage,
+    resolveVendor: () => '',
+  });
+  const [camera] = corrected.read().devices;
+  assert.equal(
+    camera.vendor,
+    fileVendor,
+    "no correction of the shortlist can withdraw what the file said",
+  );
+  assert.equal(camera.verdict, 'camera');
+});
+
+test('a maker removed from the shortlist is taken back from a stored scan', () => {
+  const storage = fakeStorage();
+  // What v2 wrote for a device the shortlist named in 44:19:B6: the column kept
+  // the attribution as it read at import time.
+  storage.setItem(
+    DEVICE_SWEEP_STORAGE_KEY,
+    JSON.stringify({
+      v: 2,
+      at: 1000,
+      name: 'home.xml',
+      place: null,
+      hosts: [
+        [
+          '192.168.1.42',
+          '44:19:B6:11:22:33',
+          'Hikvision',
+          '',
+          '80/tcp',
+          900,
+          1000,
+        ],
+      ],
+      notes: {},
+    }),
+  );
+
+  const before = createDeviceSweepStore({ storage, now: () => 2000 }).read()
+    .devices[0];
+  assert.equal(before.vendor, 'Hikvision');
+  assert.equal(
+    before.verdict,
+    'camera',
+    'the attribution alone is enough to call it a camera',
+  );
+
+  // The correction: that prefix is no longer one the shortlist vouches for.
+  const corrected = createDeviceSweepStore({
+    storage,
+    now: () => 2000,
+    resolveVendor: () => '',
+  }).read().devices[0];
+  assert.equal(
+    corrected.vendor,
+    '',
+    'the stored name was the list talking, not the file',
+  );
+  assert.equal(
+    corrected.verdict,
+    'network',
+    'the verdict an invented maker inflated falls with it',
+  );
+  assert.equal(
+    corrected.mac,
+    '44:19:B6:11:22:33',
+    'the evidence itself is untouched',
+  );
+});
+
 test('devices are drawn in a ring around the declared place, flagged first', () => {
   const place = { lat: 48.85, lon: 2.35 };
   const first = sweepPointFor(place, 0);
@@ -484,6 +708,46 @@ test('devices are drawn in a ring around the declared place, flagged first', () 
   assert.equal(rows[0].meta.verdict, 'camera', 'the flagged device is nearest');
   assert.equal(rows[0].meta.local, true);
   assert.equal(rows[0].meta.ports, '80/tcp, 554/tcp, 8000/tcp');
+});
+
+test('a device the latest scan did not see keeps a slot behind the ones it did', () => {
+  const place = { lat: 48.85, lon: 2.35 };
+  const bounds = {
+    west: place.lon - 0.01,
+    south: place.lat - 0.01,
+    east: place.lon + 0.01,
+    north: place.lat + 0.01,
+  };
+  const present = {
+    ip: '192.168.1.10',
+    verdict: 'network',
+    score: 0,
+    lastSeen: 2000,
+  };
+  const quiet = {
+    ip: '192.168.1.42',
+    verdict: 'camera',
+    score: 9,
+    lastSeen: 1000,
+  };
+  const { rows } = devicesInBounds([quiet, present], place, bounds, {
+    importedAt: 2000,
+  });
+  assert.equal(rows[0].label, '192.168.1.10', 'the present device leads');
+  assert.equal(rows[0].meta.missing, false);
+  assert.equal(rows[1].meta.missing, true, 'a camera the scan missed is greyed');
+  assert.equal(rows[1].meta.lastSeen, 1000);
+});
+
+test('a store with no import date greys nothing', () => {
+  const place = { lat: 48.85, lon: 2.35 };
+  const bounds = { west: 2.34, south: 48.84, east: 2.36, north: 48.86 };
+  const { rows } = devicesInBounds(
+    [{ ip: '192.168.1.42', verdict: 'camera', lastSeen: 1000 }],
+    place,
+    bounds,
+  );
+  assert.equal(rows[0].meta.missing, false);
 });
 
 test('no place, or a view that does not hold it, is an empty answer', async () => {
