@@ -83,6 +83,25 @@ test('radio sites draw what the proxy returned for the view', async () => {
   assert.equal(h.primitives.length, 0);
 });
 
+test('the fixed sites are exposed to a patrolling consumer, capped', async () => {
+  const h = harness(async () => ({ rows: sites }));
+  h.layer.enable();
+  assert.equal(await h.layer.update(), true);
+  assert.deepEqual(h.layer.getAllPositions(), [
+    { latitude: 48.85861, longitude: 2.34639 },
+    { latitude: 48.86, longitude: 2.35 },
+  ]);
+  assert.deepEqual(h.layer.getAllPositions(1), [
+    { latitude: 48.85861, longitude: 2.34639 },
+  ]);
+  h.layer.destroy();
+  assert.deepEqual(
+    h.layer.getAllPositions(),
+    [],
+    'a destroyed layer walks nowhere',
+  );
+});
+
 test('a not-configured server is reported, and the second provider is one chip away', async () => {
   const seen = [];
   const h = harness(async (request) => {

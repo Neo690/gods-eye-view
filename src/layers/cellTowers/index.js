@@ -28,7 +28,7 @@ export const CELL_TOWER_PROVIDERS = Object.freeze([
 export function createCellTowersLayer({
   source = createCellTowerSource(),
 } = {}) {
-  return createViewportPointsLayer({
+  const layer = createViewportPointsLayer({
     id: 'cell-towers',
     name: 'Radio Sites',
     icon: '📶',
@@ -39,4 +39,14 @@ export function createCellTowersLayer({
     pixelSize: 6,
     refreshMs: 300000,
   });
+  // Radio sites are fixed: expose them to consumers that walk a layer (the
+  // Sentinel patrol), the way the moving layers expose their tracks. The
+  // viewport engine already holds the rows; this is only a rename of its
+  // analyst snapshot into the coordinate shape those consumers read.
+  layer.getAllPositions = (maxCount = 500) =>
+    layer.getAnalystRecords(maxCount).map(({ lat, lon }) => ({
+      latitude: lat,
+      longitude: lon,
+    }));
+  return layer;
 }
