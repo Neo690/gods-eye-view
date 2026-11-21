@@ -88,6 +88,9 @@ jobs:
     timeout-minutes: 30
     env:
       GEV_REQUIRE_ALLOCATION_GATE: '0'
+      # The browser is installed explicitly below. npm refuses dependency
+      # install scripts, so Puppeteer's postinstall never fetches one.
+      PUPPETEER_SKIP_DOWNLOAD: '1'
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -102,7 +105,7 @@ jobs:
 
       # Same retry as the verify job: the ffmpeg-static post-install downloads
       # its binary from a GitHub release asset, which 504s in bursts.
-      - name: Install locked dependencies and headless Chrome
+      - name: Install locked dependencies
         run: |
           set -euo pipefail
           for attempt in 1 2 3 4; do
@@ -114,6 +117,13 @@ jobs:
             sleep 30
           done
           exit 1
+
+      # npm 11 does not run dependency install scripts unless they are trusted,
+      # so the Puppeteer postinstall above is skipped and the gate would fail
+      # with "Browser was not found at the configured executablePath". Ask for
+      # the browser at the version the lockfile pins.
+      - name: Install the browser the gate drives
+        run: npx puppeteer browsers install chrome
 
       - name: Build production bundle with a dummy Mapillary token
         env:
