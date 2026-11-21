@@ -2229,6 +2229,7 @@
   "VOICE SYSTEM ERROR": "语音系统错误",
   "DISMISS": "关闭",
   "RELOAD": "重新加载",
+  "Loading did not start. Reload to try again.": "加载未启动。请重新加载重试。",
   "the globe": "地球",
   "the console": "控制台",
   "live data": "实时数据",

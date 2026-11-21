@@ -1954,7 +1954,16 @@ own line is itself a polite live region (`.loader-status` carries `role="status"
 is heard as it changes instead of being painted for nobody, with the text on
 screen unchanged. The stall line is written through the banner's one
 label writer (`setSplitFlapText`) and its leftover detail is cleared. A page whose module graph never loads runs no
-code, so nothing can speak for it; reloading is the only answer there.
+code at all, so no application code can speak for it: `public/boot-watchdog.js`
+does. It is an external classic script because the page's CSP allows
+`script-src 'self'` and no inline script; it waits 15 seconds for `main.js` to
+mark `data-boot="started"` (its first statement), and without that mark it
+reveals the cover's own line, `Loading did not start. Reload to try again.`, in
+a `role="alert"` paragraph. The sentence is repeated in the script because the
+app's catalogs live in modules that may never run; `navigator.languages` picks
+the shipped locale (English when none matches, `zh-*` reads `zh-CN`), and an
+Arabic line is marked `dir="rtl"`. A normal boot keeps the line hidden, watched
+by the same timer that would expose a stalled graph.
 
 That stall is a degraded mode, not only a sentence. The guard reports the
 phases that never settled, and every control whose phase is missing — a host

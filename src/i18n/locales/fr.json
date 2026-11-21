@@ -2319,6 +2319,7 @@
   "VOICE SYSTEM ERROR": "ERREUR DU SYSTÈME VOCAL",
   "DISMISS": "MASQUER",
   "RELOAD": "RECHARGER",
+  "Loading did not start. Reload to try again.": "Le chargement n'a pas démarré. Rechargez pour réessayer.",
   "the globe": "le globe",
   "the console": "la console",
   "live data": "les données en direct",

@@ -879,6 +879,7 @@
   "VOICE SYSTEM ERROR": "ОШИБКА ГОЛОСОВОЙ СИСТЕМЫ",
   "DISMISS": "СКРЫТЬ",
   "RELOAD": "ПЕРЕЗАГРУЗИТЬ",
+  "Loading did not start. Reload to try again.": "Загрузка не началась. Перезагрузите страницу.",
   "the globe": "глобус",
   "the console": "пульт",
   "live data": "данные в реальном времени",

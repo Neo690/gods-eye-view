@@ -2465,6 +2465,7 @@
   "VOICE SYSTEM ERROR": "خطأ في نظام الصوت",
   "DISMISS": "إخفاء",
   "RELOAD": "إعادة التحميل",
+  "Loading did not start. Reload to try again.": "لم يبدأ التحميل. أعد التحميل للمحاولة مجددًا.",
   "the globe": "الكرة الأرضية",
   "the console": "لوحة التحكم",
   "live data": "البيانات المباشرة",

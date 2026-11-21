@@ -311,6 +311,19 @@ html:not([lang='en']) .panel-collapse-btn {
   animation: pulse 2s ease-in-out infinite;
 }
 
+/* The module-graph watchdog's fallback: the one line the cover can say when
+   no application code ran to say anything else. */
+.loader-fallback {
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  color: #ff9b8e;
+}
+.loader-fallback[hidden] {
+  display: none;
+}
+
 @keyframes pulse {
   0%,
   100% {

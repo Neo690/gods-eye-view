@@ -835,6 +835,7 @@
   "VOICE SYSTEM ERROR": "ERROR DEL SISTEMA DE VOZ",
   "DISMISS": "CERRAR",
   "RELOAD": "RECARGAR",
+  "Loading did not start. Reload to try again.": "La carga no se inició. Recarga para reintentar.",
   "the globe": "el globo",
   "the console": "la consola",
   "live data": "los datos en vivo",

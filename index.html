@@ -49,6 +49,10 @@
 
   <!-- gev:template hud-loading -->
 
+  <!-- An external classic script, not an inline one: the page's CSP allows
+       `script-src 'self'` and no inline script, so the watchdog has to be a
+       file. See public/boot-watchdog.js. -->
+  <script src="/boot-watchdog.js"></script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
