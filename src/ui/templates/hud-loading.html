@@ -13,7 +13,12 @@
       <p class="loader-status" role="status" aria-live="polite" aria-atomic="true" data-i18n>Initializing photorealistic world...</p>
       <!-- The module-graph watchdog's line. If no application code ever runs,
            nothing here can be translated or written by the app; index.html's
-           classic script reveals this one, and only this one. -->
-      <p class="loader-fallback" id="boot-watchdog" role="alert" data-i18n hidden>Loading did not start. Reload to try again.</p>
+           classic script reveals this one, and only this one. It carries the
+           sentence and the way out: telling somebody to reload is not the same
+           as giving them a control that reloads. -->
+      <p class="loader-fallback" id="boot-watchdog" role="alert" hidden>
+        <span id="boot-watchdog-text" data-i18n>Loading did not start. Reload to try again.</span>
+        <a class="loader-fallback-reload" id="boot-watchdog-reload" href="" data-i18n hidden>Reload</a>
+      </p>
     </div>
   </div>

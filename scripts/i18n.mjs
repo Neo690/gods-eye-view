@@ -119,6 +119,20 @@ export function extractMessages() {
     }
   }
 
+  // The module-graph watchdog runs when no module does, so it cannot call `t()`:
+  // its copy is generated from these catalogs into a classic script. Its English
+  // sources are still messages the app ships, and without naming them the
+  // checker would report them as stale. Read as a file, guarded: the sandbox
+  // test copies the checker alone.
+  const watchdogSources = path.join(ROOT, 'scripts/boot-watchdog-messages.json');
+  if (existsSync(watchdogSources)) {
+    for (const sentence of Object.values(
+      JSON.parse(readFileSync(watchdogSources, 'utf8')),
+    )) {
+      add(sentence, 'public/boot-watchdog.js');
+    }
+  }
+
   const markup = trackedFiles('index.html', 'src/ui/templates/*.html');
   const TAG = /<([a-zA-Z][\w-]*)(\s[^>]*?)\/?>([^<]*)/gs;
   for (const file of markup) {

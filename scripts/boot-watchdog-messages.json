@@ -1,0 +1,6 @@
+{
+  "text": "Loading did not start. Reload to try again.",
+  "failed": "{file} did not load.",
+  "ready": "The map did not finish starting. Reload to try again.",
+  "reload": "Reload"
+}

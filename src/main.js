@@ -7,6 +7,8 @@ import { t } from './i18n/index.js';
 import { setSplitFlapText } from './splitFlap.js';
 
 // The module graph is alive: the classic watchdog in index.html stands down.
+// A second mark, `ready`, says every phase settled; the watchdog treats a boot
+// that is still only `started` 30 s in as a cover nobody lifted.
 document.documentElement.dataset.boot = 'started';
 
 // Inside the Android shell the page answers the routes whose logic it already
@@ -26,7 +28,14 @@ const application = createStandaloneApplication({
 const loadingScreen = document.getElementById('loading-screen');
 const loaderStatus = loadingScreen?.querySelector('.loader-status');
 
+application.subscribe?.((state) => {
+  if (state.status === 'ready') document.documentElement.dataset.boot = 'ready';
+});
+
 application.start().catch((error) => {
+  // The cover carries this failure itself; the watchdog must not replace the
+  // message with "the map did not finish starting".
+  document.documentElement.dataset.boot = 'failed';
   console.error("God's Eye View initialization failed:", error);
   if (!loaderStatus) return;
   loaderStatus.textContent = t('Error: {message}', {

@@ -1962,8 +1962,15 @@ reveals the cover's own line, `Loading did not start. Reload to try again.`, in
 a `role="alert"` paragraph. The sentence is repeated in the script because the
 app's catalogs live in modules that may never run; `navigator.languages` picks
 the shipped locale (English when none matches, `zh-*` reads `zh-CN`), and an
-Arabic line is marked `dir="rtl"`. A normal boot keeps the line hidden, watched
-by the same timer that would expose a stalled graph.
+Arabic line is marked `dir="rtl"`. That table is generated from the catalogs by
+`npm run boot-watchdog:i18n` (a test fails when it is stale), and the line now
+carries a real reload link: telling somebody to reload is not the same as
+giving them a control that does. A captured `error` event names the script
+that never arrived (`main-abc123.js did not load.`), and a second deadline at
+30 s speaks for a graph that ran but never reached `data-boot="ready"` — the
+mark `main.js` sets once every phase settled, so the cover is not left over a
+boot that merely started. A normal boot keeps the line hidden, watched by the
+timer that would expose a stalled graph.
 
 That stall is a degraded mode, not only a sentence. The guard reports the
 phases that never settled, and every control whose phase is missing — a host

@@ -324,6 +324,29 @@ html:not([lang='en']) .panel-collapse-btn {
   display: none;
 }
 
+/* A message with nothing to press asks the reader to know the gesture. This
+   link reloads the page on its own, which the CSP allows where a script could
+   not run. */
+.loader-fallback-reload {
+  display: inline-block;
+  margin-inline-start: 8px;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 155, 142, 0.5);
+  border-radius: 4px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.loader-fallback-reload:hover,
+.loader-fallback-reload:focus-visible {
+  border-color: #ff9b8e;
+  background: rgba(255, 155, 142, 0.12);
+}
+
+.loader-fallback-reload[hidden] {
+  display: none;
+}
+
 @keyframes pulse {
   0%,
   100% {
