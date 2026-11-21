@@ -3468,6 +3468,7 @@
   "Devices in this sweep": "Appareils de ce balayage",
   "No open ports": "Aucun port ouvert",
   "Centered on {device}": "Centré sur {device}",
+  "Set your place to centre this device": "Posez votre lieu pour centrer cet appareil",
   "The globe is not ready yet": "Le globe n'est pas encore prêt",
   "No scan yet · your own spaces only · stays on this device": "Aucun scan pour l'instant · vos espaces uniquement · reste sur cet appareil",
   "That file is not an inventory this layer reads": "Ce fichier n'est pas un inventaire que cette couche lit"

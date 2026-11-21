@@ -7,8 +7,8 @@ import {
   DEVICE_SWEEP_LEGEND,
   deviceSweepColour,
   deviceSweepHoverTip,
-  deviceSweepItem,
   deviceSweepRow,
+  deviceSweepItem,
 } from './presentation.js';
 import {
   bindDeviceSweepFileHandler,
@@ -67,8 +67,8 @@ export {
   DEVICE_SWEEP_LEGEND,
   deviceSweepColour,
   deviceSweepHoverTip,
-  deviceSweepItem,
   deviceSweepRow,
+  deviceSweepItem,
   deviceVerdictLabel,
 } from './presentation.js';
 export { openNoteDialog };
@@ -316,20 +316,26 @@ export function createDeviceSweepLayer({
       });
       // One entry per device, in the ring's own order. Cesium's markers answer
       // the mouse only; this list is the same sweep a keyboard or a thumb can
-      // reach, and each entry flies the camera to that device's slot.
-      const list = place
-        ? orderedSweepDevices(devices, importedAt).map((device, index) => {
-            const item = deviceSweepItem(device, {
-              importedAt,
-              index,
-            });
+      // read, and each entry flies the camera to that device's slot. A scan is
+      // readable before the sweep has a place — the ring draws nothing yet, but
+      // the inventory is still the operator's — so the entries stay, disabled
+      // and saying what they need, until there is a slot to fly to.
+      const list = orderedSweepDevices(devices, importedAt).map(
+        (device, index) => {
+          const item = deviceSweepItem(device, { importedAt, index });
+          if (!place) {
             return {
               ...item,
-              onClick: () =>
-                centerDevice(item.lead, sweepPointFor(place, index)),
+              disabled: true,
+              title: t('Set your place to centre this device'),
             };
-          })
-        : [];
+          }
+          return {
+            ...item,
+            onClick: () => centerDevice(item.lead, sweepPointFor(place, index)),
+          };
+        },
+      );
       return {
         list: {
           ariaLabel: t('Devices in this sweep'),

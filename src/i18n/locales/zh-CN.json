@@ -3316,6 +3316,7 @@
   "Devices in this sweep": "本次扫描的设备",
   "No open ports": "无开放端口",
   "Centered on {device}": "已居中到 {device}",
+  "Set your place to centre this device": "设置你的位置以居中此设备",
   "The globe is not ready yet": "地球尚未就绪",
   "No scan yet · your own spaces only · stays on this device": "尚无扫描 · 仅限你自己的空间 · 保存在本设备",
   "That file is not an inventory this layer reads": "该文件不是此图层可读取的清单"

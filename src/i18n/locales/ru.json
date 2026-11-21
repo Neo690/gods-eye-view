@@ -3544,6 +3544,7 @@
   "Devices in this sweep": "Устройства этого сканирования",
   "No open ports": "Нет открытых портов",
   "Centered on {device}": "Центр на {device}",
+  "Set your place to centre this device": "Укажите своё место, чтобы центрировать это устройство",
   "The globe is not ready yet": "Глобус ещё не готов",
   "No scan yet · your own spaces only · stays on this device": "Сканирования ещё нет · только свои пространства · остаётся на этом устройстве",
   "That file is not an inventory this layer reads": "Этот файл не является инвентаризацией, которую читает эта функция"

@@ -226,6 +226,7 @@ test('a row entry names the address, the maker, the verdict, the ports and the a
   assert.equal(deviceSweepItem(null), null);
 });
 
+
 test('the row list follows the ring: flagged first, quiet devices last', () => {
   const ordered = orderedSweepDevices(
     [

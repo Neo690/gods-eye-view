@@ -6,12 +6,14 @@
  *
  *  1. turning the layer on makes its row, its own chips, the local-only wording,
  *     and a feedback line that is already a polite live region;
- *  2. a place typed into the layer's own dialog flies the camera there, so the
- *     schematic ring lands inside the view;
- *  3. the layer's real `<input type="file">` takes an nmap XML report: the
- *     counter reads 4, the feedback line names the file, the count and how many
- *     devices were new, and the row lists the same four as buttons — the
- *     keyboard's way to the markers — one of which centres its device;
+ *  2. the layer's real `<input type="file">` takes an nmap XML report before
+ *     any place exists: the row lists the same four devices as real buttons,
+ *     disabled and saying what they need, because the ring has nowhere to draw
+ *     and no slot to centre;
+ *  3. a place typed into the layer's own dialog then flies the camera there:
+ *     the counter reads 4, the feedback line names the file, the count and how
+ *     many devices were new, the entries turn back on, and pressing one with
+ *     the keyboard centres its device;
  *  4. a file that is not an inventory is refused in that same line and leaves
  *     the counter alone;
  *  5. an nmap report from another network is asked about in the row instead of
@@ -149,6 +151,29 @@ async function writeFixtures() {
   await fs.writeFile(refused, NOT_AN_INVENTORY);
   await fs.writeFile(stranger, OTHER_NETWORK_NMAP);
   return { scan, refused, stranger };
+}
+
+/** The row's device list, as the operator and a screen reader reach it. */
+function readList(page) {
+  return page.evaluate((selector) => {
+    const container = document.querySelector(
+      `${selector} .data-row-list--sequence`,
+    );
+    return {
+      tag: container?.tagName ?? null,
+      label: container?.getAttribute('aria-label') ?? null,
+      entries: [...(container?.children ?? [])].map((entry) => {
+        const button = entry.querySelector('button');
+        return {
+          button: button?.tagName ?? null,
+          disabled: button?.disabled ?? null,
+          title: button?.title ?? '',
+          lead: entry.querySelector('.data-row-list-lead')?.textContent ?? '',
+          text: entry.querySelector('.data-row-list-text')?.textContent ?? '',
+        };
+      }),
+    };
+  }, ROW);
 }
 
 /** The row as the operator sees it, plus the attributes that make it heard. */
@@ -327,8 +352,53 @@ async function main() {
       assert.equal(row.atomic, 'true');
     });
 
-    // ── 2. A place, typed the way an operator types it. ────────────────────
-    await step('typed coordinates place the sweep', async () => {
+    // ── 2. The operator's own report, readable before it is placed. ────────
+    await step('a picked nmap report is listed before the sweep has a place', async () => {
+      const input = await page.$(FILE_INPUT);
+      assert.ok(input, 'the layer keeps its file input in the document');
+      await input.uploadFile(scan);
+      await page.waitForFunction(
+        (selector) =>
+          document
+            .querySelector(selector)
+            ?.querySelector('.data-toggle-controls-info')
+            ?.textContent?.includes('Imported 4 devices from home-nmap.xml') ===
+          true,
+        { timeout: 30_000 },
+        ROW,
+      );
+      // No place means no ring and no slot to fly to — but the scan is already
+      // the operator's to read, so the list is there and says why it is inert.
+      assert.match(
+        await page.$eval(`${ROW} .data-count`, (node) =>
+          node.textContent.trim(),
+        ),
+        /^(—|0)$/,
+        'nothing is drawn around a place that was never set',
+      );
+      const row = await page.evaluate(readRow, ROW);
+      assert.match(row.info, /Imported 4 devices from home-nmap\.xml/);
+      assert.match(row.info, /4 new since your last scan/);
+      const list = await readList(page);
+      assert.equal(list.entries.length, 4, 'the unplaced scan is readable');
+      assert.match(
+        list.entries[0].text,
+        /Camera-like/,
+        'the flagged device leads the list, as it leads the ring',
+      );
+      assert.ok(
+        list.entries.every((entry) => entry.disabled),
+        'without a place the entries are read, not pressed',
+      );
+      assert.match(
+        list.entries[0].title,
+        /Set your place to centre this device/,
+        'and each says what it needs',
+      );
+    });
+
+    // ── 3. A place, typed the way an operator types it. ────────────────────
+    await step('typed coordinates place the sweep, and its list can centre a device', async () => {
       // The row is rendered but sits in a collapsed panel in a headless boot,
       // and this gate is about the layer, not about panel chrome: the chip is
       // activated where the panel put it. Everything after it is visible.
@@ -348,13 +418,6 @@ async function main() {
       );
       const row = await page.evaluate(readRow, ROW);
       assert.match(row.info, /Sweep place set for this device/);
-    });
-
-    // ── 3. The operator's own nmap report. ─────────────────────────────────
-    await step('a picked nmap report lands as 4 devices', async () => {
-      const input = await page.$(FILE_INPUT);
-      assert.ok(input, 'the layer keeps its file input in the document');
-      await input.uploadFile(scan);
       // The camera flies to the typed place; the row can only count what the
       // new view contains, so wait for the ring to be inside it.
       await page.waitForFunction(
@@ -364,41 +427,13 @@ async function main() {
         { timeout: 60_000 },
         ROW,
       );
-      await page.waitForFunction(
-        (selector) =>
-          document
-            .querySelector(selector)
-            ?.querySelector('.data-toggle-controls-info')
-            ?.textContent?.includes('Imported 4 devices from home-nmap.xml') ===
-          true,
-        { timeout: 30_000 },
-        ROW,
-      );
-      const row = await page.evaluate(readRow, ROW);
-      assert.equal(row.count, '4');
-      assert.match(row.info, /^4 in view/);
-      assert.match(row.info, /Imported 4 devices from home-nmap\.xml/);
-      assert.match(row.info, /4 new since your last scan/);
+      const placed = await page.evaluate(readRow, ROW);
+      assert.equal(placed.count, '4', 'the ring is inside the new view');
 
       // The globe's markers answer the mouse only. The row carries the same
       // sweep as real buttons, so a keyboard or a thumb can read it and reach
       // one device without hunting a point on the globe.
-      const list = await page.evaluate((selector) => {
-        const container = document.querySelector(
-          `${selector} .data-row-list--sequence`,
-        );
-        return {
-          tag: container?.tagName ?? null,
-          label: container?.getAttribute('aria-label') ?? null,
-          entries: [...(container?.children ?? [])].map((entry) => ({
-            button: entry.querySelector('button')?.tagName ?? null,
-            lead:
-              entry.querySelector('.data-row-list-lead')?.textContent ?? '',
-            text:
-              entry.querySelector('.data-row-list-text')?.textContent ?? '',
-          })),
-        };
-      }, ROW);
+      const list = await readList(page);
       assert.equal(list.tag, 'UL', 'a set of devices, not a sequence');
       assert.equal(list.label, 'Devices in this sweep');
       assert.equal(list.entries.length, 4, 'one entry per device');
@@ -406,15 +441,9 @@ async function main() {
         list.entries.every((entry) => entry.button === 'BUTTON'),
         'each entry is a real button, so Tab reaches it',
       );
-      assert.match(
-        list.entries[0].text,
-        /Camera-like/,
-        'the flagged device leads the list, as it leads the ring',
-      );
-      assert.match(
-        list.entries[0].lead,
-        /^192\.168\.1\.(10|20)$/,
-        'the two camera-like addresses lead',
+      assert.ok(
+        list.entries.every((entry) => !entry.disabled),
+        'a place turns the entries back on',
       );
 
       // The panel starts collapsed, which the chip clicks above did not care

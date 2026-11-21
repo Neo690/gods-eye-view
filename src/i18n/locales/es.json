@@ -3468,6 +3468,7 @@
   "Devices in this sweep": "Dispositivos de este barrido",
   "No open ports": "Sin puertos abiertos",
   "Centered on {device}": "Centrado en {device}",
+  "Set your place to centre this device": "Fija tu lugar para centrar este dispositivo",
   "The globe is not ready yet": "El globo aún no está listo",
   "No scan yet · your own spaces only · stays on this device": "Aún no hay escaneo · solo tus propios espacios · permanece en este dispositivo",
   "That file is not an inventory this layer reads": "Ese archivo no es un inventario que esta capa lea"
