@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { applyDegradedControls, unavailableFeatures } from './degradedMode.js';
+import {
+  applyDegradedControls,
+  phaseAvailable,
+  unavailableFeatures,
+} from './degradedMode.js';
 
 function fakeControl(props = {}) {
   return {
@@ -28,6 +32,15 @@ function fakeHost(requires, controls, props = {}) {
     ...props,
   };
 }
+
+test('a degraded boot is queryable by handlers that own no control', () => {
+  const root = { querySelectorAll: () => [] };
+  applyDegradedControls({ missing: ['controls'], root });
+  assert.equal(phaseAvailable('scene'), true);
+  assert.equal(phaseAvailable('controls'), false, 'the console never arrived');
+  applyDegradedControls({ missing: [], root });
+  assert.equal(phaseAvailable('controls'), true, 'a healthy boot forgets it');
+});
 
 test('a missing phase turns off its controls and leaves the rest alone', () => {
   const sceneStart = fakeControl();

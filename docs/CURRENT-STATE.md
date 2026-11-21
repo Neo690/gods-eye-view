@@ -1972,7 +1972,10 @@ marked `data-requires` — is disabled with `aria-disabled` and a
 file import are off rather than pressable and inert. The banner names what went
 with them (`Unavailable: scenes, drawing and voice.`) and being persistent it
 carries its own way out: RELOAD starts the boot again, DISMISS takes the notice
-down. Before the shell exists the same two controls sit in the fallback banner,
+down. A shortcut is not an element, so the DOM pass cannot switch it off: the
+keyboard actions are gated on the scene and console phases too and answer
+nothing while either is missing. A stalled chip also carries a small mark, not
+just a dimmed style, because `title` is not a thing on a phone. Before the shell exists the same two controls sit in the fallback banner,
 so even a stall that never built the console can be cleared or retried.
 
 The welcome card's wait for style restoration is bounded separately. It begins

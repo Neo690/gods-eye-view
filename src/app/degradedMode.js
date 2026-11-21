@@ -21,6 +21,29 @@ const FEATURE_LABELS = Object.freeze({
 
 export const DEGRADED_PHASES = Object.freeze(Object.keys(FEATURE_LABELS));
 
+/** What the last degraded boot lost, for handlers that own no DOM control. */
+let lostPhases = new Set();
+
+/**
+ * Record which phases a stalled boot left unbuilt.
+ *
+ * The DOM controls are switched off where they stand, but a keyboard shortcut
+ * is not an element: its handler still runs and would call the service of a
+ * phase that was never constructed. Handlers ask `phaseAvailable` before acting.
+ *
+ * @param {string[]} [missing]
+ * @returns {Set<string>} the phases that are gone
+ */
+export function noteLostPhases(missing = []) {
+  lostPhases = new Set(Array.isArray(missing) ? missing : []);
+  return lostPhases;
+}
+
+/** Whether a startup phase was built: true on a healthy boot, always. */
+export function phaseAvailable(phase) {
+  return !lostPhases.has(phase);
+}
+
 /**
  * The features a degraded boot cannot offer, as one readable list.
  *
@@ -63,7 +86,7 @@ export function applyDegradedControls({
   missing = [],
   root = globalThis.document,
 } = {}) {
-  const phases = new Set(Array.isArray(missing) ? missing : []);
+  const phases = noteLostPhases(missing);
   if (!phases.size || typeof root?.querySelectorAll !== 'function') return 0;
   let count = 0;
   for (const host of root.querySelectorAll('[data-requires]')) {

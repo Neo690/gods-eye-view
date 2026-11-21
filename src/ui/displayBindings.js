@@ -4,6 +4,7 @@ import { createFrameRateMonitor } from './frameRateMonitor.js';
 import { bindApplicationShortcuts } from './visualInput.js';
 import { bindDisplayControls, syncScopeControls } from './displayControls.js';
 import { canonicalizeDensity } from '../data/detectionPolicy.js';
+import { phaseAvailable } from '../app/degradedMode.js';
 
 /** Own keyboard/display event subscriptions; settings remain with their state owners. */
 export class DisplayBindings {
@@ -64,36 +65,48 @@ export class DisplayBindings {
     });
     this._dataUsageMeter?.destroy();
     this._dataUsageMeter = createDataUsageMeter({ documentRef: document });
+    // A shortcut is not an element, so `applyDegradedControls` cannot switch it
+    // off: with the scene or the console unbuilt, the keys would still call
+    // services that were never constructed. They are gated on the same phases
+    // their buttons belong to, and answer nothing while those are missing.
+    const shortcutsLive = () =>
+      phaseAvailable('scene') && phaseAvailable('controls');
+    const actions = {
+      setStyle: (style) => this.setStyle(style, { userInitiated: true }),
+      dismissSearch: () => {
+        if (this._locationSearch.classList.contains('expanded')) {
+          this._locationSearch.classList.remove('expanded');
+          this._locationSearch.value = '';
+          this._locationSearch.blur();
+        }
+      },
+      toggleHud: () => {
+        this.shareLinkManager?.claimRestoreLane?.('visual');
+        this.hud.toggle();
+        this._updateHudButtonState();
+        this._syncShareState();
+      },
+      toggleOrbit: () => this._toggleOrbit(),
+      toggleCleanView: () => this.toggleCleanView(),
+      toggleLayers: () =>
+        document.getElementById('data-panel').classList.toggle('active'),
+      cycleDetection: () => {
+        this.shareLinkManager?.claimRestoreLane?.('visual');
+        this.claimDetection();
+        cycleDetectionMode();
+        this._syncShareState();
+      },
+      toggleCctv: () => this._toggleCctvEnabled(),
+    };
     this._applicationShortcuts = bindApplicationShortcuts({
       documentRef: document,
       searchInput: this._locationSearch,
-      actions: {
-        setStyle: (style) => this.setStyle(style, { userInitiated: true }),
-        dismissSearch: () => {
-          if (this._locationSearch.classList.contains('expanded')) {
-            this._locationSearch.classList.remove('expanded');
-            this._locationSearch.value = '';
-            this._locationSearch.blur();
-          }
-        },
-        toggleHud: () => {
-          this.shareLinkManager?.claimRestoreLane?.('visual');
-          this.hud.toggle();
-          this._updateHudButtonState();
-          this._syncShareState();
-        },
-        toggleOrbit: () => this._toggleOrbit(),
-        toggleCleanView: () => this.toggleCleanView(),
-        toggleLayers: () =>
-          document.getElementById('data-panel').classList.toggle('active'),
-        cycleDetection: () => {
-          this.shareLinkManager?.claimRestoreLane?.('visual');
-          this.claimDetection();
-          cycleDetectionMode();
-          this._syncShareState();
-        },
-        toggleCctv: () => this._toggleCctvEnabled(),
-      },
+      actions: Object.fromEntries(
+        Object.entries(actions).map(([name, action]) => [
+          name,
+          (...args) => (shortcutsLive() ? action(...args) : undefined),
+        ]),
+      ),
     });
 
     syncScopeControls(

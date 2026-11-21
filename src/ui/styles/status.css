@@ -295,7 +295,8 @@
   color: #00e1ff;
   font-weight: 600;
   letter-spacing: 1.6px;
-  text-align: right;
+  /* The detail sits at the far end of the row in either direction. */
+  text-align: end;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

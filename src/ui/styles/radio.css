@@ -893,6 +893,25 @@ html:not([lang='en'])
   opacity: 0.7;
 }
 
+/* A chip is disabled for two very different reasons: it is busy, or the phase
+   behind it never arrived. The second is not a wait, and hover is not a thing
+   on a phone, so a stalled control also carries a visible mark. */
+.data-toggle-chip[data-degraded='true'] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.data-toggle-chip[data-degraded='true']::after {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  margin-inline-start: 4px;
+  border-radius: 50%;
+  background: #ff9b8e;
+  vertical-align: middle;
+}
+
 .data-toggle-chip.chip-loading {
   color: var(--text-secondary);
   border-color: rgba(255, 255, 255, 0.18);
