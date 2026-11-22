@@ -25,12 +25,14 @@
  *
  * Run (server up): npm run qa:sentinel-rotation -- --url http://localhost:4173
  * `--case <name>[,<name>]` runs only the named boots (`radio-sites`,
- * `military-bases`, `radio-sites-and-installations`). Every selected boot runs
+ * `military-bases`, `radio-sites-and-installations`); an empty or unknown name
+ * exits 2 with the list of boots. Every selected boot runs
  * even when an earlier one fails, so one broken case cannot hide another's
  * verdict. A failure saves the page, console, network and Sentinel state under
  * `qa-artifacts/sentinel-rotation/<case>/`, so the boots never share evidence.
  */
 import assert from 'node:assert/strict';
+import { rm } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 import puppeteer from 'puppeteer';
@@ -39,6 +41,7 @@ import { saveFailureArtifacts, watchPage } from './qa-browserEvidence.mjs';
 import { chromeExecutablePath } from './qa-chrome.mjs';
 
 const COORDINATE_TOLERANCE = 1e-6;
+const FONT_STYLESHEET = 'fonts.googleapis.com';
 const MEMORY_KEY = 'gev:sentinel:visited-sites';
 const EMPTY_MILITARY_NAMES = Object.freeze({
   release: 'qa-fixture',
@@ -189,34 +192,48 @@ const url = (
 const caseIndex = args.indexOf('--case');
 // `--case` without a value must not quietly mean "no boots": a typo in CI
 // would otherwise finish green without starting a browser.
-const caseValue =
-  caseIndex >= 0 ? String(args[caseIndex + 1] ?? '').trim() : null;
-const wantedCases =
-  caseValue === null
-    ? null
-    : caseValue
-        .split(',')
-        .map((name) => name.trim())
-        .filter(Boolean);
+const caseArg = caseIndex >= 0 ? String(args[caseIndex + 1] ?? '') : null;
 
 /**
  * Load the app again in the same tab, the way a reload would.
  *
- * A direct `page.reload()` loses the target in a container with no fonts:
- * Chrome aborts in `SkFontMgr_FontConfigInterface` — the FontConfig-backed
- * manager has methods that only `SK_ABORT("Not implemented.")` — while
- * resolving the Google Fonts families index.html links (JetBrains Mono, Inter,
- * Material Symbols). Blocking fonts.googleapis.com and fonts.gstatic.com, or
- * reloading with the cache bypassed, makes the same reload survive, and so does
- * having fonts on disk. The app's own script is not required: blocking its
- * entry module still crashed the reload. Why the warm reload aborts where the
- * first load does not is not established. Parking the tab on about:blank loads
- * the app as a fresh document in the same tab — and with it the same
- * sessionStorage, the state the memory must survive.
+ * A direct `page.reload()` in a container with no fonts used to lose the
+ * target: Chrome aborts in `SkFontMgr_FontConfigInterface` while resolving the
+ * Google Fonts families index.html links. installFixtures now answers that
+ * stylesheet with an empty one, so the page declares no remote family and the
+ * abort has nothing to resolve — the hop through about:blank is gone.
  */
 async function reloadApp(page) {
-  await page.goto('about:blank', { waitUntil: 'domcontentloaded' });
-  await page.goto(`${url}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+}
+
+/**
+ * The case is about surviving a reload, so refuse a navigation that only looks
+ * like one: `performance.navigation` records the type the browser performed.
+ */
+async function assertReloaded(page, label) {
+  const type = await page.evaluate(
+    () => performance.getEntriesByType('navigation')[0]?.type ?? null,
+  );
+  assert.equal(type, 'reload', `${label}: the tab really reloaded`);
+}
+
+/**
+ * Fail before Chrome starts when nothing serves the app: a dead preview would
+ * otherwise cost one 120-second wait per boot and read like a browser crash.
+ */
+async function assertPreview(target) {
+  let response;
+  try {
+    response = await fetch(`${target}/?welcome=0`, {
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch (error) {
+    throw new Error(`nothing answered at ${target} (${error.message})`);
+  }
+  if (!response.ok) {
+    throw new Error(`${target} answered HTTP ${response.status}, not the app`);
+  }
 }
 
 /** Wait for the shell and the viewer after a navigation or reload. */
@@ -458,9 +475,24 @@ async function installFixtures(page, fixtures) {
     patterns: [
       ...fixtures.map((fixture) => ({ urlPattern: fixture.urlPattern })),
       ...stubs.map((stub) => ({ urlPattern: stub.urlPattern })),
+      { urlPattern: `*${FONT_STYLESHEET}*` },
     ],
   });
   cdp.on('Fetch.requestPaused', ({ requestId, request }) => {
+    // An empty stylesheet declares no family, so no font is fetched: the gate
+    // measures rotation, not typography, stops depending on Google, and leaves
+    // the font manager nothing to resolve on a machine without fonts.
+    if (request.url.includes(FONT_STYLESHEET)) {
+      cdp
+        .send('Fetch.fulfillRequest', {
+          requestId,
+          responseCode: 200,
+          responseHeaders: [{ name: 'Content-Type', value: 'text/css' }],
+          body: '',
+        })
+        .catch(() => {});
+      return;
+    }
     const stub = stubs.find((candidate) =>
       request.url.includes(candidate.match),
     );
@@ -511,6 +543,7 @@ async function runCase(browser, spec, errors, monitors) {
 
   const hitsBeforeReload = new Map(fixtures.hits);
   await reloadApp(page);
+  await assertReloaded(page, spec.label);
   await waitForApp(page);
   await prepareLayers(page, { camera: spec.camera, layers: layersOf(spec) });
   assertFixturesRead(fixtures.hits, spec.label, hitsBeforeReload);
@@ -712,11 +745,14 @@ const BOOTS = Object.freeze([
  * Resolve `--case` against the boots. An empty value, an unknown name or a
  * selection that keeps no boot is a usage error, never a silent green run.
  */
-function selectedBoots(wanted) {
-  if (wanted === null) return BOOTS;
-  const names = [...new Set(wanted)];
+function selectedBoots(caseArg) {
+  if (caseArg === null) return BOOTS;
+  const names = [
+    ...new Set(caseArg.split(',').map((name) => name.trim())),
+  ].filter(Boolean);
   const known = BOOTS.map((boot) => boot.name);
-  if (!names.length) {
+  // `--case --url …` reads as a flag, not a boot name: say which one is meant.
+  if (!names.length || names.some((name) => name.startsWith('--'))) {
     throw new Error(`--case needs a boot name; known: ${known.join(', ')}`);
   }
   const unknown = names.filter((name) => !known.includes(name));
@@ -756,6 +792,9 @@ function browserDeath(browser) {
 async function runBoot(browser, boot) {
   const errors = [];
   const monitors = [];
+  const dir = `qa-artifacts/sentinel-rotation/${boot.name}`;
+  // A rerun must not inherit the previous run's pages as if they were current.
+  await rm(dir, { recursive: true, force: true });
   const startedAt = Date.now();
   const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
   try {
@@ -766,14 +805,14 @@ async function runBoot(browser, boot) {
   } catch (failure) {
     const death = browserDeath(browser);
     const error = death ? new Error(`${failure.message} — ${death}`) : failure;
-    const dir = await saveFailureArtifacts({
-      dir: `qa-artifacts/sentinel-rotation/${boot.name}`,
+    const saved = await saveFailureArtifacts({
+      dir,
       browser,
       monitors,
       error,
       probe: sentinelProbe,
     }).catch(() => null);
-    if (dir) console.error(`failure evidence saved in ${dir}/`);
+    if (saved) console.error(`failure evidence saved in ${saved}/`);
     console.error(`FAIL ${boot.label} (${elapsed()}): ${error.message}`);
     return error;
   } finally {
@@ -786,12 +825,18 @@ async function runBoot(browser, boot) {
 async function main() {
   let boots;
   try {
-    boots = selectedBoots(wantedCases);
+    boots = selectedBoots(caseArg);
   } catch (error) {
     console.error(error.message);
     process.exit(2);
   }
-  console.log(`boots: ${boots.map((boot) => boot.name).join(', ')}`);
+  try {
+    await assertPreview(url);
+  } catch (error) {
+    console.error(`${error.message}; start the preview first`);
+    process.exit(2);
+  }
+  console.log(`boots: ${boots.map((boot) => boot.name).join(', ')} at ${url}`);
   const browser = await puppeteer.launch({
     headless: true,
     executablePath: chromeExecutablePath(),

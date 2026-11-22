@@ -17,19 +17,21 @@
   failure caused by Chrome dying says so instead of reading as a rotation
   verdict. The new
   `--case <name>[,<name>]` argument runs only the named boots, so a developer
-  or a retry can ask for `radio-sites-and-installations` alone; an unknown name
-  exits 2 with the list of boots.
-- **The single-layer reload boots run end to end.** The gate loads the app
-  again in the same tab, and the reloaded page must re-request its API — the hit
-  count from the first page can no longer satisfy the fixture check. The
-  about:blank hop is not an app workaround: in a container with no fonts
-  installed, Chrome aborts in `SkFontMgr_FontConfigInterface` while resolving
-  the Google Fonts families the page links, and the page is gone. Blocking those
-  font hosts, bypassing the cache or having fonts on disk makes the same reload
-  survive, and a static page on that server reloads either way; the app's own
-  script is not required, since blocking its entry module still crashed. One
-  boot opener now owns the page, fixtures, layer preparation and camera for
-  every case, so the reload path runs the same code a second time.
+  or a retry can ask for `radio-sites-and-installations` alone; an empty or
+  unknown name exits 2 with the list of boots.
+- **The single-layer reload boots run end to end.** The gate reloads the app
+  in the same tab with a real `page.reload()` and asserts the navigation really
+  is a reload, and the reloaded page must re-request its API — the hit count
+  from the first page can no longer satisfy the fixture check. The fixtures now
+  answer Google's font stylesheet with an empty one, so the page declares no
+  remote family: typography is not what this gate measures, the run stops
+  depending on Google's availability, and a container without fonts no longer
+  reaches the font-manager abort that resolving those families used to trigger.
+  A dead preview fails before Chrome starts instead of after one timed-out wait
+  per boot, and each boot clears its own evidence directory so a rerun cannot
+  upload the previous run's pages. One boot opener now owns the page, fixtures,
+  layer preparation and camera for every case, so the reload path runs the same
+  code a second time.
 - **The gate now proves what it claims.** Each boot fails unless the page
   actually requested its fixture URL, so an empty 200 cannot stand in for the
   fixed data. The camera is held on the fixture view until it reads back
