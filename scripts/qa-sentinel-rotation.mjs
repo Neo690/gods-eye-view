@@ -23,7 +23,10 @@
  * layer's sites, each layer must visit both of its own sites, and with every
  * site cooling each layer must then fall back to its longest-unvisited one:
  * that is what proves neither catalog starves the other's rotation, on the
- * fresh and the cooldown path alike.
+ * fresh and the cooldown path alike. It then reloads the tab and watches two
+ * more scans, one per layer, each of which must resume at the site the tab's
+ * own memory names as that layer's longest-unvisited: the cooldown order has to
+ * survive sessionStorage instead of being rebuilt from whatever is nearest.
  *
  * Run (server up): npm run qa:sentinel-rotation -- --url http://localhost:4173
  * `--case <name>[,<name>]` runs only the named boots (`radio-sites`,
@@ -31,19 +34,23 @@
  * exits 2 with the list of boots. Any other argument is a usage error: an
  * unknown flag, a repeated one, or one without a value exits 2 with the usage
  * line, so `--urll <url>` can no longer run the gate against the default URL.
- * Every selected boot runs
- * even when an earlier one fails, so one broken case cannot hide another's
- * verdict. A failure saves the page, console, network and Sentinel state under
+ * Every selected boot runs even when an earlier one fails, so one broken case
+ * cannot hide another's verdict. A failure saves the page, console, network and
+ * Sentinel state under
  * `qa-artifacts/sentinel-rotation/<case>/`, so the boots never share evidence.
  *
- * `--self-check` runs one boot, Radio Sites, with the reloaded document starting
- * without its site memory: the gate must then fail on the rotation assertion,
- * and the mode exits 0 only when that expected failure was produced. It is the
- * proof that the assertions still bite, not a second gate.
+ * `--self-check` runs two sabotaged boots and exits 0 only when both failed as
+ * they must: Radio Sites with the reloaded document starting without its site
+ * memory, which the rotation assertion has to catch, and Mapped Installations
+ * with its names-pack requests counted under a name the pack check cannot read,
+ * which the pack check has to catch. It is the proof that the assertions still
+ * bite, not a second gate.
  */
 import assert from 'node:assert/strict';
+import { readdirSync, statSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
-import { pathToFileURL } from 'node:url';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import puppeteer from 'puppeteer';
 
@@ -61,14 +68,19 @@ const MEMORY_KEY = 'gev:sentinel:visited-sites';
 const ROTATION_FAILURE = Object.freeze(
   'after reload, the Sentinel skips the remembered site and rotates',
 );
-/** The case `--self-check` sabotages. Named, not an index: cases get reordered. */
+/**
+ * The one wording of an unanswered names pack: the check fails with it and the
+ * pack self-check looks for exactly it.
+ */
+const PACK_FAILURE = Object.freeze(
+  'never requested the installations names pack',
+);
+/** The cases `--self-check` sabotages. Named, not indexes: cases get reordered. */
 const SELF_CHECK_CASE = 'radio-sites';
-const EMPTY_MILITARY_NAMES = Object.freeze({
-  release: 'qa-fixture',
-  snapshots: [],
-  classes: [],
-  records: [],
-});
+const PACK_SELF_CHECK_CASE = 'military-bases';
+// Only the two fields the loader reads: `records` to map, `classes` to name
+// them. An empty pack adds no base to the fixture's own two.
+const EMPTY_MILITARY_NAMES = Object.freeze({ classes: [], records: [] });
 
 const CASES = Object.freeze([
   {
@@ -205,12 +217,25 @@ const COEXISTENCE = Object.freeze({
   ],
 });
 
-const siteAt = (sites, lat, lon) =>
+const siteAt = (sites, lat, lon, tolerance = COORDINATE_TOLERANCE) =>
   sites.find(
     (site) =>
-      Math.abs(site.lat - lat) < COORDINATE_TOLERANCE &&
-      Math.abs(site.lon - lon) < COORDINATE_TOLERANCE,
+      Math.abs(site.lat - lat) < tolerance &&
+      Math.abs(site.lon - lon) < tolerance,
   ) ?? null;
+
+/**
+ * The fixture site a memory key names. The layer rounds a key to two decimals,
+ * so the key sits half a hundredth from the site at most: `siteAt` with that
+ * tolerance is the same match the arithmetic would make, without repeating the
+ * layer's own formatting here.
+ */
+function siteOfKey(key, sites) {
+  const [lat, lon] = String(key).split(',').map(Number);
+  return Number.isFinite(lat) && Number.isFinite(lon)
+    ? siteAt(sites, lat, lon, 0.005)
+    : null;
+}
 
 /** What every usage error prints, so a typo never reads as a broken gate. */
 const USAGE =
@@ -312,9 +337,9 @@ async function assertPreview(target) {
  * both wasted time on every navigation and still a race on a loaded one, where
  * the flight can outlive it and overwrite the view the boot just set. Watching
  * the pose leaves as soon as the camera stops, wherever the machine's timing
- * put that moment: a moved camera that then holds still for five samples is a
- * finished flight, and a camera that never moved at all — a restored share view
- * has nothing to fly — is settled once stillness has outlasted the 500 ms timer.
+ * put that moment: a moved camera that then holds still is a finished flight,
+ * and a camera that never moved at all — a boot the app one day stops flying —
+ * is settled once stillness has outlasted the 500 ms timer.
  */
 async function waitForStartupFlight(page) {
   await page.evaluate(async () => {
@@ -336,6 +361,10 @@ async function waitForStartupFlight(page) {
       Math.abs(a.height - b.height) < 1e-3 &&
       Math.abs(a.heading - b.heading) < 1e-9 &&
       Math.abs(a.pitch - b.pitch) < 1e-9;
+    // Five still samples (~400 ms) end a flight that has moved; sixty (~4.8 s)
+    // settle a boot that never moved, well past the 500 ms flight timer.
+    const SETTLED_SAMPLES = 5;
+    const NOTHING_FLEW_SAMPLES = 60;
     const deadline = Date.now() + 30_000;
     let previous = pose();
     let moved = false;
@@ -349,7 +378,7 @@ async function waitForStartupFlight(page) {
         still = 0;
       }
       previous = current;
-      if (moved ? still >= 5 : still >= 60) return;
+      if (still >= (moved ? SETTLED_SAMPLES : NOTHING_FLEW_SAMPLES)) return;
     }
     throw new Error('the start-up flight never came to rest');
   });
@@ -453,6 +482,10 @@ const fixturesOf = (spec) => spec.fixtures ?? [spec.fixture];
 const layersOf = (spec) =>
   spec.layers ?? [{ id: spec.layerId, label: spec.label, sites: spec.sites }];
 
+/** The shared assets a boot's fixtures declare, if any. */
+const packsOf = (spec) =>
+  fixturesOf(spec).flatMap((fixture) => (fixture.pack ? [fixture.pack] : []));
+
 /**
  * A fresh page with the fixed APIs installed, the app booted, every layer the
  * boot needs holding its fixture sites, and the camera held on the view.
@@ -460,12 +493,12 @@ const layersOf = (spec) =>
  * Every read of these layers is a fixture: the layers are real, the data is
  * fixed, and the Sentinel's rotation is the only variable under test.
  */
-async function openBoot(browser, spec, errors, monitors) {
+async function openBoot(browser, spec, errors, monitors, options) {
   const page = await browser.newPage();
   monitors.push(
     watchPage(page, { name: `sentinel-rotation-${spec.name}`, errors }),
   );
-  const fixtures = await installFixtures(page, fixturesOf(spec));
+  const fixtures = await installFixtures(page, fixturesOf(spec), options);
   await page.goto(`${url}/?welcome=0`, { waitUntil: 'domcontentloaded' });
   await waitForApp(page);
   await prepareLayers(page, { camera: spec.camera, layers: layersOf(spec) });
@@ -574,6 +607,7 @@ async function readMemory(page) {
     return {
       version: parsed.version,
       count: Object.keys(parsed.sites || {}).length,
+      sites: parsed.sites || {},
     };
   }, MEMORY_KEY);
 }
@@ -583,7 +617,7 @@ async function readMemory(page) {
  * depends on the network. A stub whose `match` appears in the URL wins over
  * the fixture body it belongs to.
  */
-async function installFixtures(page, fixtures) {
+async function installFixtures(page, fixtures, { blindPacks = false } = {}) {
   const stubs = fixtures.flatMap((fixture) => fixture.stubs ?? []);
   // Every fixture must be asked for at least once: a 200 with the wrong body
   // would still let a layer count rows, so the request itself is the proof.
@@ -593,6 +627,9 @@ async function installFixtures(page, fixtures) {
     ...fixtures.map((fixture) => [fixture.match, 0]),
     ...stubs.map((stub) => [stub.match, 0]),
   ]);
+  // `blindPacks` answers a stub exactly as usual but files the request under a
+  // name the pack check never reads, so the check alone goes blind.
+  const seenKey = (match) => (blindPacks ? `${match}:unwatched` : match);
   const cdp = await page.createCDPSession();
   await cdp.send('Fetch.enable', {
     patterns: [
@@ -622,8 +659,10 @@ async function installFixtures(page, fixtures) {
     const fixture = fixtures.find((candidate) =>
       request.url.includes(candidate.match),
     );
-    if (stub) hits.set(stub.match, hits.get(stub.match) + 1);
-    else if (fixture) hits.set(fixture.match, hits.get(fixture.match) + 1);
+    if (stub) {
+      const key = seenKey(stub.match);
+      hits.set(key, (hits.get(key) ?? 0) + 1);
+    } else if (fixture) hits.set(fixture.match, hits.get(fixture.match) + 1);
     cdp
       .send('Fetch.fulfillRequest', {
         requestId,
@@ -668,16 +707,15 @@ function assertFixturesRead(fixtures, hits, label, since = null) {
  * does it ask — so a boot that never reloads (the coexistence pair) would fail
  * a check it has no way to satisfy.
  */
-function assertPacksRead(fixtures, hits, label) {
-  for (const { pack } of fixtures) {
-    if (!pack) continue;
+function assertPacksRead(packs, hits, label) {
+  for (const pack of packs) {
     const seen = pack.matches.reduce(
       (total, match) => total + (hits.get(match) ?? 0),
       0,
     );
     if (seen > 0) continue;
     assert.fail(
-      `${label}: the page never requested ${pack.label} (${pack.matches.join(' or ')}); if that asset was renamed, update its stub and this list — the rotation is not what failed`,
+      `${label}: the page ${PACK_FAILURE} (${pack.matches.join(' or ')}); if that asset was renamed, update its stub and this list — the rotation is not what failed`,
     );
   }
 }
@@ -702,14 +740,39 @@ async function forgetVisitedSites(page) {
 
 /** The reloaded page must have lost the key before it can scan again. */
 async function assertForgotten(page) {
-  const kept = await page.evaluate((key) => {
-    try {
-      return sessionStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  }, MEMORY_KEY);
+  // No tolerant catch here: a store that refuses the read would make this pass
+  // for the wrong reason. `readMemory` already proved the store works.
+  const kept = await page.evaluate(
+    (key) => sessionStorage.getItem(key),
+    MEMORY_KEY,
+  );
   assert.equal(kept, null, 'the reloaded page starts without a site memory');
+}
+
+/**
+ * Reload the tab, rebuild the boot on the same page, and start the Sentinel.
+ *
+ * The two boots that reload share this path: the fixtures must be asked again,
+ * the camera re-placed and the layers re-enabled. With `forgetMemory` the
+ * sabotage is installed before the navigation, so the new document never sees
+ * the site memory at all.
+ */
+async function reloadBoot(page, spec, fixtures, { forgetMemory = false } = {}) {
+  const hitsBeforeReload = new Map(fixtures.hits);
+  if (forgetMemory) await forgetVisitedSites(page);
+  await reloadApp(page);
+  await assertReloaded(page, spec.label);
+  if (forgetMemory) await assertForgotten(page);
+  await waitForApp(page);
+  await prepareLayers(page, { camera: spec.camera, layers: layersOf(spec) });
+  assertFixturesRead(
+    fixturesOf(spec),
+    fixtures.hits,
+    spec.label,
+    hitsBeforeReload,
+  );
+  await settleCamera(page, spec.camera);
+  await enableSentinel(page);
 }
 
 async function runCase(
@@ -717,9 +780,11 @@ async function runCase(
   spec,
   errors,
   monitors,
-  { forgetMemory = false } = {},
+  { forgetMemory = false, blindPacks = false } = {},
 ) {
-  const { page, fixtures } = await openBoot(browser, spec, errors, monitors);
+  const { page, fixtures } = await openBoot(browser, spec, errors, monitors, {
+    blindPacks,
+  });
   await enableSentinel(page);
 
   const before = await observeScans(page, 1);
@@ -727,40 +792,32 @@ async function runCase(
   await waitForScanEnd(page);
   const memoryBefore = await readMemory(page);
   assert.equal(memoryBefore?.version, 2, 'the tab has a versioned memory');
-  assert.ok(memoryBefore.count >= 1, 'the first scan was remembered');
+  assert.equal(
+    memoryBefore.count,
+    1,
+    'the first scan is the only site in the memory',
+  );
 
-  const hitsBeforeReload = new Map(fixtures.hits);
-  // The self-check installs its sabotage before the navigation, so it lands in
-  // the new document instead of the one being torn down.
-  if (forgetMemory) await forgetVisitedSites(page);
-  await reloadApp(page);
-  await assertReloaded(page, spec.label);
-  if (forgetMemory) await assertForgotten(page);
-  await waitForApp(page);
-  await prepareLayers(page, { camera: spec.camera, layers: layersOf(spec) });
-  assertFixturesRead(fixturesOf(spec), fixtures.hits, spec.label, hitsBeforeReload);
-  await settleCamera(page, spec.camera);
-  await enableSentinel(page);
+  await reloadBoot(page, spec, fixtures, { forgetMemory });
 
   const after = await observeScans(page, 2);
-
-  for (const [phase, scans] of [
-    ['before reload', before],
-    ['after reload', after],
-  ]) {
+  // Before any assertion about the walk: a renamed names pack changes which
+  // sites the layer holds, so the pack has to name itself first. Otherwise the
+  // rotation assertion speaks for it and accuses the Sentinel of a change that
+  // never touched it.
+  assertPacksRead(packsOf(spec), fixtures.hits, spec.label);
+  assert.equal(after.length, 2, `${spec.label}: two scans after the reload`);
+  for (const scan of [...before, ...after]) {
     assert.equal(
-      scans.length,
-      phase === 'before reload' ? 1 : 2,
-      `${spec.label}: ${phase} completed the expected scans`,
+      scan.target,
+      spec.layerId,
+      `${spec.label}: the Sentinel inspects the static layer`,
     );
-    for (const scan of scans) {
-      assert.equal(scan.target, spec.layerId);
-      assert.equal(
-        scan.targetKind,
-        null,
-        `${spec.label} scans inspect the static layer, not a GhostMaps alert`,
-      );
-    }
+    assert.equal(
+      scan.targetKind,
+      null,
+      `${spec.label}: the scan is not a GhostMaps alert`,
+    );
   }
 
   const beforeSites = before.map((scan) =>
@@ -783,15 +840,6 @@ async function runCase(
     [spec.sites[1].id, spec.sites[0].id],
     `${spec.label}: ${ROTATION_FAILURE}`,
   );
-  assert.notEqual(
-    beforeSites[0].id,
-    afterSites[0].id,
-    `${spec.label}: sessionStorage prevented scanning the same site again`,
-  );
-  // Last, once the boot has really run: the layer fetches its names pack only
-  // when its installations context needs it, which is after the reload.
-  assertPacksRead(fixturesOf(spec), fixtures.hits, spec.label);
-
   console.log(
     `[${spec.name}] before reload: ${beforeSites[0].id} (${before[0].lat.toFixed(5)}, ${before[0].lon.toFixed(5)})`,
   );
@@ -808,6 +856,26 @@ async function runCase(
   // capture the page it happened on.
 }
 
+/** Which of the boot's layers a scan inspected, and on which of its sites. */
+function visitOf(scan, spec) {
+  assert.equal(
+    scan.targetKind,
+    null,
+    `${spec.label}: a static layer is inspected, not a GhostMaps alert`,
+  );
+  const layer = spec.layers.find((candidate) => candidate.id === scan.target);
+  assert.ok(
+    layer,
+    `${spec.label}: ${scan.target} is one of the two enabled layers`,
+  );
+  const site = siteAt(layer.sites, scan.lat, scan.lon);
+  assert.ok(
+    site,
+    `${spec.label}: the scan stands exactly on a ${layer.label} site`,
+  );
+  return { layerId: layer.id, label: layer.label, siteId: site.id };
+}
+
 /**
  * Both static layers on at once.
  *
@@ -816,10 +884,11 @@ async function runCase(
  * ranking would starve the other one. Six scans must alternate layers, cover
  * both sites of each layer, and then revisit the longest-unvisited site of
  * each layer once nothing is left unvisited — the cooldown path, where only
- * the visit times and the repeat penalty can break the tie.
+ * the visit times and the repeat penalty can break the tie. A reload follows,
+ * and one scan per layer must resume from the memory it kept.
  */
 async function runCoexistenceCase(browser, spec, errors, monitors) {
-  const { page } = await openBoot(browser, spec, errors, monitors);
+  const { page, fixtures } = await openBoot(browser, spec, errors, monitors);
   await enableSentinel(page);
 
   const scans = await observeScans(page, spec.scans);
@@ -829,26 +898,7 @@ async function runCoexistenceCase(browser, spec, errors, monitors) {
     `${spec.label}: the Sentinel completed ${spec.scans} scans`,
   );
 
-  const visits = scans.map((scan) => {
-    assert.equal(
-      scan.targetKind,
-      null,
-      `${spec.label}: a static layer is inspected, not a GhostMaps alert`,
-    );
-    const layer = spec.layers.find(
-      (candidate) => candidate.id === scan.target,
-    );
-    assert.ok(
-      layer,
-      `${spec.label}: ${scan.target} is one of the two enabled layers`,
-    );
-    const site = siteAt(layer.sites, scan.lat, scan.lon);
-    assert.ok(
-      site,
-      `${spec.label}: the scan stands exactly on a ${layer.label} site`,
-    );
-    return { layerId: layer.id, label: layer.label, siteId: site.id };
-  });
+  const visits = scans.map((scan) => visitOf(scan, spec));
 
   // The anti-starvation property: one catalog may not take every scan, and no
   // layer may be skipped while the other is inspected twice in a row.
@@ -879,11 +929,6 @@ async function runCoexistenceCase(browser, spec, errors, monitors) {
       visited[0].siteId,
       `${layer.label}: the cooldown revisits its longest-unvisited site`,
     );
-    assert.notEqual(
-      visited.at(-1).siteId,
-      visited.at(-2).siteId,
-      `${layer.label}: not the site it just scanned`,
-    );
   }
 
   assert.deepEqual(
@@ -903,6 +948,58 @@ async function runCoexistenceCase(browser, spec, errors, monitors) {
   );
   console.log(
     'RESULT: with every site cooling, each layer revisited its longest-unvisited site',
+  );
+
+  // The reload: the tab keeps its per-site memory and loses only the layer-level
+  // book. Each layer must therefore resume at the site its own memory names as
+  // longest-unvisited. Which layer goes first is the ranking's business, and a
+  // reloaded spider may well rank them differently, so the order of the pair is
+  // left free: the memory is what this phase has to prove, not the walk.
+  const memoryBefore = await readMemory(page);
+  assert.equal(
+    memoryBefore?.count,
+    spec.layers.reduce((total, layer) => total + layer.sites.length, 0),
+    `${spec.label}: the tab remembers every fixture site`,
+  );
+  const oldest = new Map();
+  for (const layer of spec.layers) {
+    const remembered = Object.entries(memoryBefore.sites)
+      .map(([key, at]) => ({ site: siteOfKey(key, layer.sites), at }))
+      .filter((entry) => entry.site)
+      .sort((left, right) => left.at - right.at);
+    assert.equal(
+      remembered.length,
+      layer.sites.length,
+      `${layer.label}: the memory names both of its sites`,
+    );
+    oldest.set(layer.id, remembered[0].site.id);
+  }
+  await reloadBoot(page, spec, fixtures);
+
+  const resumedScans = await observeScans(page, spec.layers.length);
+  assert.equal(
+    resumedScans.length,
+    spec.layers.length,
+    `${spec.label}: the reloaded Sentinel completed ${spec.layers.length} scans`,
+  );
+  const resumed = resumedScans.map((scan) => visitOf(scan, spec));
+  assert.equal(
+    new Set(resumed.map((visit) => visit.layerId)).size,
+    spec.layers.length,
+    `${spec.label}: the reloaded Sentinel visits both layers`,
+  );
+  for (const visit of resumed) {
+    assert.equal(
+      visit.siteId,
+      oldest.get(visit.layerId),
+      `${visit.label}: after the reload it resumes at the site it scanned longest ago`,
+    );
+    console.log(
+      `[${spec.name}] after reload: ${visit.label}: ${visit.siteId}`,
+    );
+  }
+  console.log(
+    `RESULT ${spec.label}: a reload kept the cooldown order; then ${resumed.map((visit) => visit.siteId).join(' then ')}`,
   );
 }
 
@@ -972,15 +1069,58 @@ async function expectRotationFailure(browser, errors, monitors) {
 }
 
 /**
- * The one boot `--self-check` runs. Kept out of BOOTS so a full run can never
- * include the sabotage and mistake it for a verdict.
+ * Prove the names-pack check can still go red.
+ *
+ * The same boot runs with its stubs answering every request but filing it under
+ * a name the check does not read: the page still gets its pack, so the walk and
+ * the memory stay exactly as a green run leaves them, and only the pack
+ * assertion can fail. A boot that failed anywhere else means the sabotage
+ * reached past the check it was meant to test.
  */
-const SELF_CHECK = Object.freeze({
-  name: 'self-check',
-  label: 'Self-check: a forgotten site must fail the rotation',
-  run: (browser, errors, monitors) =>
-    expectRotationFailure(browser, errors, monitors),
-});
+async function expectPackFailure(browser, errors, monitors) {
+  const spec = CASES.find(
+    (candidate) => candidate.name === PACK_SELF_CHECK_CASE,
+  );
+  assert.ok(spec, `--self-check needs the ${PACK_SELF_CHECK_CASE} case`);
+  let failure = null;
+  try {
+    await runCase(browser, spec, errors, monitors, { blindPacks: true });
+  } catch (thrown) {
+    failure = thrown;
+  }
+  assert.ok(
+    failure,
+    `${spec.label}: the gate stayed green with its names pack unaccounted for, so the pack check no longer bites`,
+  );
+  const reason = failure.message ?? String(failure);
+  assert.ok(
+    reason.includes(PACK_FAILURE),
+    `${spec.label}: the blinded-pack boot failed on something other than the pack check: ${reason}`,
+  );
+  console.log(`  failed as expected: ${reason.split('\n')[0]}`);
+  console.log(
+    `RESULT ${spec.label}: an unaccounted names pack fails the boot, as it must`,
+  );
+}
+
+/**
+ * The boots `--self-check` runs. Kept out of BOOTS so a full run can never
+ * include a sabotage and mistake it for a verdict.
+ */
+const SELF_CHECKS = Object.freeze([
+  {
+    name: 'self-check-rotation',
+    label: 'Self-check: a forgotten site must fail the rotation',
+    run: (browser, errors, monitors) =>
+      expectRotationFailure(browser, errors, monitors),
+  },
+  {
+    name: 'self-check-pack',
+    label: 'Self-check: an unaccounted names pack must fail the boot',
+    run: (browser, errors, monitors) =>
+      expectPackFailure(browser, errors, monitors),
+  },
+]);
 
 /**
  * Resolve `--case` against the boots. An empty value, an unknown name or a
@@ -1064,6 +1204,47 @@ async function runBoot(browser, boot) {
   }
 }
 
+/**
+ * Say when the preview's build is older than the sources, and only on loopback.
+ *
+ * The gate runs against whatever `dist/` the preview serves, so a forgotten
+ * build makes a green run report on a tree that no longer exists. A remote URL
+ * has no build to compare, and a checkout whose mtimes are arbitrary only earns
+ * a warning, never a red run.
+ */
+function staleBuildWarning(url) {
+  const { hostname } = new URL(url);
+  if (hostname !== '127.0.0.1' && hostname !== 'localhost') return null;
+  const root = fileURLToPath(new URL('..', import.meta.url));
+  let built;
+  try {
+    built = statSync(join(root, 'dist', 'index.html')).mtimeMs;
+  } catch {
+    return null;
+  }
+  const newest = newestSource(join(root, 'src'));
+  if (!newest || newest.at <= built) return null;
+  const seconds = Math.round((newest.at - built) / 1000);
+  return `dist/index.html is ${seconds}s older than ${newest.path.replace(`${root}/`, '')}; run npm run build, or this run proves an older tree`;
+}
+
+const SOURCE_FILE = /\.(m?js|css|html|json)$/;
+
+function newestSource(dir) {
+  let newest = null;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const found = newestSource(path);
+      if (found && (!newest || found.at > newest.at)) newest = found;
+    } else if (SOURCE_FILE.test(entry.name)) {
+      const at = statSync(path).mtimeMs;
+      if (!newest || at > newest.at) newest = { at, path };
+    }
+  }
+  return newest;
+}
+
 async function main() {
   let boots;
   try {
@@ -1071,7 +1252,7 @@ async function main() {
     // read as a preference for which sabotage to run, so it is a usage error.
     if (selfCheck && caseArg !== null)
       throw new Error('--self-check runs its own boot; drop --case');
-    boots = selfCheck ? [SELF_CHECK] : selectedBoots(caseArg);
+    boots = selfCheck ? SELF_CHECKS : selectedBoots(caseArg);
   } catch (error) {
     console.error(error.message);
     process.exit(2);
@@ -1083,6 +1264,8 @@ async function main() {
     process.exit(2);
   }
   console.log(`boots: ${boots.map((boot) => boot.name).join(', ')} at ${url}`);
+  const stale = staleBuildWarning(url);
+  if (stale) console.warn(`warning: ${stale}`);
   const browser = await puppeteer.launch({
     headless: true,
     executablePath: chromeExecutablePath(),
@@ -1105,7 +1288,7 @@ async function main() {
     }
     if (selfCheck) {
       console.log(
-        'RESULT: with its memory wiped, the gate failed the rotation, as it must',
+        `RESULT: ${SELF_CHECKS.length} sabotages failed as they must, so the assertions still bite`,
       );
     } else {
       console.log(`RESULT: ${boots.length} of ${boots.length} boots passed`);
@@ -1115,6 +1298,9 @@ async function main() {
         );
         console.log(
           'RESULT: with both static layers on, neither starved the other',
+        );
+        console.log(
+          'RESULT: the pair kept its cooldown order across a reload',
         );
       }
     }
