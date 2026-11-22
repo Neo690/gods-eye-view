@@ -277,11 +277,19 @@ spider ranks them from a position the gate does not control. `--case
 (`radio-sites`, `military-bases`, `radio-sites-and-installations`); an empty or
 unknown name exits 2.
 
-`--self-check` proves those assertions can still fail: it runs the Radio Sites
-boot with the reloaded document starting without its site memory, and exits 0
-only when the rotation assertion fires. A green sabotaged run means the
-assertions have become decoration. CI runs the gate and then this mode in the
-same browser job.
+`--self-check` proves those assertions can still fail, with two sabotaged boots:
+Radio Sites with the reloaded document starting without its site memory, which
+the rotation assertion has to catch, and Mapped Installations with its names-pack
+requests answered but counted under a name the pack check cannot read, which is
+the only thing allowed to fail there. It exits 0 only when both failed as
+expected; a green sabotaged run means the assertions have become decoration. CI
+runs the gate and then this mode in the same browser job.
+
+On this machine a full run takes about five minutes — 62 to 66 s for Radio
+Sites, 85 to 99 s for Mapped Installations, 133 to 149 s for the pair — and the
+self-check's two boots about the same as the first two. A loopback preview whose `dist/` is older
+than the newest source file prints a warning first, so a green run cannot
+quietly prove a build that no longer matches the tree.
 
 A failure saves the page, console, network and Sentinel state under
 `qa-artifacts/sentinel-rotation/<case>/`, and each boot clears its own directory
