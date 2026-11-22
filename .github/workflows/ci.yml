@@ -287,9 +287,6 @@ jobs:
         with:
           name: device-sweep-gate-evidence
           path: qa-artifacts/qa-device-sweep/
-          # A failing gate that wrote no evidence is a finding, not a reason to
-          # pass the upload silently.
-          if-no-files-found: warn
           retention-days: 14
 
       # Keyed to the Sentinel step alone: a Device Sweep failure must not upload
@@ -301,7 +298,6 @@ jobs:
         with:
           name: sentinel-rotation-gate-evidence
           path: qa-artifacts/sentinel-rotation/
-          if-no-files-found: warn
           retention-days: 14
 
   windows-onboarding:

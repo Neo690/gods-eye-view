@@ -202,14 +202,17 @@ const wantedCases =
 /**
  * Load the app again in the same tab, the way a reload would.
  *
- * A direct `page.reload()` loses the target on a bare container: Chrome's
- * browser process aborts in `SkFontMgr_FontConfigInterface` when fontconfig has
- * no fonts installed, and the page never comes back. The same page reloads
- * cleanly with fonts on disk or with JavaScript disabled, so this is the
- * browser's font stack, not the app. Parking the tab on about:blank first loads
+ * A direct `page.reload()` loses the target in a container with no fonts:
+ * Chrome aborts in `SkFontMgr_FontConfigInterface` — the FontConfig-backed
+ * manager has methods that only `SK_ABORT("Not implemented.")` — while
+ * resolving the Google Fonts families index.html links (JetBrains Mono, Inter,
+ * Material Symbols). Blocking fonts.googleapis.com and fonts.gstatic.com, or
+ * reloading with the cache bypassed, makes the same reload survive, and so does
+ * having fonts on disk. The app's own script is not required: blocking its
+ * entry module still crashed the reload. Why the warm reload aborts where the
+ * first load does not is not established. Parking the tab on about:blank loads
  * the app as a fresh document in the same tab — and with it the same
- * sessionStorage, the state the memory must survive. CI installs fonts for
- * deterministic metrics, so the hop costs it nothing.
+ * sessionStorage, the state the memory must survive.
  */
 async function reloadApp(page) {
   await page.goto('about:blank', { waitUntil: 'domcontentloaded' });
@@ -339,11 +342,10 @@ async function openBoot(browser, spec, errors, monitors) {
 /**
  * Hold the camera on the fixture view until it is really there.
  *
- * The Sentinel spawns where the operator is looking, and the app can still
- * apply a restored view or finish a flight after the first setView. A camera
- * that has drifted moves the spider's start and turns the first pick into a
- * coordinate race; re-applying the view until it reads back keeps the walk
- * deterministic.
+ * The Sentinel spawns where the operator is looking, so the spider's first
+ * target is decided by the camera and not only by the fixture ranking. Reading
+ * the view back before the first scan keeps the walk reproducible instead of
+ * depending on whatever the app did to the camera since setView.
  */
 async function settleCamera(page, camera) {
   await page.evaluate(async ({ camera }) => {
@@ -727,19 +729,43 @@ function selectedBoots(wanted) {
 }
 
 /**
+ * When the failure is Chrome dying rather than an assertion, say so: the
+ * evidence shows a detached frame or a closed target, which reads like a
+ * rotation failure otherwise. A font-stack abort on reload is one cause; see
+ * reloadApp.
+ */
+function browserDeath(browser) {
+  if (browser.connected !== false) return null;
+  const child = browser.process?.();
+  const signal = child?.signalCode ?? null;
+  const code = child?.exitCode ?? null;
+  const how = signal ? `signal ${signal}` : `exit code ${code ?? 'unknown'}`;
+  const hint =
+    signal === 'SIGABRT' || signal === 'SIGSEGV'
+      ? '; an abort on reload can be the font stack, see reloadApp'
+      : '';
+  return `the browser died (${how}), not the gate${hint}`;
+}
+
+/**
  * Run one boot and hand back its error, or null. Each boot owns its console
  * list and its pages, so one failing case neither stops the next nor shares a
- * directory with another.
+ * directory with another. It also prints how long it took, so a slow boot is
+ * visible in the log.
  */
 async function runBoot(browser, boot) {
   const errors = [];
   const monitors = [];
+  const startedAt = Date.now();
+  const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
   try {
     await boot.run(browser, errors, monitors);
     assert.deepEqual(errors, [], `${boot.label}: the page logged no errors`);
-    console.log(`PASS ${boot.label}`);
+    console.log(`PASS ${boot.label} (${elapsed()})`);
     return null;
-  } catch (error) {
+  } catch (failure) {
+    const death = browserDeath(browser);
+    const error = death ? new Error(`${failure.message} — ${death}`) : failure;
     const dir = await saveFailureArtifacts({
       dir: `qa-artifacts/sentinel-rotation/${boot.name}`,
       browser,
@@ -748,7 +774,7 @@ async function runBoot(browser, boot) {
       probe: sentinelProbe,
     }).catch(() => null);
     if (dir) console.error(`failure evidence saved in ${dir}/`);
-    console.error(`FAIL ${boot.label}: ${error.message}`);
+    console.error(`FAIL ${boot.label} (${elapsed()}): ${error.message}`);
     return error;
   } finally {
     for (const monitor of monitors) {
@@ -765,19 +791,13 @@ async function main() {
     console.error(error.message);
     process.exit(2);
   }
+  console.log(`boots: ${boots.map((boot) => boot.name).join(', ')}`);
   const browser = await puppeteer.launch({
     headless: true,
     executablePath: chromeExecutablePath(),
     defaultViewport: { width: 1440, height: 900 },
     protocolTimeout: 180_000,
-    args: [
-      '--no-sandbox',
-      // Containers ship a small /dev/shm; without this the renderer can lose
-      // its shared memory under a heavy Cesium page.
-      '--disable-dev-shm-usage',
-      '--use-gl=angle',
-      '--use-angle=swiftshader',
-    ],
+    args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader'],
   });
   const failures = [];
   try {

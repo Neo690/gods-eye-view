@@ -12,19 +12,24 @@
 - **One boot's failure no longer ends the gate.** The three boots run one
   after another, each with its own console-error list and its own evidence
   directory, and the run reports every failure before exiting non-zero: a
-  broken single-layer case cannot hide whether the pair still rotates. The new
+  broken single-layer case cannot hide whether the pair still rotates. Each
+  boot prints its duration, the run names the boots it will run up front, and a
+  failure caused by Chrome dying says so instead of reading as a rotation
+  verdict. The new
   `--case <name>[,<name>]` argument runs only the named boots, so a developer
   or a retry can ask for `radio-sites-and-installations` alone; an unknown name
   exits 2 with the list of boots.
-- **The single-layer reload boots now run end to end.** They never had, and
-  not because of the app: a bare container has no fonts, and Chrome's browser
-  process aborts in `SkFontMgr_FontConfigInterface` on reload, taking the page
-  with it (with fonts on disk, or with JavaScript off, the same reload works).
-  The gate parks the tab on `about:blank` and loads the app again in that same
-  tab, and the reloaded page must re-request its API — the hit count from the
-  first page can no longer satisfy the fixture check. One boot opener now owns
-  the page, fixtures, layer preparation and camera for every case, so the
-  reload path runs the same code a second time.
+- **The single-layer reload boots run end to end.** The gate loads the app
+  again in the same tab, and the reloaded page must re-request its API — the hit
+  count from the first page can no longer satisfy the fixture check. The
+  about:blank hop is not an app workaround: in a container with no fonts
+  installed, Chrome aborts in `SkFontMgr_FontConfigInterface` while resolving
+  the Google Fonts families the page links, and the page is gone. Blocking those
+  font hosts, bypassing the cache or having fonts on disk makes the same reload
+  survive, and a static page on that server reloads either way; the app's own
+  script is not required, since blocking its entry module still crashed. One
+  boot opener now owns the page, fixtures, layer preparation and camera for
+  every case, so the reload path runs the same code a second time.
 - **The gate now proves what it claims.** Each boot fails unless the page
   actually requested its fixture URL, so an empty 200 cannot stand in for the
   fixed data. The camera is held on the fixture view until it reads back
