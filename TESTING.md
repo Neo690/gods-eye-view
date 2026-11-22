@@ -257,15 +257,45 @@ scene-controls, camera, pack, interaction and timing harnesses.
 
 ## Sentinel orb patrol across every catalog layer
 
-The Sentinel layer (`src/layers/aiAgent`) was exercised end to end once per
-catalog layer on 2026-11-05, with the layer's own test seams (a scored clock,
-the small DOM double, the real Cesium `Event`) driving four frames of 250 ms
-tick per simulated second against the true registry built from
+The standing gate for the patrol's rotation is
+`npm run qa:sentinel-rotation -- --url http://localhost:4173`, against a
+running `npm run preview`. It boots the app three times — Radio Sites alone,
+Mapped Installations alone, then both — answers every layer API with fixed
+fixtures instead of the network, holds the camera on the fixture view before
+each scan, and reads the Sentinel's own scan state: every scan must stand
+within 1e-6° of a fixture site and target the layer that owns it. The
+single-layer boots reload the page for real (`page.reload()`, the tab's
+`sessionStorage` intact) and must then scan the other site rather than the one
+already recorded, which is what proves the memory survives a reload. The pair
+boot watches six scans: no layer may take two in a row, each must cover both of
+its sites, and once every site is cooling each must fall back to its
+longest-unvisited one. It then reloads the page and watches one scan per layer,
+each of which must resume at the site `sessionStorage` names as that layer's
+longest-unvisited; which layer goes first is left free, because a reloaded
+spider ranks them from a position the gate does not control. `--case
+<name>[,<name>]` runs only the named boots
+(`radio-sites`, `military-bases`, `radio-sites-and-installations`); an empty or
+unknown name exits 2.
+
+`--self-check` proves those assertions can still fail: it runs the Radio Sites
+boot with the reloaded document starting without its site memory, and exits 0
+only when the rotation assertion fires. A green sabotaged run means the
+assertions have become decoration. CI runs the gate and then this mode in the
+same browser job.
+
+A failure saves the page, console, network and Sentinel state under
+`qa-artifacts/sentinel-rotation/<case>/`, and each boot clears its own directory
+first, so a rerun cannot upload the previous run's pages.
+
+Before that gate existed, the layer was exercised end to end once per catalog
+layer on 2026-11-05 with a disposable harness, using the layer's own test seams
+(a scored clock, the small DOM double, the real Cesium `Event`) driving four
+frames of 250 ms tick per simulated second against the true registry built from
 `VOICE_LAYER_MANIFEST` — one positioned record per layer, up to 900 simulated
-frames. A layer passes when the orb (1) targets it, (2) walks to its record to
-within 0.05°, (3) advances through multiple pulse frames (`PULSE_INTENSITY`-
-scaled glow), (4) opens the tightened scan ring (1% of camera altitude,
-20 km floor) and (5) posts an inspection note naming the layer and its count.
+frames. A layer passed when the orb (1) targeted it, (2) walked to its record to
+within 0.05°, (3) advanced through multiple pulse frames (`PULSE_INTENSITY`-
+scaled glow), (4) opened the tightened scan ring (1% of camera altitude,
+20 km floor) and (5) posted an inspection note naming the layer and its count.
 
 Recorded run: 43 of 43 layers passed every gate (`gnss-integrity`, `flights`,
 `military`, `local-adsb`, `ais-live-vessels`, `satellites`, `rocket-launches`,
@@ -280,7 +310,8 @@ Recorded run: 43 of 43 layers passed every gate (`gnss-integrity`, `flights`,
 `windy-weather`, `private-wifi`). The one skipped row is the Sentinel's own
 `ai-agent` id, which the watch cycle deliberately filters out of its roster —
 the orb must never inspect itself. The disposable harness was removed after
-the run; the module's `node --test src/layers/aiAgent/` suites (layer 20,
-follow 15) remain the standing automated gate. Pixel-level rendering stays a
-manual check on the dev server: this run proves the patrol, pulse, scan and
-report machinery, not what the canvas draws.
+the run. The rotation gate above is the standing automated check for the walk
+and the memory, and `node --test src/layers/aiAgent/` (layer 20, follow 15) for
+the machinery behind it — patrol, pulse, scan and report. Pixel-level rendering
+stays a manual check on the dev server: neither one proves what the canvas
+draws.

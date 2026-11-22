@@ -178,12 +178,12 @@ jobs:
     # Sentinel rotation gate reuses this same Chrome/fonts/build/preview setup.
     name: Device Sweep browser gate
     runs-on: ubuntu-latest
-    # Two 12-minute gates plus the browser, build and preview setup: the job
-    # cap has to outlast them, so a slow gate times out inside its own step
-    # and still uploads evidence instead of the job being cancelled mid-step.
-    # The Sentinel gate now also runs after a Device Sweep failure, so both
-    # gates can spend their full budget in one run.
-    timeout-minutes: 36
+    # Two 12-minute gates and a 6-minute self-check plus the browser, build and
+    # preview setup: the job cap has to outlast them, so a slow gate times out
+    # inside its own step and still uploads evidence instead of the job being
+    # cancelled mid-step. Each gate also runs after the previous one's failure,
+    # so three of them can spend their full budget in one run.
+    timeout-minutes: 42
     env:
       GEV_REQUIRE_ALLOCATION_GATE: '0'
       # The browser is installed explicitly below. npm refuses dependency
@@ -273,6 +273,19 @@ jobs:
         if: ${{ !cancelled() && (success() || steps.device-sweep-gate.outcome == 'failure') }}
         timeout-minutes: 12
         run: npm run qa:sentinel-rotation -- --url "http://localhost:$PREVIEW_PORT"
+
+      # The self-check proves the rotation assertions can still fail: it runs
+      # the same boot with the tab's site memory wiped and passes only when that
+      # assertion fires. It reuses this job's Chrome, build and preview, and it
+      # is keyed to the Sentinel step rather than to the Device Sweep, so a
+      # Sentinel failure still gets its assertions checked — the one case where
+      # knowing they bite matters most. Its budget is its own: one boot, not
+      # three.
+      - name: Sentinel self-check
+        id: sentinel-self-check
+        if: ${{ !cancelled() && (success() || steps.sentinel-rotation-gate.outcome == 'failure') }}
+        timeout-minutes: 6
+        run: npm run qa:sentinel-rotation -- --self-check --url "http://localhost:$PREVIEW_PORT"
 
       - name: Preview server log
         if: failure()
