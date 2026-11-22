@@ -16,14 +16,15 @@
   `--case <name>[,<name>]` argument runs only the named boots, so a developer
   or a retry can ask for `radio-sites-and-installations` alone; an unknown name
   exits 2 with the list of boots.
-- **The single-layer reload boots now run end to end.** They never had: a
-  direct `page.reload()` on the loaded app detaches the frame, because the
-  app's pagehide cleanup rewrites the tab URL while the navigation is in
-  flight. The gate parks the tab on `about:blank` and loads the app again in
-  that same tab, and the reloaded page must re-request its API — the hit count
-  from the first page can no longer satisfy the fixture check. One boot opener
-  now owns the page, fixtures, layer preparation and camera for every case, so
-  the reload path runs the same code a second time.
+- **The single-layer reload boots now run end to end.** They never had, and
+  not because of the app: a bare container has no fonts, and Chrome's browser
+  process aborts in `SkFontMgr_FontConfigInterface` on reload, taking the page
+  with it (with fonts on disk, or with JavaScript off, the same reload works).
+  The gate parks the tab on `about:blank` and loads the app again in that same
+  tab, and the reloaded page must re-request its API — the hit count from the
+  first page can no longer satisfy the fixture check. One boot opener now owns
+  the page, fixtures, layer preparation and camera for every case, so the
+  reload path runs the same code a second time.
 - **The gate now proves what it claims.** Each boot fails unless the page
   actually requested its fixture URL, so an empty 200 cannot stand in for the
   fixed data. The camera is held on the fixture view until it reads back

@@ -187,22 +187,29 @@ const url = (
   urlIndex >= 0 ? args[urlIndex + 1] : 'http://localhost:4173'
 ).replace(/\/$/, '');
 const caseIndex = args.indexOf('--case');
+// `--case` without a value must not quietly mean "no boots": a typo in CI
+// would otherwise finish green without starting a browser.
+const caseValue =
+  caseIndex >= 0 ? String(args[caseIndex + 1] ?? '').trim() : null;
 const wantedCases =
-  caseIndex >= 0
-    ? String(args[caseIndex + 1] ?? '')
+  caseValue === null
+    ? null
+    : caseValue
         .split(',')
         .map((name) => name.trim())
-        .filter(Boolean)
-    : null;
+        .filter(Boolean);
 
 /**
  * Load the app again in the same tab, the way a reload would.
  *
- * A direct `page.reload()` on the loaded app detaches the frame: its pagehide
- * cleanup rewrites the tab's URL while the navigation is in flight, and the
- * browser reports the navigating frame as gone. Parking the tab on
- * about:blank first lets the same tab — and with it sessionStorage — load the
- * app as a fresh document, which is the state the memory must survive.
+ * A direct `page.reload()` loses the target on a bare container: Chrome's
+ * browser process aborts in `SkFontMgr_FontConfigInterface` when fontconfig has
+ * no fonts installed, and the page never comes back. The same page reloads
+ * cleanly with fonts on disk or with JavaScript disabled, so this is the
+ * browser's font stack, not the app. Parking the tab on about:blank first loads
+ * the app as a fresh document in the same tab — and with it the same
+ * sessionStorage, the state the memory must survive. CI installs fonts for
+ * deterministic metrics, so the hop costs it nothing.
  */
 async function reloadApp(page) {
   await page.goto('about:blank', { waitUntil: 'domcontentloaded' });
@@ -699,18 +706,24 @@ const BOOTS = Object.freeze([
   },
 ]);
 
-/** Resolve `--case` against the boots; an unknown name is a usage error. */
+/**
+ * Resolve `--case` against the boots. An empty value, an unknown name or a
+ * selection that keeps no boot is a usage error, never a silent green run.
+ */
 function selectedBoots(wanted) {
-  if (!wanted) return BOOTS;
-  const unknown = wanted.filter(
-    (name) => !BOOTS.some((boot) => boot.name === name),
-  );
+  if (wanted === null) return BOOTS;
+  const names = [...new Set(wanted)];
+  const known = BOOTS.map((boot) => boot.name);
+  if (!names.length) {
+    throw new Error(`--case needs a boot name; known: ${known.join(', ')}`);
+  }
+  const unknown = names.filter((name) => !known.includes(name));
   if (unknown.length) {
     throw new Error(
-      `unknown case(s): ${unknown.join(', ')}; known: ${BOOTS.map((boot) => boot.name).join(', ')}`,
+      `unknown case(s): ${unknown.join(', ')}; known: ${known.join(', ')}`,
     );
   }
-  return BOOTS.filter((boot) => wanted.includes(boot.name));
+  return BOOTS.filter((boot) => names.includes(boot.name));
 }
 
 /**

@@ -8,5 +8,6 @@
   the Device Sweep artifact. The Sentinel gate also runs when the Device Sweep
   gate fails, so one gate's failure cannot hide the other's verdict, while a
   cancelled run starts neither gate. Its upload is keyed to the Sentinel step's
-  own outcome, so each archive keeps its own name and only the gate that failed
-  produces it (Neo690, #1379).
+  own outcome and scoped to `qa-artifacts/sentinel-rotation/`, so each archive
+  keeps its own name, holds only the gate that produced it, and an upload with
+  no evidence warns instead of passing quietly (Neo690, #1379).

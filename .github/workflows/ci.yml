@@ -278,13 +278,18 @@ jobs:
         if: failure()
         run: cat preview.log
 
+      # Each artifact carries only the gate it belongs to: the two gates write
+      # different subtrees of qa-artifacts/, and a shared path would put the
+      # other gate's pages in this archive whenever both failed.
       - name: Upload Device Sweep gate evidence
         if: failure() && steps.device-sweep-gate.outcome == 'failure'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: device-sweep-gate-evidence
-          path: qa-artifacts/
-          if-no-files-found: ignore
+          path: qa-artifacts/qa-device-sweep/
+          # A failing gate that wrote no evidence is a finding, not a reason to
+          # pass the upload silently.
+          if-no-files-found: warn
           retention-days: 14
 
       # Keyed to the Sentinel step alone: a Device Sweep failure must not upload
@@ -295,8 +300,8 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: sentinel-rotation-gate-evidence
-          path: qa-artifacts/
-          if-no-files-found: ignore
+          path: qa-artifacts/sentinel-rotation/
+          if-no-files-found: warn
           retention-days: 14
 
   windows-onboarding:
