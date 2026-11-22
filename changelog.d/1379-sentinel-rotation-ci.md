@@ -5,4 +5,6 @@
   both Radio Sites and the Creil/Villacoublay installations on every pull
   request without a second browser setup. If the Sentinel step fails, its
   evidence is uploaded as `sentinel-rotation-gate-evidence`, separately from
-  the Device Sweep artifact (Neo690, #1379).
+  the Device Sweep artifact. The Sentinel gate also runs when the Device Sweep
+  gate fails, so one gate's failure cannot hide the other's verdict; each
+  archive keeps its own name and its own evidence directory (Neo690, #1379).

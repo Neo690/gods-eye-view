@@ -259,9 +259,12 @@ jobs:
 
       # Reuse this job's Chrome, fonts, production build and preview server:
       # the Sentinel gate needs the same browser environment, not a second
-      # installation of it.
+      # installation of it. It also runs after a Device Sweep failure, so the
+      # first gate's verdict cannot hide the Sentinel's own; a failure before
+      # either gate (install, build, preview) still skips both.
       - name: Sentinel rotation gate
         id: sentinel-rotation-gate
+        if: success() || steps.device-sweep-gate.outcome == 'failure'
         timeout-minutes: 12
         run: npm run qa:sentinel-rotation -- --url "http://localhost:$PREVIEW_PORT"
 
