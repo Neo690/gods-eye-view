@@ -30,6 +30,11 @@
  * even when an earlier one fails, so one broken case cannot hide another's
  * verdict. A failure saves the page, console, network and Sentinel state under
  * `qa-artifacts/sentinel-rotation/<case>/`, so the boots never share evidence.
+ *
+ * `--self-check` runs one boot, Radio Sites, with the tab's site memory wiped
+ * between the reload and the next scan: the gate must then fail on the rotation
+ * assertion, and the mode exits 0 only when that expected failure was produced.
+ * It is the proof that the assertions still bite, not a second gate.
  */
 import assert from 'node:assert/strict';
 import { rm } from 'node:fs/promises';
@@ -43,6 +48,9 @@ import { chromeExecutablePath } from './qa-chrome.mjs';
 const COORDINATE_TOLERANCE = 1e-6;
 const FONT_STYLESHEET = 'fonts.googleapis.com';
 const MEMORY_KEY = 'gev:sentinel:visited-sites';
+/** What `--self-check` must still see when the tab forgets its scans. */
+const ROTATION_FAILURE_MARKER =
+  /after reload, the Sentinel skips the remembered site and rotates/;
 const EMPTY_MILITARY_NAMES = Object.freeze({
   release: 'qa-fixture',
   snapshots: [],
@@ -193,6 +201,9 @@ const caseIndex = args.indexOf('--case');
 // `--case` without a value must not quietly mean "no boots": a typo in CI
 // would otherwise finish green without starting a browser.
 const caseArg = caseIndex >= 0 ? String(args[caseIndex + 1] ?? '') : null;
+// The sabotage mode: it proves the assertions can fail, so it takes its own
+// boot rather than being mixed into a case selection.
+const selfCheck = args.includes('--self-check');
 
 /**
  * Load the app again in the same tab, the way a reload would.
@@ -530,7 +541,28 @@ function assertFixturesRead(hits, label, since = null) {
   }
 }
 
-async function runCase(browser, spec, errors, monitors) {
+/**
+ * Drop the tab's site memory after a reload and before the Sentinel starts.
+ *
+ * An empty store would make the sabotage a no-op, so a wipe that finds nothing
+ * fails here instead of letting the self-check read as a proof.
+ */
+async function forgetVisitedSites(page) {
+  const kept = await page.evaluate((key) => {
+    const before = sessionStorage.getItem(key);
+    sessionStorage.removeItem(key);
+    return before;
+  }, MEMORY_KEY);
+  assert.ok(kept, 'the reload kept a site memory to wipe');
+}
+
+async function runCase(
+  browser,
+  spec,
+  errors,
+  monitors,
+  { forgetMemory = false } = {},
+) {
   const { page, fixtures } = await openBoot(browser, spec, errors, monitors);
   await enableSentinel(page);
 
@@ -544,6 +576,10 @@ async function runCase(browser, spec, errors, monitors) {
   const hitsBeforeReload = new Map(fixtures.hits);
   await reloadApp(page);
   await assertReloaded(page, spec.label);
+  // The self-check's sabotage. The module reads this key when it is enabled
+  // further down, so wiping it here makes the reloaded page believe it never
+  // scanned anything.
+  if (forgetMemory) await forgetVisitedSites(page);
   await waitForApp(page);
   await prepareLayers(page, { camera: spec.camera, layers: layersOf(spec) });
   assertFixturesRead(fixtures.hits, spec.label, hitsBeforeReload);
@@ -742,6 +778,51 @@ const BOOTS = Object.freeze([
 ]);
 
 /**
+ * Prove the gate can still go red.
+ *
+ * A green rotation run only means something while the assertions that model it
+ * can fail, so this boot runs the same case with the tab's memory wiped: the
+ * reloaded Sentinel must then walk back to the site it just left. The boot must
+ * fail on that assertion — staying green means the check has become decoration,
+ * and failing on anything else means the gate is broken for another reason and
+ * proves nothing about the rotation.
+ */
+async function expectRotationFailure(browser, errors, monitors) {
+  const spec = CASES[0];
+  let failure = null;
+  try {
+    await runCase(browser, spec, errors, monitors, { forgetMemory: true });
+  } catch (thrown) {
+    failure = thrown;
+  }
+  if (!failure)
+    assert.fail(
+      `${spec.label}: the gate stayed green with its site memory wiped, so the rotation assertions no longer bite`,
+    );
+  assert.match(
+    failure.message,
+    ROTATION_FAILURE_MARKER,
+    `${spec.label}: the sabotaged boot failed on something other than the rotation: ${failure.message}`,
+  );
+  // The assertion's own words, so the log carries the proof, not the claim.
+  console.log(`  failed as expected: ${failure.message.split('\n')[0]}`);
+  console.log(
+    `RESULT ${spec.label}: a forgotten site fails the rotation, as it must`,
+  );
+}
+
+/**
+ * The one boot `--self-check` runs. Kept out of BOOTS so a full run can never
+ * include the sabotage and mistake it for a verdict.
+ */
+const SELF_CHECK = Object.freeze({
+  name: 'self-check',
+  label: 'Self-check: a forgotten site must fail the rotation',
+  run: (browser, errors, monitors) =>
+    expectRotationFailure(browser, errors, monitors),
+});
+
+/**
  * Resolve `--case` against the boots. An empty value, an unknown name or a
  * selection that keeps no boot is a usage error, never a silent green run.
  */
@@ -825,7 +906,11 @@ async function runBoot(browser, boot) {
 async function main() {
   let boots;
   try {
-    boots = selectedBoots(caseArg);
+    // The self-check sabotages one known boot; a `--case` alongside it would
+    // read as a preference for which sabotage to run, so it is a usage error.
+    if (selfCheck && caseIndex >= 0)
+      throw new Error('--self-check runs its own boot; drop --case');
+    boots = selfCheck ? [SELF_CHECK] : selectedBoots(caseArg);
   } catch (error) {
     console.error(error.message);
     process.exit(2);
@@ -857,14 +942,20 @@ async function main() {
           .join(', ')}`,
       );
     }
-    console.log(`RESULT: ${boots.length} of ${boots.length} boots passed`);
-    if (boots.length === BOOTS.length) {
+    if (selfCheck) {
       console.log(
-        'RESULT: each static layer rotated to a new site after a real reload',
+        'RESULT: with its memory wiped, the gate failed the rotation, as it must',
       );
-      console.log(
-        'RESULT: with both static layers on, neither starved the other',
-      );
+    } else {
+      console.log(`RESULT: ${boots.length} of ${boots.length} boots passed`);
+      if (boots.length === BOOTS.length) {
+        console.log(
+          'RESULT: each static layer rotated to a new site after a real reload',
+        );
+        console.log(
+          'RESULT: with both static layers on, neither starved the other',
+        );
+      }
     }
   } finally {
     await browser.close();
