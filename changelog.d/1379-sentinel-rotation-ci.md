@@ -6,5 +6,7 @@
   request without a second browser setup. If the Sentinel step fails, its
   evidence is uploaded as `sentinel-rotation-gate-evidence`, separately from
   the Device Sweep artifact. The Sentinel gate also runs when the Device Sweep
-  gate fails, so one gate's failure cannot hide the other's verdict; each
-  archive keeps its own name and its own evidence directory (Neo690, #1379).
+  gate fails, so one gate's failure cannot hide the other's verdict, while a
+  cancelled run starts neither gate. Its upload is keyed to the Sentinel step's
+  own outcome, so each archive keeps its own name and only the gate that failed
+  produces it (Neo690, #1379).

@@ -266,10 +266,11 @@ jobs:
       # the Sentinel gate needs the same browser environment, not a second
       # installation of it. It also runs after a Device Sweep failure, so the
       # first gate's verdict cannot hide the Sentinel's own; a failure before
-      # either gate (install, build, preview) still skips both.
+      # either gate (install, build, preview) still skips both, and a cancelled
+      # run starts neither.
       - name: Sentinel rotation gate
         id: sentinel-rotation-gate
-        if: success() || steps.device-sweep-gate.outcome == 'failure'
+        if: ${{ !cancelled() && (success() || steps.device-sweep-gate.outcome == 'failure') }}
         timeout-minutes: 12
         run: npm run qa:sentinel-rotation -- --url "http://localhost:$PREVIEW_PORT"
 
@@ -286,8 +287,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      # Keyed to the Sentinel step alone: a Device Sweep failure must not upload
+      # this archive, and a Sentinel success uploads nothing even though the
+      # job stays failed.
       - name: Upload Sentinel rotation gate evidence
-        if: failure() && steps.sentinel-rotation-gate.outcome == 'failure'
+        if: steps.sentinel-rotation-gate.outcome == 'failure'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: sentinel-rotation-gate-evidence
