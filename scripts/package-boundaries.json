@@ -679,6 +679,7 @@
   "ui-shell": {
     "exports": ["./ui/shell"],
     "modules": [
+      "src/app/degradedMode.js",
       "src/app/layers/fishingEffort.js",
       "src/app/stateChannel.js",
       "src/bloom.js",
@@ -1364,9 +1365,11 @@
       "src/data/installationNames.js",
       "src/layers/installations/controls.js",
       "src/layers/installations/index.js",
+      "src/layers/installations/patrolSites.js",
       "src/layers/installations/ingestion.js",
       "src/layers/installations/lifecycle.js",
       "src/layers/installations/model.js",
+      "src/layers/installations/patrolSites.js",
       "src/layers/installations/policy.js",
       "src/layers/installations/rendering.js",
       "src/layers/installations/selection.js",
@@ -1884,6 +1887,9 @@
       "./standalone/catalog"
     ],
     "modules": [
+      "src/app/application.js",
+      "src/app/degradedMode.js",
+      "src/layers/installations/patrolSites.js",
       "scripts/qa-street-level.mjs",
       "src/agent/worldPacket.js",
       "src/annotations/annotationEngine.js",
@@ -2327,6 +2333,7 @@
       "src/layers/installations/classLabel.js",
       "src/layers/installations/controls.js",
       "src/layers/installations/index.js",
+      "src/layers/installations/patrolSites.js",
       "src/layers/installations/ingestion.js",
       "src/layers/installations/lifecycle.js",
       "src/layers/installations/model.js",
@@ -3272,6 +3279,7 @@
       "src/layers/installations/classLabel.js",
       "src/layers/installations/controls.js",
       "src/layers/installations/index.js",
+      "src/layers/installations/patrolSites.js",
       "src/layers/installations/ingestion.js",
       "src/layers/installations/lifecycle.js",
       "src/layers/installations/model.js",

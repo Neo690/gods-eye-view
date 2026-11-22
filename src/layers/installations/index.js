@@ -7,6 +7,7 @@ import { createSelection } from './selection.js';
 import { createControls } from './controls.js';
 import { createLifecycle } from './lifecycle.js';
 import { createState } from './state.js';
+import { patrolSitesFromRecords } from './patrolSites.js';
 
 /** Construct one layer with its own scene state and supplied application services. */
 export function createInstallationsLayer({ services, source, overlayHost }) {
@@ -26,6 +27,12 @@ export function createInstallationsLayer({ services, source, overlayHost }) {
   parts.selection = createSelection(context);
   parts.controls = createControls(context);
   parts.lifecycle = createLifecycle(context);
+  // Mapped sites are fixed, so the Sentinel can walk to them: `getAllPositions`
+  // is the contract its patrol reads, and `getPatrolSites` is the explicit
+  // alias Radio Sites already carries. Without either, the patrol skipped this
+  // layer entirely and no installation was ever inspected.
+  const patrolSites = (maxCount = 500) =>
+    patrolSitesFromRecords(state.records, maxCount);
   return Object.assign(
     {},
     parts.controls.methods,
@@ -39,6 +46,12 @@ export function createInstallationsLayer({ services, source, overlayHost }) {
       installationWithinViewport: parts.model.installationWithinViewport,
       installationResponseSaturated: parts.model.installationResponseSaturated,
       installationRetryDelayMs: parts.viewport.installationRetryDelayMs,
+      getPatrolSites: patrolSites,
+      getAllPositions: (maxCount = 500) =>
+        patrolSites(maxCount).map(({ latitude, longitude }) => ({
+          latitude,
+          longitude,
+        })),
     },
   );
 }

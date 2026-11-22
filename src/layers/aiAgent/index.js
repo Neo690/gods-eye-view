@@ -54,6 +54,7 @@ import {
   TURN_RAD_PER_S,
   REST_MS,
   SCAN_MS,
+  SITE_COOLDOWN_MS,
   toDegrees,
 } from './patrol.js';
 import { requestFindingBrief, BRIEF_MIN_INTERVAL_MS } from './brief.js';
@@ -92,6 +93,20 @@ const ALERT_LAYER_ID = 's2-ghostmaps';
 const ALERT_TOUR_MIN_HEIGHT_M = 400_000;
 const ALERT_TOUR_MAX_HEIGHT_M = 1_500_000;
 const ALERT_TOUR_FLIGHT_MS = 2500;
+/** Where a tab remembers the static sites the spider has already scanned. */
+const VISITED_SITES_STORAGE_KEY = 'gev:sentinel:visited-sites';
+/** Version 2 stores a keyed site map; any other shape is not this memory. */
+const VISITED_SITES_STORAGE_VERSION = 2;
+
+/** The tab's sessionStorage, or null where the platform hides it. */
+function browserSessionStorage() {
+  try {
+    return globalThis.sessionStorage ?? null;
+  } catch {
+    return null; // a policy-disabled store is the same as no memory
+  }
+}
+
 /** Between two alerts the view pulls back to a regional shot first. */
 const ALERT_TOUR_PULLBACK_HEIGHT_M = 6_000_000;
 const ALERT_TOUR_PULLBACK_FLIGHT_MS = 1200;
@@ -140,6 +155,8 @@ const ALERT_WALK_LIMITS = Object.freeze({
  *   one the layer creates the device voice on init.
  * @param {Function} [options.askMic] push-to-talk factory seam (see
  *   askMic.js); without one the layer creates the platform input on init.
+ * @param {Storage} [options.storage] storage seam; without one the layer uses
+ *   the tab's sessionStorage when the platform provides it.
  * @returns {object} data-layer module (lifecycle contract).
  */
 export function createAiAgentLayer({
@@ -149,6 +166,7 @@ export function createAiAgentLayer({
   overlayHost: noteOverlayHost = null,
   voice: voiceSource = null,
   askMic: askMicFactory = null,
+  storage = undefined,
 } = {}) {
   let document = docScope ?? globalThis.document;
   let manager = null;
@@ -168,6 +186,10 @@ export function createAiAgentLayer({
   // A layer's nearest record is always the one it just left, so this is what
   // makes the next pass through that layer land somewhere else.
   const visitedSites = {};
+  // The stored book is read once; a later enable must not let an older write
+  // on disk win over the visits this boot already made.
+  let visitedSitesLoaded = false;
+  const memoryStorage = storage ?? browserSessionStorage();
   // Alerts already scanned in this edition. A new GhostMaps commit (or a
   // changed feature count) starts the tour over from the most severe one.
   const visitedAlerts = new Set();
@@ -191,6 +213,10 @@ export function createAiAgentLayer({
   let spriteFrames = [];
   let pulsePhase = 0;
   let target = null;
+  // The layer under the spider's feet outlives the target: after a scan the
+  // target is cleared for the rest, but the walk must still prefer somewhere
+  // else rather than the layer it just left (see the repeat penalty).
+  let lastInspectedLayerId = null;
   let phase = 'rest';
   let scanUntil = 0;
   let restUntil = 0;
@@ -351,6 +377,47 @@ export function createAiAgentLayer({
   }
 
   /**
+   * The sites this tab scanned before the last reload, so a boot does not walk
+   * straight back to the address it just left. Every failure — a forbidden
+   * store, junk JSON, another version, an entry past the cooldown the ranking
+   * already ignores — costs the memory, never the patrol.
+   */
+  function readVisitedSites() {
+    try {
+      const raw = memoryStorage?.getItem(VISITED_SITES_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed?.version !== VISITED_SITES_STORAGE_VERSION) return;
+      const sites = parsed?.sites;
+      if (!sites || typeof sites !== 'object') return;
+      const now = nowSource();
+      for (const [key, seenAt] of Object.entries(sites)) {
+        const at = Number(seenAt);
+        if (!key || !Number.isFinite(at)) continue;
+        if (now - at > SITE_COOLDOWN_MS) continue;
+        visitedSites[key] = at;
+      }
+    } catch {
+      // a store that refuses the read leaves the patrol forgetful but working
+    }
+  }
+
+  /** Remember this tab's site visits; a failed write costs only the next boot. */
+  function writeVisitedSites() {
+    try {
+      memoryStorage?.setItem(
+        VISITED_SITES_STORAGE_KEY,
+        JSON.stringify({
+          version: VISITED_SITES_STORAGE_VERSION,
+          sites: visitedSites,
+        }),
+      );
+    } catch {
+      // quota or policy: the current patrol still rotates from memory
+    }
+  }
+
+  /**
    * Where the spider would stand to inspect one layer: a record it actually
    * holds, preferring a site it has not scanned recently. Without that memory
    * the nearest record is always the one the spider just left, so a static
@@ -361,10 +428,18 @@ export function createAiAgentLayer({
    */
   function inspectionPoint(layerId) {
     const module = manager?.layers?.get?.(layerId)?.module;
-    if (typeof module?.getAllPositions !== 'function') return null;
+    // `getPatrolSites` is the explicit contract; `getAllPositions` stays as the
+    // older alias for layers written before it existed.
+    const readSites =
+      typeof module?.getPatrolSites === 'function'
+        ? module.getPatrolSites.bind(module)
+        : typeof module?.getAllPositions === 'function'
+          ? module.getAllPositions.bind(module)
+          : null;
+    if (!readSites) return null;
     let rows = [];
     try {
-      rows = module.getAllPositions(PULSE_SAMPLE) || [];
+      rows = readSites(PULSE_SAMPLE) || [];
     } catch {
       return null; // a throwing reader is the same as no reader
     }
@@ -426,7 +501,7 @@ export function createAiAgentLayer({
       from: { latDeg: spider.latDeg, lonDeg: spider.lonDeg },
       now: nowSource(),
       visitedAt,
-      current: target?.layerId ?? null,
+      current: target?.layerId ?? lastInspectedLayerId,
     });
     if (!ranked.length) return false;
     adoptTarget(ranked[0]);
@@ -711,7 +786,11 @@ export function createAiAgentLayer({
       return;
     }
     visitedAt[target.layerId] = now;
-    if (target.siteKey) visitedSites[target.siteKey] = now;
+    lastInspectedLayerId = target.layerId;
+    if (target.siteKey) {
+      visitedSites[target.siteKey] = now;
+      writeVisitedSites();
+    }
     spider.scanning = false;
     spider.note = '';
     syncNote();
@@ -897,6 +976,10 @@ export function createAiAgentLayer({
       pausedAt = 0;
       spider.visible = true;
       avatar?.setSleeping(false);
+      if (!visitedSitesLoaded) {
+        visitedSitesLoaded = true;
+        readVisitedSites();
+      }
       // The tick stalls before the follow does its one gate read: a hidden
       // spider already stops the drift, so re-arming is a mirror of the flag.
       follow?.setEnabled(followEnabled);

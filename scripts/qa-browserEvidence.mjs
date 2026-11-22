@@ -119,7 +119,13 @@ function streetLevelState(page) {
  * cannot be captured records why instead.
  * @returns {Promise<string>} the directory written
  */
-export async function saveFailureArtifacts({ dir, browser, monitors, error }) {
+export async function saveFailureArtifacts({
+  dir,
+  browser,
+  monitors,
+  error,
+  probe = null,
+}) {
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(
     path.join(dir, 'error.txt'),
@@ -168,6 +174,15 @@ export async function saveFailureArtifacts({ dir, browser, monitors, error }) {
     ].map(redact);
     record.console = monitor?.console ?? [];
     record.failedRequests = monitor?.failed ?? [];
+    // A gate that owns app state can add its own readout to the record; a
+    // probe that cannot run costs the extra field, never the evidence.
+    if (probe) {
+      try {
+        record.probe = await withTimeout(probe(page), 10_000, 'probe');
+      } catch (probeError) {
+        record.probeError = String(probeError?.message || probeError);
+      }
+    }
     await fs.writeFile(
       path.join(dir, `${base}.json`),
       redact(JSON.stringify(record, null, 2)),

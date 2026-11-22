@@ -178,7 +178,12 @@ jobs:
     # Sentinel rotation gate reuses this same Chrome/fonts/build/preview setup.
     name: Device Sweep browser gate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Two 12-minute gates plus the browser, build and preview setup: the job
+    # cap has to outlast them, so a slow gate times out inside its own step
+    # and still uploads evidence instead of the job being cancelled mid-step.
+    # The Sentinel gate now also runs after a Device Sweep failure, so both
+    # gates can spend their full budget in one run.
+    timeout-minutes: 36
     env:
       GEV_REQUIRE_ALLOCATION_GATE: '0'
       # The browser is installed explicitly below. npm refuses dependency

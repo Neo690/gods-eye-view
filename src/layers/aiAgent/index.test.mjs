@@ -852,10 +852,136 @@ test('the spider remembers the site it scanned and picks another one next pass',
   assert.equal(doc.body.children.length, 0);
 });
 
-test('corrupt or unavailable session storage leaves the patrol forgetful but working', () => {
-  // Each run owns its clock, viewer, layer and site set: no state can leak
-  // from the corrupt-read case into the quota-write case.
-  const runPatrol = (storage) => {
+test('two static layers alternate instead of one starving the other', () => {
+  const doc = fakeDocument();
+  // Paris, the same view the coexistence browser boot uses: the tower is the
+  // nearest site on either layer, so whichever layer starts, the other one
+  // always holds an unvisited site while the last layer cools down.
+  const viewer = fakeViewer({ latDeg: 48.855, lonDeg: 2.355 });
+  let clock = 1_000_000;
+  const layers = [
+    {
+      id: 'towers',
+      name: 'Radio Sites',
+      sites: [
+        { id: 'tower-paris', latitude: 48.85, longitude: 2.35 },
+        { id: 'tower-east', latitude: 48.9, longitude: 2.4 },
+      ],
+    },
+    {
+      id: 'bases',
+      name: 'Mapped Installations',
+      sites: [
+        { id: 'base-creil', latitude: 49.253, longitude: 2.519 },
+        { id: 'base-villacoublay', latitude: 48.774, longitude: 2.191 },
+      ],
+    },
+  ];
+  const layer = createAiAgentLayer({
+    docScope: doc,
+    now: () => clock,
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({}) }),
+  });
+  layer.attachDataManager({
+    getAll: () =>
+      layers.map(({ id, name, sites }) => ({
+        id,
+        name,
+        enabled: true,
+        stats: { count: sites.length, loading: false, error: null },
+      })),
+    layers: new Map(
+      layers.map(({ id, sites }) => [
+        id,
+        {
+          enabled: true,
+          // The patrol contract: the layer exposes sites, the Sentinel picks.
+          module: { getPatrolSites: () => sites },
+        },
+      ]),
+    ),
+  });
+  assert.equal(layer.init(viewer), true);
+  assert.equal(layer.enable(), true);
+  const advance = (frames) => {
+    for (let frame = 0; frame < frames; frame += 1) {
+      clock += 250;
+      viewer.scene.preUpdate.raiseEvent();
+    }
+  };
+  const waitForScan = () => {
+    for (let frame = 0; frame < 200; frame += 1) {
+      if (layer.getStats().scanning) return layer.getStats();
+      advance(1);
+    }
+    return layer.getStats();
+  };
+
+  const visits = [];
+  for (let index = 0; index < 6; index += 1) {
+    if (index > 0) advance(SCAN_MS / 250 + REST_MS / 250 + 1);
+    const stats = waitForScan();
+    assert.equal(stats.scanning, true, `scan ${index + 1} reached a site`);
+    const entry = layers.find((candidate) => candidate.id === stats.target);
+    assert.ok(entry, `${stats.target} is one of the two enabled layers`);
+    const site = entry.sites.find(
+      (candidate) =>
+        candidate.latitude === stats.latDeg &&
+        candidate.longitude === stats.lonDeg,
+    );
+    assert.ok(site, `scan ${index + 1} landed on a site of its own layer`);
+    visits.push({ target: stats.target, site: site.id });
+  }
+
+  // No layer may take two scans in a row: that is exactly the starvation a
+  // single-layer boot cannot show, and the repeat penalty exists to stop it.
+  for (let index = 1; index < visits.length; index += 1) {
+    assert.notEqual(
+      visits[index].target,
+      visits[index - 1].target,
+      `scan ${index + 1} moved to the other layer`,
+    );
+  }
+  for (const entry of layers) {
+    const seen = visits.filter((visit) => visit.target === entry.id);
+    assert.equal(seen.length, 3, `${entry.name} is inspected every other scan`);
+    assert.deepEqual(
+      [...new Set(seen.map((visit) => visit.site))].sort(),
+      entry.sites.map((site) => site.id).sort(),
+      `${entry.name} visited both of its sites`,
+    );
+    // Every site is cooling by the third visit, so the layer falls back to the
+    // one it visited longest ago: the same site it started with.
+    assert.equal(
+      seen.at(-1).site,
+      seen[0].site,
+      `${entry.name}: the cooldown revisits its longest-unvisited site`,
+    );
+  }
+  assert.deepEqual(
+    visits.map((visit) => visit.site),
+    [
+      'tower-paris',
+      'base-villacoublay',
+      'tower-east',
+      'base-creil',
+      'tower-paris',
+      'base-villacoublay',
+    ],
+    'the walk repeats itself once every site is cooling',
+  );
+
+  assert.equal(layer.disable(), true);
+  assert.equal(layer.destroy(), true);
+  assert.equal(doc.body.children.length, 0);
+});
+
+/**
+ * One isolated patrol boot over two fixed sites: no clock, viewer, layer or
+ * site set leaks from one storage case into the next. Returns the first
+ * scan's stats.
+ */
+function runPatrol(storage) {
     const sites = [
       { latitude: 0, longitude: 0.2 },
       { latitude: 0, longitude: 0.8 },
@@ -910,8 +1036,9 @@ test('corrupt or unavailable session storage leaves the patrol forgetful but wor
     layer.disable();
     layer.destroy();
     return stats;
-  };
+}
 
+test('corrupt or unavailable session storage leaves the patrol forgetful but working', () => {
   let malformed;
   assert.doesNotThrow(() => {
     malformed = runPatrol({
@@ -939,6 +1066,39 @@ test('corrupt or unavailable session storage leaves the patrol forgetful but wor
     'the quota write is attempted after a completed scan',
   );
   assert.deepEqual([disabled.latDeg, disabled.lonDeg], [0, 0.2]);
+});
+
+test('a site this tab scanned before the last load is skipped next boot', () => {
+  const saved = JSON.stringify({
+    version: 2,
+    sites: { '0.00,0.20': 999_000 },
+  });
+  const stats = runPatrol({ getItem: () => saved, setItem: () => {} });
+  assert.deepEqual(
+    [stats.latDeg, stats.lonDeg],
+    [0, 0.8],
+    'the remembered site is not walked to again',
+  );
+});
+
+test('another version or an expired entry is not this memory', () => {
+  const otherVersion = JSON.stringify({
+    version: 1,
+    sites: { '0.00,0.20': 999_000 },
+  });
+  // Older than SITE_COOLDOWN_MS, which is the only memory the ranking uses.
+  const stale = JSON.stringify({
+    version: 2,
+    sites: { '0.00,0.20': -1_000_000 },
+  });
+  for (const saved of [otherVersion, stale]) {
+    const stats = runPatrol({ getItem: () => saved, setItem: () => {} });
+    assert.deepEqual(
+      [stats.latDeg, stats.lonDeg],
+      [0, 0.2],
+      'an unusable record leaves the nearest site as the target',
+    );
+  }
 });
 
 test('GhostMaps alerts are toured most severe first, with the card open', async () => {

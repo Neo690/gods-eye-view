@@ -2,23 +2,33 @@
 /**
  * Deterministic browser gate for the Sentinel's static-site rotation.
  *
- * Two independent pages each enable one static layer and the Sentinel. Fixed
- * request fixtures answer the layer's API, so the test does not depend on the
- * network or a particular viewport. The gate watches the Sentinel's own scan
- * state and asserts that two successive scans visit two different sites, in a
- * fixed order, at the fixture's exact coordinates and provider ids.
+ * Three boots. Two enable one static layer each and the Sentinel. Fixed request
+ * fixtures answer the layer's API, so the test does not depend on the network
+ * or a particular viewport. The gate watches the Sentinel's own scan state and
+ * asserts that two successive scans visit two different sites, in a fixed
+ * order, at the fixture's exact coordinates and provider ids.
  *
  * After the first scan the page is really reloaded. The same tab keeps its
  * sessionStorage, so the next scan must visit the other site instead of
  * returning to the one already recorded; a lost memory would pick the nearest
  * site again. Radio Sites covers the ANFR fixture; Mapped Installations covers
- * Creil and Villacoublay. The camera starts near the first site in each case
- * so the sequence is deterministic rather than decided by a floating-point
- * tie.
+ * Creil and Villacoublay. The camera is held on the fixture view before every
+ * scan (see settleCamera), so the sequence is deterministic rather than decided
+ * by a floating-point tie, and the reloaded page must ask its API again.
+ *
+ * The third boot enables BOTH static layers at once and watches six scans. No
+ * layer may take two scans in a row, every scan must stand on one of that
+ * layer's sites, each layer must visit both of its own sites, and with every
+ * site cooling each layer must then fall back to its longest-unvisited one:
+ * that is what proves neither catalog starves the other's rotation, on the
+ * fresh and the cooldown path alike.
  *
  * Run (server up): npm run qa:sentinel-rotation -- --url http://localhost:4173
- * A failure saves the page, console and network evidence under
- * `qa-artifacts/sentinel-rotation/`.
+ * `--case <name>[,<name>]` runs only the named boots (`radio-sites`,
+ * `military-bases`, `radio-sites-and-installations`). Every selected boot runs
+ * even when an earlier one fails, so one broken case cannot hide another's
+ * verdict. A failure saves the page, console, network and Sentinel state under
+ * `qa-artifacts/sentinel-rotation/<case>/`, so the boots never share evidence.
  */
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
@@ -48,6 +58,7 @@ const CASES = Object.freeze([
       { id: 'qa-site-b', label: 'qa-site-b', lat: 48.9, lon: 2.4 },
     ],
     fixture: {
+      match: '/api/cell-towers',
       urlPattern: '*/api/cell-towers*',
       body: {
         points: [
@@ -95,6 +106,7 @@ const CASES = Object.freeze([
       },
     ],
     fixture: {
+      match: '/api/military-installations',
       urlPattern: '*/api/military-installations*',
       // The layer also loads a bundled worldwide names pack. It is real data,
       // not network data, so it would add bases around Paris after a reload;
@@ -135,6 +147,33 @@ const CASES = Object.freeze([
   },
 ]);
 
+// Both static layers at once: the boot this gate exists to prove now that a
+// catalog can win every ranking and leave the other uninspected.
+const COEXISTENCE = Object.freeze({
+  name: 'radio-sites-and-installations',
+  label: 'Radio Sites + Mapped Installations',
+  camera: { lat: 48.855, lon: 2.355 },
+  layers: [
+    { id: CASES[0].layerId, label: CASES[0].label, sites: CASES[0].sites },
+    { id: CASES[1].layerId, label: CASES[1].label, sites: CASES[1].sites },
+  ],
+  fixtures: [CASES[0].fixture, CASES[1].fixture],
+  scans: 6,
+  // With the camera settled on the fixture view (see settleCamera), the walk
+  // is reproducible: nearest site, then the other layer's nearer base, then
+  // the remaining tower, then the remaining base. Scans five and six have no
+  // unvisited site left anywhere, so they take the longest-unvisited site of
+  // each layer — the sites the pair started with.
+  expected: [
+    'qa-site-a',
+    'osm:node:91002',
+    'qa-site-b',
+    'osm:node:91001',
+    'qa-site-a',
+    'osm:node:91002',
+  ],
+});
+
 const siteAt = (sites, lat, lon) =>
   sites.find(
     (site) =>
@@ -147,6 +186,28 @@ const urlIndex = args.indexOf('--url');
 const url = (
   urlIndex >= 0 ? args[urlIndex + 1] : 'http://localhost:4173'
 ).replace(/\/$/, '');
+const caseIndex = args.indexOf('--case');
+const wantedCases =
+  caseIndex >= 0
+    ? String(args[caseIndex + 1] ?? '')
+        .split(',')
+        .map((name) => name.trim())
+        .filter(Boolean)
+    : null;
+
+/**
+ * Load the app again in the same tab, the way a reload would.
+ *
+ * A direct `page.reload()` on the loaded app detaches the frame: its pagehide
+ * cleanup rewrites the tab's URL while the navigation is in flight, and the
+ * browser reports the navigating frame as gone. Parking the tab on
+ * about:blank first lets the same tab — and with it sessionStorage — load the
+ * app as a fresh document, which is the state the memory must survive.
+ */
+async function reloadApp(page) {
+  await page.goto('about:blank', { waitUntil: 'domcontentloaded' });
+  await page.goto(`${url}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+}
 
 /** Wait for the shell and the viewer after a navigation or reload. */
 async function waitForApp(page) {
@@ -161,10 +222,15 @@ async function waitForApp(page) {
   await new Promise((resolve) => setTimeout(resolve, 8000));
 }
 
-/** Set the fixture's view, leave only the case layer enabled, and show it. */
-async function prepareLayer(page, spec) {
+/**
+ * Set the fixture's view, leave only the named layers enabled, and show them.
+ * `layers` is one entry per layer the boot needs, each with the sites its
+ * fixture is expected to produce.
+ */
+async function prepareLayers(page, { camera, layers }) {
+  const layerIds = layers.map((layer) => layer.id);
   await page.evaluate(
-    async ({ layerId, camera }) => {
+    async ({ layerIds, camera }) => {
       const viewer = window.__godsEyeView.viewer;
       viewer.camera.cancelFlight?.();
       const C = viewer.camera.positionCartographic.constructor;
@@ -181,53 +247,127 @@ async function prepareLayer(page, spec) {
         if (button?.textContent?.trim() === 'ON') button.click();
       }
       await new Promise((resolve) => setTimeout(resolve, 800));
-      document
-        .querySelector(
-          `#data-toggles [data-layer-id="${layerId}"] .data-toggle-btn`,
-        )
-        ?.click();
-    },
-    { layerId: spec.layerId, camera: spec.camera },
-  );
-
-  await page.evaluate(
-    async ({ layerId, count, label }) => {
-      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-      for (let attempt = 0; attempt < 60; attempt += 1) {
-        const module =
-          window.__godsEyeView.dataManager.layers.get(layerId)?.module;
-        if ((module?.getStats?.().count ?? 0) >= count) return;
-        await sleep(500);
+      for (const layerId of layerIds) {
+        document
+          .querySelector(
+            `#data-toggles [data-layer-id="${layerId}"] .data-toggle-btn`,
+          )
+          ?.click();
       }
-      throw new Error(`${label} fixture did not reach the layer`);
     },
-    { layerId: spec.layerId, count: spec.sites.length, label: spec.label },
+    { layerIds, camera },
   );
 
-  const layerSites = await page.evaluate((layerId) => {
-    const module = window.__godsEyeView.dataManager.layers.get(layerId)?.module;
-    return module?.getPatrolSites?.(10) ?? [];
-  }, spec.layerId);
-  const uniqueSites = new Map(layerSites.map((site) => [site.id, site]));
-  assert.equal(
-    uniqueSites.size,
-    spec.sites.length,
-    `${spec.label} holds both fixture sites`,
-  );
-  for (const expected of spec.sites) {
-    const row = uniqueSites.get(expected.id);
-    assert.ok(row, `${spec.label} exposes ${expected.id}`);
+  // Every layer the boot enabled must reach its fixture and expose exactly the
+  // sites that fixture carries, at their published coordinates.
+  for (const layer of layers) {
+    await page.evaluate(
+      async ({ layerId, count, label }) => {
+        const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        for (let attempt = 0; attempt < 60; attempt += 1) {
+          const module =
+            window.__godsEyeView.dataManager.layers.get(layerId)?.module;
+          if ((module?.getStats?.().count ?? 0) >= count) return;
+          await sleep(500);
+        }
+        throw new Error(`${label} fixture did not reach the layer`);
+      },
+      { layerId: layer.id, count: layer.sites.length, label: layer.label },
+    );
+
+    const layerSites = await page.evaluate((layerId) => {
+      const module =
+        window.__godsEyeView.dataManager.layers.get(layerId)?.module;
+      return module?.getPatrolSites?.(10) ?? [];
+    }, layer.id);
+    const uniqueSites = new Map(layerSites.map((site) => [site.id, site]));
     assert.equal(
-      row.label,
-      expected.label,
-      `${spec.label} exposes ${expected.id}'s label`,
+      uniqueSites.size,
+      layer.sites.length,
+      `${layer.label} holds both fixture sites`,
     );
-    assert.ok(
-      Math.abs(row.latitude - expected.lat) < COORDINATE_TOLERANCE &&
-        Math.abs(row.longitude - expected.lon) < COORDINATE_TOLERANCE,
-      `${expected.id} keeps its fixture coordinates: ${JSON.stringify(row)}`,
-    );
+    for (const expected of layer.sites) {
+      const row = uniqueSites.get(expected.id);
+      assert.ok(row, `${layer.label} exposes ${expected.id}`);
+      assert.equal(
+        row.label,
+        expected.label,
+        `${layer.label} exposes ${expected.id}'s label`,
+      );
+      assert.ok(
+        Math.abs(row.latitude - expected.lat) < COORDINATE_TOLERANCE &&
+          Math.abs(row.longitude - expected.lon) < COORDINATE_TOLERANCE,
+        `${expected.id} keeps its fixture coordinates: ${JSON.stringify(row)}`,
+      );
+    }
   }
+}
+
+/** A boot's fixtures and layers, whether it enables one layer or both. */
+const fixturesOf = (spec) => spec.fixtures ?? [spec.fixture];
+const layersOf = (spec) =>
+  spec.layers ?? [{ id: spec.layerId, label: spec.label, sites: spec.sites }];
+
+/**
+ * A fresh page with the fixed APIs installed, the app booted, every layer the
+ * boot needs holding its fixture sites, and the camera held on the view.
+ *
+ * Every read of these layers is a fixture: the layers are real, the data is
+ * fixed, and the Sentinel's rotation is the only variable under test.
+ */
+async function openBoot(browser, spec, errors, monitors) {
+  const page = await browser.newPage();
+  monitors.push(
+    watchPage(page, { name: `sentinel-rotation-${spec.name}`, errors }),
+  );
+  const fixtures = await installFixtures(page, fixturesOf(spec));
+  await page.goto(`${url}/?welcome=0`, { waitUntil: 'domcontentloaded' });
+  await waitForApp(page);
+  await prepareLayers(page, { camera: spec.camera, layers: layersOf(spec) });
+  assertFixturesRead(fixtures.hits, spec.label);
+  await settleCamera(page, spec.camera);
+  return { page, fixtures };
+}
+
+/**
+ * Hold the camera on the fixture view until it is really there.
+ *
+ * The Sentinel spawns where the operator is looking, and the app can still
+ * apply a restored view or finish a flight after the first setView. A camera
+ * that has drifted moves the spider's start and turns the first pick into a
+ * coordinate race; re-applying the view until it reads back keeps the walk
+ * deterministic.
+ */
+async function settleCamera(page, camera) {
+  await page.evaluate(async ({ camera }) => {
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const viewer = window.__godsEyeView.viewer;
+    const C = viewer.camera.positionCartographic.constructor;
+    const place = () =>
+      viewer.camera.setView({
+        destination: viewer.scene.globe.ellipsoid.cartographicToCartesian(
+          C.fromDegrees(camera.lon, camera.lat, 200_000),
+        ),
+        orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+      });
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const current = viewer.camera.positionCartographic;
+      const lat = (current.latitude * 180) / Math.PI;
+      const lon = (current.longitude * 180) / Math.PI;
+      if (
+        Math.abs(lat - camera.lat) < 0.005 &&
+        Math.abs(lon - camera.lon) < 0.005 &&
+        Math.abs(current.height - 200_000) < 1_000
+      )
+        return;
+      viewer.camera.cancelFlight?.();
+      place();
+      await sleep(250);
+    }
+    throw new Error(
+      `the camera would not settle on ${camera.lat}, ${camera.lon}`,
+    );
+  }, { camera });
 }
 
 /** Start the Sentinel without an extra fixed sleep: walk time is part of it. */
@@ -294,19 +434,20 @@ async function readMemory(page) {
   }, MEMORY_KEY);
 }
 
-async function runCase(browser, spec, errors, monitors) {
-  const page = await browser.newPage();
-  monitors.push(
-    watchPage(page, { name: `sentinel-rotation-${spec.name}`, errors }),
-  );
-
-  // Every read of this layer is the fixture: the layer is real, the data is
-  // fixed, and the Sentinel's rotation is the only variable under test.
+/**
+ * Answer the page's layer reads with the boot's fixed JSON, so the gate never
+ * depends on the network. A stub whose `match` appears in the URL wins over
+ * the fixture body it belongs to.
+ */
+async function installFixtures(page, fixtures) {
+  const stubs = fixtures.flatMap((fixture) => fixture.stubs ?? []);
+  // Every fixture must be asked for at least once: a 200 with the wrong body
+  // would still let a layer count rows, so the request itself is the proof.
+  const hits = new Map(fixtures.map((fixture) => [fixture.match, 0]));
   const cdp = await page.createCDPSession();
-  const stubs = spec.fixture.stubs ?? [];
   await cdp.send('Fetch.enable', {
     patterns: [
-      { urlPattern: spec.fixture.urlPattern },
+      ...fixtures.map((fixture) => ({ urlPattern: fixture.urlPattern })),
       ...stubs.map((stub) => ({ urlPattern: stub.urlPattern })),
     ],
   });
@@ -314,21 +455,42 @@ async function runCase(browser, spec, errors, monitors) {
     const stub = stubs.find((candidate) =>
       request.url.includes(candidate.match),
     );
+    const fixture = fixtures.find((candidate) =>
+      request.url.includes(candidate.match),
+    );
+    if (fixture) hits.set(fixture.match, hits.get(fixture.match) + 1);
     cdp
       .send('Fetch.fulfillRequest', {
         requestId,
         responseCode: 200,
         responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
         body: Buffer.from(
-          JSON.stringify(stub?.body ?? spec.fixture.body),
+          JSON.stringify(stub?.body ?? fixture?.body ?? {}),
         ).toString('base64'),
       })
       .catch(() => {});
   });
+  return { cdp, hits };
+}
 
-  await page.goto(`${url}/?welcome=0`, { waitUntil: 'domcontentloaded' });
-  await waitForApp(page);
-  await prepareLayer(page, spec);
+/**
+ * Refuse a boot whose layer never asked its API for the fixture. With `since`
+ * (the hit counts from before a reload), the request must be new: counts from
+ * the first page would otherwise make the check pass on its own.
+ */
+function assertFixturesRead(hits, label, since = null) {
+  for (const [match, count] of hits) {
+    if (count > (since?.get(match) ?? 0)) continue;
+    assert.fail(
+      since
+        ? `${label}: the reloaded page never re-requested ${match}`
+        : `${label}: the page never requested ${match}`,
+    );
+  }
+}
+
+async function runCase(browser, spec, errors, monitors) {
+  const { page, fixtures } = await openBoot(browser, spec, errors, monitors);
   await enableSentinel(page);
 
   const before = await observeScans(page, 1);
@@ -338,9 +500,12 @@ async function runCase(browser, spec, errors, monitors) {
   assert.equal(memoryBefore?.version, 2, 'the tab has a versioned memory');
   assert.ok(memoryBefore.count >= 1, 'the first scan was remembered');
 
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  const hitsBeforeReload = new Map(fixtures.hits);
+  await reloadApp(page);
   await waitForApp(page);
-  await prepareLayer(page, spec);
+  await prepareLayers(page, { camera: spec.camera, layers: layersOf(spec) });
+  assertFixturesRead(fixtures.hits, spec.label, hitsBeforeReload);
+  await settleCamera(page, spec.camera);
   await enableSentinel(page);
 
   const after = await observeScans(page, 2);
@@ -402,34 +567,227 @@ async function runCase(browser, spec, errors, monitors) {
   console.log(
     `RESULT ${spec.label}: ${beforeSites[0].id} survived reload through sessionStorage; then ${afterSites.map((site) => site.id).join(' then ')}`,
   );
-  await page.close();
+  // main closes the page once the boot is settled, so a failure can still
+  // capture the page it happened on.
+}
+
+/**
+ * Both static layers on at once.
+ *
+ * Radio Sites and Mapped Installations hold four fixture sites between them,
+ * and the Sentinel inspects one site per scan: a catalog that always won the
+ * ranking would starve the other one. Six scans must alternate layers, cover
+ * both sites of each layer, and then revisit the longest-unvisited site of
+ * each layer once nothing is left unvisited — the cooldown path, where only
+ * the visit times and the repeat penalty can break the tie.
+ */
+async function runCoexistenceCase(browser, spec, errors, monitors) {
+  const { page } = await openBoot(browser, spec, errors, monitors);
+  await enableSentinel(page);
+
+  const scans = await observeScans(page, spec.scans);
+  assert.equal(
+    scans.length,
+    spec.scans,
+    `${spec.label}: the Sentinel completed ${spec.scans} scans`,
+  );
+
+  const visits = scans.map((scan) => {
+    assert.equal(
+      scan.targetKind,
+      null,
+      `${spec.label}: a static layer is inspected, not a GhostMaps alert`,
+    );
+    const layer = spec.layers.find(
+      (candidate) => candidate.id === scan.target,
+    );
+    assert.ok(
+      layer,
+      `${spec.label}: ${scan.target} is one of the two enabled layers`,
+    );
+    const site = siteAt(layer.sites, scan.lat, scan.lon);
+    assert.ok(
+      site,
+      `${spec.label}: the scan stands exactly on a ${layer.label} site`,
+    );
+    return { layerId: layer.id, label: layer.label, siteId: site.id };
+  });
+
+  // The anti-starvation property: one catalog may not take every scan, and no
+  // layer may be skipped while the other is inspected twice in a row.
+  for (let index = 1; index < visits.length; index += 1) {
+    assert.notEqual(
+      visits[index].layerId,
+      visits[index - 1].layerId,
+      `${spec.label}: scan ${index + 1} leaves ${visits[index - 1].label}`,
+    );
+  }
+
+  for (const layer of spec.layers) {
+    const visited = visits.filter((visit) => visit.layerId === layer.id);
+    assert.equal(
+      visited.length,
+      spec.scans / 2,
+      `${layer.label} is inspected as often as the other layer`,
+    );
+    assert.equal(
+      new Set(visited.map((visit) => visit.siteId)).size,
+      layer.sites.length,
+      `${layer.label}: both of its sites were inspected`,
+    );
+    // Every site is cooling by this layer's third visit, so it falls back to
+    // the one it visited longest ago: the same site it started with.
+    assert.equal(
+      visited.at(-1).siteId,
+      visited[0].siteId,
+      `${layer.label}: the cooldown revisits its longest-unvisited site`,
+    );
+    assert.notEqual(
+      visited.at(-1).siteId,
+      visited.at(-2).siteId,
+      `${layer.label}: not the site it just scanned`,
+    );
+  }
+
+  assert.deepEqual(
+    visits.map((visit) => visit.siteId),
+    spec.expected,
+    `${spec.label}: the settled camera gives the reproducible walk`,
+  );
+
+  for (const visit of visits) {
+    console.log(`[${spec.name}] ${visit.label}: ${visit.siteId}`);
+  }
+  console.log(
+    `RESULT ${spec.label}: ${visits.map((visit) => visit.siteId).join(' then ')}`,
+  );
+  console.log(
+    'RESULT: neither static layer starved the rotation; each visited both of its sites',
+  );
+  console.log(
+    'RESULT: with every site cooling, each layer revisited its longest-unvisited site',
+  );
+}
+
+/** The Sentinel's own readout, so a failed boot says what it saw. */
+async function sentinelProbe(page) {
+  return page.evaluate(() => {
+    const module = window.__godsEyeView?.dataManager?.layers?.get(
+      'ai-agent',
+    )?.module;
+    const raw = sessionStorage.getItem('gev:sentinel:visited-sites');
+    return {
+      stats: module?.getStats?.() ?? null,
+      memory: raw ? JSON.parse(raw) : null,
+    };
+  });
+}
+
+/** One boot the gate can run, in the order a full run takes them. */
+const BOOTS = Object.freeze([
+  ...CASES.map((spec) => ({
+    name: spec.name,
+    label: spec.label,
+    run: (browser, errors, monitors) =>
+      runCase(browser, spec, errors, monitors),
+  })),
+  {
+    name: COEXISTENCE.name,
+    label: COEXISTENCE.label,
+    run: (browser, errors, monitors) =>
+      runCoexistenceCase(browser, COEXISTENCE, errors, monitors),
+  },
+]);
+
+/** Resolve `--case` against the boots; an unknown name is a usage error. */
+function selectedBoots(wanted) {
+  if (!wanted) return BOOTS;
+  const unknown = wanted.filter(
+    (name) => !BOOTS.some((boot) => boot.name === name),
+  );
+  if (unknown.length) {
+    throw new Error(
+      `unknown case(s): ${unknown.join(', ')}; known: ${BOOTS.map((boot) => boot.name).join(', ')}`,
+    );
+  }
+  return BOOTS.filter((boot) => wanted.includes(boot.name));
+}
+
+/**
+ * Run one boot and hand back its error, or null. Each boot owns its console
+ * list and its pages, so one failing case neither stops the next nor shares a
+ * directory with another.
+ */
+async function runBoot(browser, boot) {
+  const errors = [];
+  const monitors = [];
+  try {
+    await boot.run(browser, errors, monitors);
+    assert.deepEqual(errors, [], `${boot.label}: the page logged no errors`);
+    console.log(`PASS ${boot.label}`);
+    return null;
+  } catch (error) {
+    const dir = await saveFailureArtifacts({
+      dir: `qa-artifacts/sentinel-rotation/${boot.name}`,
+      browser,
+      monitors,
+      error,
+      probe: sentinelProbe,
+    }).catch(() => null);
+    if (dir) console.error(`failure evidence saved in ${dir}/`);
+    console.error(`FAIL ${boot.label}: ${error.message}`);
+    return error;
+  } finally {
+    for (const monitor of monitors) {
+      await monitor.page.close().catch(() => {});
+    }
+  }
 }
 
 async function main() {
+  let boots;
+  try {
+    boots = selectedBoots(wantedCases);
+  } catch (error) {
+    console.error(error.message);
+    process.exit(2);
+  }
   const browser = await puppeteer.launch({
     headless: true,
     executablePath: chromeExecutablePath(),
     defaultViewport: { width: 1440, height: 900 },
     protocolTimeout: 180_000,
-    args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader'],
+    args: [
+      '--no-sandbox',
+      // Containers ship a small /dev/shm; without this the renderer can lose
+      // its shared memory under a heavy Cesium page.
+      '--disable-dev-shm-usage',
+      '--use-gl=angle',
+      '--use-angle=swiftshader',
+    ],
   });
-  const errors = [];
-  const monitors = [];
+  const failures = [];
   try {
-    for (const spec of CASES) await runCase(browser, spec, errors, monitors);
-    assert.deepEqual(errors, []);
-    console.log(
-      'RESULT: each static layer rotated to a new site after a real reload',
-    );
-  } catch (error) {
-    const dir = await saveFailureArtifacts({
-      dir: 'qa-artifacts/sentinel-rotation',
-      browser,
-      monitors,
-      error,
-    }).catch(() => null);
-    if (dir) console.error(`failure evidence saved in ${dir}/`);
-    throw error;
+    for (const boot of boots) {
+      const error = await runBoot(browser, boot);
+      if (error) failures.push({ label: boot.label, error });
+    }
+    if (failures.length) {
+      throw new Error(
+        `${failures.length} of ${boots.length} boot(s) failed: ${failures
+          .map((failure) => failure.label)
+          .join(', ')}`,
+      );
+    }
+    console.log(`RESULT: ${boots.length} of ${boots.length} boots passed`);
+    if (boots.length === BOOTS.length) {
+      console.log(
+        'RESULT: each static layer rotated to a new site after a real reload',
+      );
+      console.log(
+        'RESULT: with both static layers on, neither starved the other',
+      );
+    }
   } finally {
     await browser.close();
   }
