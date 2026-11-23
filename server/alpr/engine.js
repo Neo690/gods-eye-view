@@ -12,6 +12,7 @@
  * @module server/alpr/engine
  */
 import fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import {
   ALPR_DETECTOR_SIZE,
   modelPaths,
@@ -113,14 +114,24 @@ async function cpuQuotaThreads() {
 async function importRuntime() {
   let ort = null;
   let sharp = null;
+  // Loaded through Node's own resolver rather than a dynamic `import()`: these
+  // modules are evaluated while Vite is reading its config (the local provider
+  // plugins), and the module runner that owns that graph is closed afterwards —
+  // a dynamic import there fails with "Vite module runner has been closed".
+  const requireNative = createRequire(import.meta.url);
   try {
-    ort = await import('onnxruntime-node');
-  } catch {
+    ort = requireNative('onnxruntime-node');
+  } catch (error) {
+    console.warn(
+      `[alpr] onnxruntime import failed: ${error?.message ?? error}`,
+    );
     ort = null;
   }
   try {
-    sharp = (await import('sharp')).default;
-  } catch {
+    const loaded = requireNative('sharp');
+    sharp = loaded?.default ?? loaded;
+  } catch (error) {
+    console.warn(`[alpr] sharp import failed: ${error?.message ?? error}`);
     sharp = null;
   }
   return { ort, sharp };
