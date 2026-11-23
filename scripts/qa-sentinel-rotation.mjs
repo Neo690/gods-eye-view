@@ -39,12 +39,14 @@
  * Sentinel state under
  * `qa-artifacts/sentinel-rotation/<case>/`, so the boots never share evidence.
  *
- * `--self-check` runs two sabotaged boots and exits 0 only when both failed as
- * they must: Radio Sites with the reloaded document starting without its site
- * memory, which the rotation assertion has to catch, and Mapped Installations
- * with its names-pack requests counted under a name the pack check cannot read,
- * which the pack check has to catch. It is the proof that the assertions still
- * bite, not a second gate.
+ * `--self-check` runs three sabotaged boots and exits 0 only when each failed as
+ * it must: Radio Sites with the reloaded document starting without its site
+ * memory, which the rotation assertion has to catch; Mapped Installations with
+ * its names-pack requests counted under a name the pack check cannot read,
+ * which the pack check has to catch; and the pair with one layer's patrol sites
+ * silenced after its first scan, which must be caught as a layer inspected
+ * twice in a row. It is the proof that the assertions still bite, not a second
+ * gate.
  */
 import assert from 'node:assert/strict';
 import { readdirSync, statSync } from 'node:fs';
@@ -74,6 +76,13 @@ const ROTATION_FAILURE = Object.freeze(
  */
 const PACK_FAILURE = Object.freeze(
   'never requested the installations names pack',
+);
+/**
+ * The one wording of a starved pair: the alternation assertion fails with it
+ * and the starvation self-check looks for exactly it.
+ */
+const STARVATION_FAILURE = Object.freeze(
+  'takes two scans in a row without the other layer',
 );
 /** The cases `--self-check` sabotages. Named, not indexes: cases get reordered. */
 const SELF_CHECK_CASE = 'radio-sites';
@@ -238,7 +247,7 @@ function siteOfKey(key, sites) {
 }
 
 /** What every usage error prints, so a typo never reads as a broken gate. */
-const USAGE =
+export const USAGE =
   'usage: node scripts/qa-sentinel-rotation.mjs [--url <app url>] [--case <name>[,<name>]] [--self-check]';
 const FLAGS = new Set(['--url', '--case', '--self-check']);
 
@@ -248,7 +257,7 @@ const FLAGS = new Set(['--url', '--case', '--self-check']);
  * ignored, and the gate then ran against `localhost:4173` — which can be a
  * different server altogether, and pass for the wrong reason.
  */
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const values = new Map();
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
@@ -268,24 +277,33 @@ function parseArgs(argv) {
   return values;
 }
 
-let flags;
-try {
-  flags = parseArgs(process.argv.slice(2));
-} catch (error) {
-  console.error(error.message);
-  process.exit(2);
+// Filled from the command line by main(); module-level so the boot helpers can
+// read the preview address. A test that imports this file gets the defaults and
+// never parses the test runner's own argv.
+let url = 'http://localhost:4173';
+let caseArg = null;
+let selfCheck = false;
+
+/**
+ * Read the command line once. `--case` without a value must not quietly mean
+ * "no boots": a typo in CI would otherwise finish green without starting a
+ * browser, so the empty value is rejected later, when the boots are resolved.
+ */
+function readCommandLine(argv) {
+  const flags = parseArgs(argv);
+  const target = (flags.get('--url') ?? 'http://localhost:4173').replace(
+    /\/$/,
+    '',
+  );
+  if (!target) throw new Error(`--url needs an address; ${USAGE}`);
+  return {
+    url: target,
+    // The sabotage mode proves the assertions can fail, so it takes its own
+    // boot rather than being mixed into a case selection.
+    caseArg: flags.has('--case') ? String(flags.get('--case')) : null,
+    selfCheck: flags.has('--self-check'),
+  };
 }
-const url = (flags.get('--url') ?? 'http://localhost:4173').replace(/\/$/, '');
-if (!url) {
-  console.error(`--url needs an address; ${USAGE}`);
-  process.exit(2);
-}
-// `--case` without a value must not quietly mean "no boots": a typo in CI
-// would otherwise finish green without starting a browser.
-const caseArg = flags.has('--case') ? String(flags.get('--case')) : null;
-// The sabotage mode: it proves the assertions can fail, so it takes its own
-// boot rather than being mixed into a case selection.
-const selfCheck = flags.has('--self-check');
 
 /**
  * Load the app again in the same tab, the way a reload would.
@@ -877,6 +895,31 @@ function visitOf(scan, spec) {
 }
 
 /**
+ * Silence one layer's patrol sites after a scan, so only the other layer is
+ * left to walk to.
+ *
+ * A layer that still advertises records but reports no position is a real
+ * state, not a broken one: the Sentinel drops it as a candidate (see
+ * inspectionPoint) and inspects the one catalog it has — twice in a row. The
+ * sabotage reaches that failure through the layer's own reader, so the pair's
+ * assertions run unchanged and one of them has to notice the repetition.
+ */
+async function starvePatrolLayer(page, layerId) {
+  const silenced = await page.evaluate((layerId) => {
+    const module = window.__godsEyeView?.dataManager?.layers?.get?.(layerId)
+      ?.module;
+    if (!module || typeof module.getPatrolSites !== 'function') return null;
+    const before = module.getPatrolSites(10)?.length ?? 0;
+    module.getPatrolSites = () => [];
+    return { before, after: module.getPatrolSites(10)?.length ?? 0 };
+  }, layerId);
+  assert.ok(
+    silenced && silenced.before > 0 && silenced.after === 0,
+    `${layerId}: the layer had patrol sites and now reports none: ${JSON.stringify(silenced)}`,
+  );
+}
+
+/**
  * Both static layers on at once.
  *
  * Radio Sites and Mapped Installations hold four fixture sites between them,
@@ -885,17 +928,44 @@ function visitOf(scan, spec) {
  * both sites of each layer, and then revisit the longest-unvisited site of
  * each layer once nothing is left unvisited — the cooldown path, where only
  * the visit times and the repeat penalty can break the tie. A reload follows,
- * and one scan per layer must resume from the memory it kept.
+ * and one scan per layer must resume from the memory it kept. With `starve`,
+ * one layer's patrol sites are silenced after the first scan and the boot
+ * stops at the repetition that forces, so the same assertion fails for real.
  */
-async function runCoexistenceCase(browser, spec, errors, monitors) {
+async function runCoexistenceCase(
+  browser,
+  spec,
+  errors,
+  monitors,
+  { starve = false } = {},
+) {
   const { page, fixtures } = await openBoot(browser, spec, errors, monitors);
   await enableSentinel(page);
 
-  const scans = await observeScans(page, spec.scans);
+  // The starved boot watches two scans, not six: the layer it silences goes
+  // quiet after the first one, so the next can only repeat the other. Waiting
+  // for the full walk would spend four scans on a pair that already failed.
+  const wanted = starve ? 2 : spec.scans;
+  let scans;
+  if (starve) {
+    scans = await observeScans(page, 1);
+    assert.equal(scans.length, 1, `${spec.label}: the first scan starts`);
+    await waitForScanEnd(page);
+    const first = visitOf(scans[0], spec);
+    const other = spec.layers.find((layer) => layer.id !== first.layerId);
+    assert.ok(
+      other,
+      `${spec.label}: the first scan leaves another layer to starve`,
+    );
+    await starvePatrolLayer(page, other.id);
+    scans = [...scans, ...(await observeScans(page, wanted - 1))];
+  } else {
+    scans = await observeScans(page, spec.scans);
+  }
   assert.equal(
     scans.length,
-    spec.scans,
-    `${spec.label}: the Sentinel completed ${spec.scans} scans`,
+    wanted,
+    `${spec.label}: the Sentinel completed ${wanted} scans`,
   );
 
   const visits = scans.map((scan) => visitOf(scan, spec));
@@ -906,7 +976,7 @@ async function runCoexistenceCase(browser, spec, errors, monitors) {
     assert.notEqual(
       visits[index].layerId,
       visits[index - 1].layerId,
-      `${spec.label}: scan ${index + 1} leaves ${visits[index - 1].label}`,
+      `${spec.label}: ${visits[index].label} ${STARVATION_FAILURE} (scan ${index + 1})`,
     );
   }
 
@@ -1018,7 +1088,7 @@ async function sentinelProbe(page) {
 }
 
 /** One boot the gate can run, in the order a full run takes them. */
-const BOOTS = Object.freeze([
+export const BOOTS = Object.freeze([
   ...CASES.map((spec) => ({
     name: spec.name,
     label: spec.label,
@@ -1104,10 +1174,43 @@ async function expectPackFailure(browser, errors, monitors) {
 }
 
 /**
+ * Prove the pair's anti-starvation assertion can still go red.
+ *
+ * The coexistence boot runs with one layer's patrol sites silenced after its
+ * first scan. The Sentinel still sees that layer's records, so it walks the one
+ * catalog left and inspects it twice in a row; the boot must fail on that
+ * repetition and nothing else. If the assertion is ever dropped, the per-layer
+ * count fails instead and this check reports the mismatch rather than passing.
+ */
+async function expectStarvationFailure(browser, errors, monitors) {
+  let failure = null;
+  try {
+    await runCoexistenceCase(browser, COEXISTENCE, errors, monitors, {
+      starve: true,
+    });
+  } catch (thrown) {
+    failure = thrown;
+  }
+  assert.ok(
+    failure,
+    `${COEXISTENCE.label}: the gate stayed green with one layer given every scan, so the anti-starvation assertion no longer bites`,
+  );
+  const reason = failure.message ?? String(failure);
+  assert.ok(
+    reason.includes(STARVATION_FAILURE),
+    `${COEXISTENCE.label}: the starved pair failed on something other than the repetition: ${reason}`,
+  );
+  console.log(`  failed as expected: ${reason.split('\n')[0]}`);
+  console.log(
+    `RESULT ${COEXISTENCE.label}: a layer taking two scans in a row fails the pair, as it must`,
+  );
+}
+
+/**
  * The boots `--self-check` runs. Kept out of BOOTS so a full run can never
  * include a sabotage and mistake it for a verdict.
  */
-const SELF_CHECKS = Object.freeze([
+export const SELF_CHECKS = Object.freeze([
   {
     name: 'self-check-rotation',
     label: 'Self-check: a forgotten site must fail the rotation',
@@ -1120,13 +1223,19 @@ const SELF_CHECKS = Object.freeze([
     run: (browser, errors, monitors) =>
       expectPackFailure(browser, errors, monitors),
   },
+  {
+    name: 'self-check-starvation',
+    label: 'Self-check: a repeated layer must fail the pair',
+    run: (browser, errors, monitors) =>
+      expectStarvationFailure(browser, errors, monitors),
+  },
 ]);
 
 /**
  * Resolve `--case` against the boots. An empty value, an unknown name or a
  * selection that keeps no boot is a usage error, never a silent green run.
  */
-function selectedBoots(caseArg) {
+export function selectedBoots(caseArg) {
   if (caseArg === null) return BOOTS;
   const names = [
     ...new Set(caseArg.split(',').map((name) => name.trim())),
@@ -1144,6 +1253,18 @@ function selectedBoots(caseArg) {
     );
   }
   return BOOTS.filter((boot) => names.includes(boot.name));
+}
+
+/**
+ * Which boots a run takes. `--self-check` with `--case` is a usage error, not
+ * a preference: a caller asking for both wants to know it cannot be honoured,
+ * rather than to have one of the two silently win.
+ */
+export function resolveBoots({ selfCheck, caseArg }) {
+  if (selfCheck && caseArg !== null) {
+    throw new Error('--self-check runs its own boot; drop --case');
+  }
+  return selfCheck ? SELF_CHECKS : selectedBoots(caseArg);
 }
 
 /**
@@ -1248,11 +1369,8 @@ function newestSource(dir) {
 async function main() {
   let boots;
   try {
-    // The self-check sabotages one known boot; a `--case` alongside it would
-    // read as a preference for which sabotage to run, so it is a usage error.
-    if (selfCheck && caseArg !== null)
-      throw new Error('--self-check runs its own boot; drop --case');
-    boots = selfCheck ? SELF_CHECKS : selectedBoots(caseArg);
+    ({ url, caseArg, selfCheck } = readCommandLine(process.argv.slice(2)));
+    boots = resolveBoots({ selfCheck, caseArg });
   } catch (error) {
     console.error(error.message);
     process.exit(2);

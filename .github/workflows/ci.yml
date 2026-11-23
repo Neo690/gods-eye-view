@@ -274,13 +274,13 @@ jobs:
         timeout-minutes: 12
         run: npm run qa:sentinel-rotation -- --url "http://localhost:$PREVIEW_PORT"
 
-      # The self-check proves the rotation assertions can still fail: it runs
-      # the same boot with the tab's site memory wiped and passes only when that
-      # assertion fires. It reuses this job's Chrome, build and preview, and it
-      # is keyed to the Sentinel step rather than to the Device Sweep, so a
-      # Sentinel failure still gets its assertions checked — the one case where
-      # knowing they bite matters most. Its budget is its own: one boot, not
-      # three.
+      # The self-check proves the gate's assertions can still fail: it runs
+      # three sabotaged boots and passes only when each one fires the assertion
+      # it was built to trip. It reuses this job's Chrome, build and preview,
+      # and it is keyed to the Sentinel step rather than to the Device Sweep, so
+      # a Sentinel failure still gets its assertions checked — the one case
+      # where knowing they bite matters most. Its budget is its own: the pair
+      # boot stops after two scans, as soon as the repetition is caught.
       - name: Sentinel self-check
         id: sentinel-self-check
         if: ${{ !cancelled() && (success() || steps.sentinel-rotation-gate.outcome == 'failure') }}
@@ -302,11 +302,14 @@ jobs:
           path: qa-artifacts/qa-device-sweep/
           retention-days: 14
 
-      # Keyed to the Sentinel step alone: a Device Sweep failure must not upload
-      # this archive, and a Sentinel success uploads nothing even though the
-      # job stays failed.
+      # Uploaded when either Sentinel step fails. A red gate is the obvious
+      # case; a red self-check is the other one, and the one where evidence
+      # matters most — the assertions stopped biting, and the pages show why.
+      # Keyed to the Sentinel steps alone: a Device Sweep failure must not
+      # upload this archive, and a green Sentinel uploads nothing even though
+      # the job stays failed.
       - name: Upload Sentinel rotation gate evidence
-        if: steps.sentinel-rotation-gate.outcome == 'failure'
+        if: ${{ !cancelled() && (steps.sentinel-rotation-gate.outcome == 'failure' || steps.sentinel-self-check.outcome == 'failure') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: sentinel-rotation-gate-evidence

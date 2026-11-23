@@ -277,23 +277,32 @@ spider ranks them from a position the gate does not control. `--case
 (`radio-sites`, `military-bases`, `radio-sites-and-installations`); an empty or
 unknown name exits 2.
 
-`--self-check` proves those assertions can still fail, with two sabotaged boots:
-Radio Sites with the reloaded document starting without its site memory, which
-the rotation assertion has to catch, and Mapped Installations with its names-pack
-requests answered but counted under a name the pack check cannot read, which is
-the only thing allowed to fail there. It exits 0 only when both failed as
-expected; a green sabotaged run means the assertions have become decoration. CI
-runs the gate and then this mode in the same browser job.
+`--self-check` proves those assertions can still fail, with three sabotaged
+boots: Radio Sites with the reloaded document starting without its site memory,
+which the rotation assertion has to catch; Mapped Installations with its
+names-pack requests answered but counted under a name the pack check cannot
+read, which is the only thing allowed to fail there; and the pair with one
+layer's patrol sites silenced after its first scan, so the Sentinel can only
+inspect the other layer twice in a row, which the anti-starvation assertion has
+to catch. It exits 0 only when all three failed as expected; a green sabotaged
+run means the assertions have become decoration. CI runs the gate and then this
+mode in the same browser job, and uploads `qa-artifacts/sentinel-rotation/`
+when either step fails — a red self-check is exactly when its pages and
+network matter. The command line itself is covered by
+`node --test scripts/qa-sentinel-rotation.test.mjs`: unknown, repeated or
+valueless flags, an empty `--case`, and `--self-check` combined with `--case`
+all exit 2 instead of falling back to a default address or boot list.
 
 On this machine a full run takes about five minutes — 62 to 66 s for Radio
 Sites, 85 to 99 s for Mapped Installations, 133 to 149 s for the pair — and the
-self-check's two boots about the same as the first two. A loopback preview whose `dist/` is older
+self-check about three and a half, its sabotaged pair stopping after two scans. A loopback preview whose `dist/` is older
 than the newest source file prints a warning first, so a green run cannot
 quietly prove a build that no longer matches the tree.
 
 A failure saves the page, console, network and Sentinel state under
 `qa-artifacts/sentinel-rotation/<case>/`, and each boot clears its own directory
-first, so a rerun cannot upload the previous run's pages.
+first, so a rerun cannot upload the previous run's pages. The CI archive keeps
+the same path whether the gate or the self-check failed.
 
 Before that gate existed, the layer was exercised end to end once per catalog
 layer on 2026-11-05 with a disposable harness, using the layer's own test seams
