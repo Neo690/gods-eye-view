@@ -8,7 +8,14 @@
 // window loads comes from 127.0.0.1 — the shell itself never reaches the
 // network.
 
-const { app, BrowserWindow, Menu, dialog, shell } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  Menu,
+  dialog,
+  ipcMain,
+  shell,
+} = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -51,6 +58,8 @@ function log(message) {
 
 let mainWindow = null;
 let serverChild = null;
+/** electron-updater's instance once initUpdates has wired it; null off Windows. */
+let autoUpdater = null;
 
 function createWindow(error) {
   mainWindow = new BrowserWindow({
@@ -69,6 +78,9 @@ function createWindow(error) {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      // The only bridge the page gets: a request to install the published
+      // update, and the progress the main process sends back.
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
@@ -123,6 +135,111 @@ function createWindow(error) {
   mainWindow.on('closed', () => {
     mainWindow = null;
     app.quit();
+  });
+}
+
+/** One update status line for the page; silent once the window is gone. */
+function sendUpdate(payload) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('gev:update', payload);
+}
+
+/**
+ * Wire the Windows updater to the UPDATE panel.
+ *
+ * `electron-updater` reads the generic feed configured in
+ * electron-builder.yml — the rolling `desktop-latest` release — so the panel's
+ * own button downloads the published Setup and restarts into it. The download
+ * starts only on that request (autoDownload is off); the installer is applied
+ * with quitAndInstall, not on a later quit nobody asked for. A checkout run
+ * from source has no update feed, and says so instead of failing silently.
+ */
+function initUpdates() {
+  ipcMain.on('gev:update:install', async () => {
+    if (!autoUpdater) {
+      sendUpdate({
+        status: 'failed',
+        progress: 0,
+        message: 'updates run in an installed copy, not a checkout',
+      });
+      return;
+    }
+    sendUpdate({ status: 'downloading', progress: 0 });
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      const latest = result?.updateInfo?.version;
+      if (!latest || latest === app.getVersion()) {
+        sendUpdate({
+          status: 'failed',
+          progress: 0,
+          message: 'this build is already the published version',
+        });
+        return;
+      }
+      await autoUpdater.downloadUpdate();
+    } catch (error) {
+      sendUpdate({
+        status: 'failed',
+        progress: 0,
+        message: String(error?.message || error),
+      });
+    }
+  });
+
+  if (process.platform !== 'win32' || !app.isPackaged) {
+    autoUpdater = null;
+    return;
+  }
+  try {
+    // Required lazily: a source checkout without the shell's dependencies must
+    // still open the window, and only the update button is lost.
+    ({ autoUpdater } = require('electron-updater'));
+  } catch (error) {
+    log(`electron-updater is unavailable: ${error && error.message}`);
+    autoUpdater = null;
+    return;
+  }
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.logger = {
+    info: log,
+    warn: log,
+    error: log,
+    debug: () => {},
+  };
+  autoUpdater.on('download-progress', (progress) => {
+    sendUpdate({
+      status: 'downloading',
+      progress: Math.round(Number(progress?.percent) || 0),
+    });
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    // The panel paints this line before the process goes away, so the restart
+    // reads as the install rather than as a crash.
+    sendUpdate({
+      status: 'restarting',
+      progress: 100,
+      message: String(info?.version || ''),
+    });
+    setTimeout(() => {
+      try {
+        autoUpdater.quitAndInstall(false, true);
+      } catch (error) {
+        log(`quitAndInstall failed: ${error && error.message}`);
+        sendUpdate({
+          status: 'failed',
+          progress: 0,
+          message: String(error?.message || error),
+        });
+      }
+    }, 1200);
+  });
+  autoUpdater.on('error', (error) => {
+    sendUpdate({
+      status: 'failed',
+      progress: 0,
+      message: String(error?.message || error),
+    });
   });
 }
 
@@ -215,6 +332,7 @@ async function start() {
 }
 
 app.whenReady().then(async () => {
+  initUpdates();
   buildMenu();
   await start().catch((error) => {
     log(`startup failed: ${error && error.stack ? error.stack : error}`);

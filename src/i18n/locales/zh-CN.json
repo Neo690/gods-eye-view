@@ -3325,5 +3325,12 @@
   "Set your place to centre this device": "设置你的位置以居中此设备",
   "The globe is not ready yet": "地球尚未就绪",
   "No scan yet · your own spaces only · stays on this device": "尚无扫描 · 仅限你自己的空间 · 保存在本设备",
-  "That file is not an inventory this layer reads": "该文件不是此图层可读取的清单"
+  "That file is not an inventory this layer reads": "该文件不是此图层可读取的清单",
+  "Download and install": "下载并安装",
+  "Downloading the update": "正在下载更新",
+  "Allow installs from this app, then try again.": "请允许从此应用安装，然后重试。",
+  "Confirm the install in the system dialog.": "请在系统对话框中确认安装。",
+  "Installed. Reopen the app to use it.": "已安装。请重新打开应用。",
+  "The update could not be installed: {message}": "无法安装更新：{message}",
+  "Restarting to apply the update…": "正在重启以应用更新…"
 }

@@ -50,6 +50,30 @@ uninstalled before it can be installed. A build signed by the CI key does not
 replace an APK signed by a local debug key — the first switch needs one
 uninstall, then updates are seamless.
 
+## Update from inside the app
+
+The UPDATE panel no longer sends the operator to a browser download on Android.
+Its own-platform button downloads the published `apk-latest` asset inside the
+shell (`ApkUpdater`) and hands it to `PackageInstaller`, which asks for the
+usual system confirmation.
+
+- The APK must be signed by the same key as the installed copy and carry a
+  higher `versionCode`. The shell checks the package name, the version and the
+  signing certificate before offering it, so a CI build replaces a CI build and
+  a local debug-signed APK is refused with a sentence instead of the
+  installer's generic "app not installed".
+- Android 8 and later need a one-time per-app grant (`REQUEST_INSTALL_PACKAGES`);
+  the shell opens Settings → Install unknown apps for its own package and the
+  panel says what to do. The system dialog remains the last word: nothing
+  installs silently.
+- Only `https` release URLs on `github.com/Neo690/gods-eye-view`, plus the
+  `objects.githubusercontent.com` redirect GitHub serves the asset from, are
+  accepted, so page script cannot talk the shell into installing an arbitrary
+  APK.
+- The download lands in the app cache and is deleted once the session is
+  committed or the attempt fails. Progress and failures arrive through
+  `window.__gevUpdate` and are rendered by the panel, in the operator's locale.
+
 ## Land every CI build on a plugged-in phone
 
 Downloading from the phone is fine once; while iterating, the phone is on USB

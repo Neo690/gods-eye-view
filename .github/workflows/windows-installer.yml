@@ -145,6 +145,11 @@ jobs:
             Where-Object { $_.Name -like '*Setup*' } |
             Select-Object -First 1
           if (-not $installer) { throw 'no installer was produced' }
+          # electron-builder writes the feed the in-app updater reads. It is
+          # published after the exe it names, so a check that lands between the
+          # two uploads never points the updater at a missing file.
+          $feed = 'desktop/release/latest.yml'
+          if (-not (Test-Path $feed)) { throw 'no latest.yml was produced for the updater' }
           Copy-Item $installer.FullName gods-eye-view-windows-setup.exe
           $notes = "Built from $env:GITHUB_SHA ($env:GEV_DESKTOP_VERSION) on $env:GITHUB_REF_NAME."
           gh release view desktop-latest 2>$null
@@ -152,6 +157,13 @@ jobs:
             gh release create desktop-latest --title "God's Eye View — Windows" --notes $notes
           }
           gh release upload desktop-latest gods-eye-view-windows-setup.exe --clobber
+          # The differential update needs the block map beside the feed; the
+          # updater falls back to a full download without it, but the smaller
+          # download is the point of shipping one.
+          $blockmap = Get-ChildItem desktop/release/*.blockmap |
+            Select-Object -First 1
+          if ($blockmap) { gh release upload desktop-latest $blockmap.FullName --clobber }
+          gh release upload desktop-latest $feed --clobber
           gh release edit desktop-latest --notes $notes
 
           # Only one release per repository can be "the latest", and the Android

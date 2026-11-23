@@ -1976,18 +1976,46 @@ export class StyleManager extends ShellFacade {
 
   /**
    * Wires the chrome-top update button. The panel resolves the published
-   * channels against this bundle's build stamps, and every download it offers
+   * channels against this bundle's build stamps. A shell that can install its
+   * own update supplies the installer hooks — the Android shell downloads the
+   * APK in-app and reports through `window.__gevUpdate`, the Windows shell asks
+   * electron-updater through the preload bridge — and every other download
    * leaves through the shell's external route: `window.open` is what Android
    * already knows how to route (routeWindow → ACTION_VIEW), iOS opens Safari
    * on target="_blank", and desktop hands the popup to the system browser
    * (setWindowOpenHandler in desktop/main.js).
    */
   _initUpdatePanel() {
+    // Only the shell that actually carries an installer gets offered as one:
+    // a panel that promised "download and install" on a plain browser tab
+    // would have nothing to call.
+    const androidBridge = globalThis.GodsEyeNative;
+    const desktopBridge = globalThis.gevDesktop;
+    const nativeUpdate =
+      typeof androidBridge?.installUpdate === 'function'
+        ? {
+            installUpdate: (channel) =>
+              Boolean(androidBridge.installUpdate(String(channel.openUrl))),
+            watchUpdate: (listener) => {
+              globalThis.__gevUpdate = listener;
+              return () => {
+                if (globalThis.__gevUpdate === listener)
+                  delete globalThis.__gevUpdate;
+              };
+            },
+          }
+        : typeof desktopBridge?.installUpdate === 'function'
+          ? {
+              installUpdate: () => Boolean(desktopBridge.installUpdate()),
+              watchUpdate: (listener) => desktopBridge.onUpdateEvent(listener),
+            }
+          : {};
     this._updatePanel = installUpdatePanel(
       { document: window.document },
       {
         openExternal: (url) =>
           window.open(url, '_blank', 'noopener,noreferrer'),
+        ...nativeUpdate,
       },
     );
   }

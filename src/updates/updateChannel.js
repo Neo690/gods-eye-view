@@ -28,7 +28,7 @@ export const CHANNELS = [
     tag: 'apk-latest',
     assetMatch: 'gods-eye-view.apk',
     install:
-      'The browser downloads the APK; open it from the notification to install. Settings and presets survive an in-place install.',
+      'The app downloads the APK itself and opens the system installer, after a one-time grant to install from this app. Settings and presets survive an in-place install.',
   },
   {
     id: 'ios',

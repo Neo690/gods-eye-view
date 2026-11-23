@@ -18,6 +18,7 @@ directories:
 # `vite preview` reads its configuration and providers from a real directory.
 files:
   - main.js
+  - preload.js
   - server.js
   - package.json
   - assets/**
@@ -31,12 +32,25 @@ extraResources:
   - from: .payload
     to: .
 
+# The updater's feed. electron-updater reads `latest.yml` from this URL, and
+# the rolling `desktop-latest` release is republished in place on every
+# installer build, so the URL never changes between versions. A generic feed
+# rather than the GitHub provider: it needs no token and no API quota at
+# update time, and it reads the release the workflow actually writes.
+publish:
+  provider: generic
+  url: https://github.com/Neo690/gods-eye-view/releases/download/desktop-latest
+  channel: latest
+
 win:
   icon: assets/icon.png
   target:
     - target: nsis
       arch: [x64]
-  artifactName: ${productName} Setup ${version}.exe
+  # The release carries one rolling asset, and latest.yml has to name the file
+  # the updater will fetch. A version-stamped name would leave the stable URL
+  # and the feed pointing at different files.
+  artifactName: gods-eye-view-windows-setup.exe
 
 nsis:
   # An assisted installer, not a silent one: the user sees where it lands and

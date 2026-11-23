@@ -78,6 +78,8 @@ public class MainActivity extends Activity {
   private boolean dictationForAsk = false;
   private String pendingLocationOrigin;
   private ApiForwarder apiForwarder;
+  /** Downloads and hands a published APK to the platform installer. */
+  private ApkUpdater apkUpdater;
   /** The phone's own synthesiser for the Sentinel's spoken alerts; WebView
    *  ships no speechSynthesis, so the announcement has to come from here. */
   private TextToSpeech speaker;
@@ -141,6 +143,21 @@ public class MainActivity extends Activity {
     webView.setWebViewClient(new AssetClient());
     webView.setWebChromeClient(new ChromeClient());
     webView.addJavascriptInterface(new NativeBridge(), "GodsEyeNative");
+    apkUpdater = new ApkUpdater(
+      this,
+      new ApkUpdater.Host() {
+        @Override
+        public void emitUpdate(String status, int progress, String message) {
+          MainActivity.this.emitUpdate(status, progress, message);
+        }
+
+        @Override
+        public void openUnknownSourceSettings() {
+          MainActivity.this.openUnknownSourceSettings();
+        }
+      }
+    );
+    apkUpdater.register();
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
       WebView.setWebContentsDebuggingEnabled(true);
@@ -201,6 +218,10 @@ public class MainActivity extends Activity {
 
   @Override
   protected void onDestroy() {
+    if (apkUpdater != null) {
+      apkUpdater.close();
+      apkUpdater = null;
+    }
     if (speaker != null) {
       speaker.stop();
       speaker.shutdown();
@@ -364,6 +385,51 @@ public class MainActivity extends Activity {
     final String script =
       "window." + callback + "&&window." + callback + "(" + event + ")";
     runOnUiThread(() -> webView.evaluateJavascript(script, null));
+  }
+
+  /**
+   * Posts one update event to the page; the panel renders the status line.
+   * Called from the download thread, so it hands the script to the UI thread.
+   */
+  private void emitUpdate(String status, int progress, String message) {
+    if (webView == null) return;
+    JSONObject event = new JSONObject();
+    try {
+      event.put("status", status);
+      event.put("progress", progress);
+      event.put("message", message == null ? "" : message);
+    } catch (JSONException error) {
+      Log.w(TAG, "Update event could not be built", error);
+      return;
+    }
+    final String script =
+      "window.__gevUpdate&&window.__gevUpdate(" + event + ")";
+    runOnUiThread(() -> {
+      if (webView != null) webView.evaluateJavascript(script, null);
+    });
+  }
+
+  /**
+   * Android 8 and later require a per-app grant before an app may offer an
+   * APK; without it PackageInstaller refuses the session with a message that
+   * says nothing about the missing grant.
+   */
+  private void openUnknownSourceSettings() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+    // The bridge method runs on the WebView's JavaBridge thread, and starting
+    // an activity belongs to the UI thread.
+    runOnUiThread(() -> {
+      try {
+        startActivity(
+          new Intent(
+            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+            Uri.parse("package:" + getPackageName())
+          )
+        );
+      } catch (ActivityNotFoundException | SecurityException missing) {
+        Log.w(TAG, "No unknown-sources screen for this app", missing);
+      }
+    });
   }
 
   private static String bestResult(Bundle bundle) {
@@ -961,6 +1027,16 @@ public class MainActivity extends Activity {
         pendingSpeech = null;
         if (speaker != null) speaker.stop();
       });
+    }
+
+    /**
+     * Starts the in-app update from a published APK URL. False means nothing
+     * was started: the grant prompt opened, or the URL is not a release.
+     */
+    @JavascriptInterface
+    public boolean installUpdate(String url) {
+      ApkUpdater updater = apkUpdater;
+      return updater != null && updater.start(url);
     }
 
     @JavascriptInterface

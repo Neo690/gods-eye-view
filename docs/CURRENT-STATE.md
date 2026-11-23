@@ -6670,3 +6670,35 @@ the marker. The watch asks for a precise (satellite/GNSS) fix first; when the
 platform answers `POSITION_UNAVAILABLE` or times out, it rearms against the
 network provider (Wi-Fi and cell towers) instead of failing, and only a refused
 permission or a network failure reports "Location unavailable".
+
+## In-app Android updates
+
+The UPDATE panel's Android action no longer opens a browser download. The
+shell's `ApkUpdater` fetches the published `apk-latest` asset into its cache and
+commits a `PackageInstaller` session, so the operator confirms the install in
+the platform dialog instead of finding an APK in notifications. The panel only
+offers that action when the native bridge is present; every other platform keeps
+the external link. A release URL must be https on the project's own GitHub
+release (or the `objects.githubusercontent.com` redirect it serves), which keeps
+page script from installing an arbitrary APK. Before the session opens, the
+downloaded archive must carry this package name, a strictly higher version code
+and the signing certificate already installed, so a debug-signed local build is
+refused with a named reason rather than the installer's generic failure.
+Android 8 and later require a one-time per-app grant; the shell opens that
+settings screen and reports the missing grant to the panel, whose progress and
+failure lines are translated with the rest of its text.
+
+## In-app Windows updates
+
+The Windows shell installs its own updates instead of sending the operator to
+the release page. `electron-updater` reads `latest.yml` from a generic feed that
+points at the rolling `desktop-latest` release, so the version comparison and
+the download need no GitHub token and no API quota. The UPDATE panel's own
+button asks the main process through a narrow preload bridge (`gevDesktop`),
+reports download progress in its own line, and the downloaded Setup is applied
+with `quitAndInstall`, which restarts the app into the new build. The download
+starts only on that request — `autoDownload` is off — and a source checkout or a
+non-Windows run answers that updates only apply to an installed copy. The
+installer keeps one stable asset name (`gods-eye-view-windows-setup.exe`) so the
+feed and the published download never point at different files, and the Windows
+workflow uploads `latest.yml` and the block map after the exe it names.

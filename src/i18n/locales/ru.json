@@ -3553,5 +3553,12 @@
   "Set your place to centre this device": "Укажите своё место, чтобы центрировать это устройство",
   "The globe is not ready yet": "Глобус ещё не готов",
   "No scan yet · your own spaces only · stays on this device": "Сканирования ещё нет · только свои пространства · остаётся на этом устройстве",
-  "That file is not an inventory this layer reads": "Этот файл не является инвентаризацией, которую читает эта функция"
+  "That file is not an inventory this layer reads": "Этот файл не является инвентаризацией, которую читает эта функция",
+  "Download and install": "Скачать и установить",
+  "Downloading the update": "Загрузка обновления",
+  "Allow installs from this app, then try again.": "Разрешите установку из этого приложения и повторите попытку.",
+  "Confirm the install in the system dialog.": "Подтвердите установку в системном окне.",
+  "Installed. Reopen the app to use it.": "Установлено. Откройте приложение заново.",
+  "The update could not be installed: {message}": "Не удалось установить обновление: {message}",
+  "Restarting to apply the update…": "Перезапуск для применения обновления…"
 }

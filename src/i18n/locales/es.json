@@ -3477,5 +3477,12 @@
   "Set your place to centre this device": "Fija tu lugar para centrar este dispositivo",
   "The globe is not ready yet": "El globo aún no está listo",
   "No scan yet · your own spaces only · stays on this device": "Aún no hay escaneo · solo tus propios espacios · permanece en este dispositivo",
-  "That file is not an inventory this layer reads": "Ese archivo no es un inventario que esta capa lea"
+  "That file is not an inventory this layer reads": "Ese archivo no es un inventario que esta capa lea",
+  "Download and install": "Descargar e instalar",
+  "Downloading the update": "Descargando la actualización",
+  "Allow installs from this app, then try again.": "Permite las instalaciones desde esta aplicación y vuelve a intentarlo.",
+  "Confirm the install in the system dialog.": "Confirma la instalación en el diálogo del sistema.",
+  "Installed. Reopen the app to use it.": "Instalada. Vuelve a abrir la aplicación para usarla.",
+  "The update could not be installed: {message}": "La actualización no se pudo instalar: {message}",
+  "Restarting to apply the update…": "Reiniciando para aplicar la actualización…"
 }

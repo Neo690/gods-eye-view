@@ -459,3 +459,75 @@ test('the panel is inert on a shell whose chrome carries no update button', () =
   assert.ok(panel);
   panel.destroy();
 });
+
+// ── In-app installation ──────────────────────
+
+test('a shell that can install takes the update instead of opening a browser', async () => {
+  const { doc, button } = makeDoc();
+  const opened = [];
+  const installed = [];
+  let listener = null;
+  let stopped = false;
+  let info;
+  const panel = installUpdatePanel(
+    { document: doc },
+    {
+      openExternal: (url) => opened.push(url),
+      checkForUpdate: () => info,
+      installUpdate: (channel) => {
+        installed.push(channel.openUrl);
+        return true;
+      },
+      watchUpdate: (fn) => {
+        listener = fn;
+        return () => {
+          stopped = true;
+        };
+      },
+    },
+  );
+  info = resolveUpdateInfo(
+    [
+      release('desktop-latest', NEWER, [asset('GEV Setup 1.1.0.exe')]),
+      release('apk-latest', OLD, [asset('gods-eye-view.apk')]),
+    ],
+    bundled,
+  );
+  button.dispatch('click');
+  await drain();
+  const dialog = doc.body.children.find((c) => c.tagName === 'DIV');
+  const hero = dialog.children.find((c) =>
+    String(c.className).includes('app-update-hero'),
+  );
+  const heroAction = hero.children.find((c) => c.tagName === 'BUTTON');
+  assert.equal(
+    heroAction.textContent,
+    'Download and install',
+    'the shell own update names the action it can actually take',
+  );
+  heroAction.dispatch('click');
+  assert.deepEqual(installed, [
+    `https://github.com/${REPO}/releases/download/x/GEV Setup 1.1.0.exe`,
+  ]);
+  assert.deepEqual(opened, [], 'the browser is never opened for an in-app install');
+
+  const list = dialog.children.find((c) => c.className === 'app-update-rows');
+  const ownRow = list.children.find((c) =>
+    String(c.className).includes('app-update-row-current'),
+  );
+  const status = dialog.children.find((c) =>
+    String(c.className).includes('app-update-install-status'),
+  );
+  assert.ok(status, 'the installer reports into its own line');
+  listener({ status: 'downloading', progress: 42 });
+  assert.match(String(status.textContent), /42%/);
+  // One installer at a time: a second tap while the download runs is ignored.
+  ownRow.children[3].dispatch('click');
+  assert.equal(installed.length, 1);
+  listener({ status: 'failed', message: 'boom' });
+  assert.match(String(status.textContent), /boom/);
+  ownRow.children[3].dispatch('click');
+  assert.equal(installed.length, 2, 'a failed download can be retried');
+  panel.destroy();
+  assert.equal(stopped, true, 'the panel stops listening when it goes away');
+});

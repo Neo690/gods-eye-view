@@ -10,13 +10,16 @@
  * one measure that matters on this machine: an amber "get the update" when a
  * newer build is published, a dimmed "open release" when the console is
  * current. Opening happens through
- * `openExternal`, supplied by the shell that owns this document: on Android a
- * tap lands on the download via `ACTION_VIEW` (MainActivity already routes
- * non-asset popups to the system), on desktop Electron hands the popup to
- * `shell.openExternal`, and iOS tabs out to Safari.
+ * `openExternal`, supplied by the shell that owns this document: on desktop
+ * Electron hands the popup to `shell.openExternal`, and iOS tabs out to
+ * Safari.
  *
- * The open and network behaviors are injected by the caller, so the panel
- * wiring is testable without a browser.
+ * A shell that can install an update itself supplies `installUpdate` instead:
+ * the Android shell downloads the APK in-app and opens PackageInstaller's own
+ * confirmation, reporting progress through `watchUpdate`, so the same button
+ * no longer sends the operator to a browser download. The open, install and
+ * network behaviors are injected by the caller, so the panel wiring is
+ * testable without a browser.
  * @module updates/updatePanel
  */
 import {
@@ -35,6 +38,31 @@ const CURRENT_LABEL = msg('current');
 const PAGE_LABEL = msg('page');
 
 const PANEL_ID = 'app-update-panel';
+
+/**
+ * One status line from the shell's installer, in the operator's language.
+ * @param {{status?: string, progress?: number, message?: string}} event
+ */
+function describeUpdateEvent(event) {
+  const status = String(event?.status || '');
+  if (status === 'downloading') {
+    const percent = Number(event.progress);
+    return Number.isFinite(percent) && percent > 0
+      ? `${t('Downloading the update')} ${Math.min(100, Math.round(percent))}%`
+      : t('Downloading the update');
+  }
+  if (status === 'permission')
+    return t('Allow installs from this app, then try again.');
+  if (status === 'confirm')
+    return t('Confirm the install in the system dialog.');
+  if (status === 'restarting') return t('Restarting to apply the update\u2026');
+  if (status === 'installed') return t('Installed. Reopen the app to use it.');
+  if (status === 'failed')
+    return t('The update could not be installed: {message}', {
+      message: String(event.message || ''),
+    });
+  return '';
+}
 
 function timestampLabel(iso) {
   if (!iso) return 'unpublished';
@@ -70,16 +98,27 @@ function channelRow(doc, channel, platform, hooks) {
   const at = doc.createElement('span');
   at.textContent = channel.ok ? timestampLabel(channel.publishedAt) : '';
 
+  // The shell's own channel is the one this document can install from inside
+  // the app; the others can only be opened where their platform takes them.
+  const installs =
+    channel.id === platform &&
+    channel.available &&
+    typeof hooks.installUpdate === 'function';
   const action = doc.createElement('button');
   if (!channel.ok) {
     action.disabled = true;
     action.textContent = t(PAGE_LABEL);
     action.title = t('The channel has not been published yet.');
   } else {
-    action.textContent = channel.available ? t('Get it') : t('Open release');
+    action.textContent = channel.available
+      ? installs
+        ? t('Download and install')
+        : t('Get it')
+      : t('Open release');
     action.title = String(channel.openUrl);
     action.addEventListener?.('click', () => {
-      hooks.openExternal(String(channel.openUrl));
+      if (installs) hooks.installUpdate(channel);
+      else hooks.openExternal(String(channel.openUrl));
     });
   }
 
@@ -102,6 +141,8 @@ function channelRow(doc, channel, platform, hooks) {
  * @param {{
  *   openExternal: (url: string) => void,
  *   checkForUpdate?: () => Promise<object>,
+ *   installUpdate?: (channel: object) => boolean|void,
+ *   watchUpdate?: (listener: (event: object) => void) => () => void,
  * }} hooks
  * @returns {{ destroy: () => void }}
  */
@@ -114,6 +155,29 @@ export function installUpdatePanel(services = {}, hooks) {
 
   let open = false;
   let panel = doc.getElementById(PANEL_ID);
+  // One installer channel for the life of the panel: events keep arriving
+  // after the dialog is closed, and reopening must show the last one rather
+  // than a blank line.
+  let installLine = null;
+  let installing = false;
+  let lastUpdateEvent = null;
+  const paintUpdate = (event) => {
+    lastUpdateEvent = event || null;
+    if (lastUpdateEvent?.status === 'failed') installing = false;
+    if (installLine)
+      installLine.textContent = describeUpdateEvent(lastUpdateEvent);
+  };
+  // A shell with no installer simply never calls back; the panel then offers
+  // the external download it always did.
+  const stopWatching =
+    typeof hooks.watchUpdate === 'function'
+      ? hooks.watchUpdate(paintUpdate)
+      : () => {};
+  const beginInstall = (channel) => {
+    if (installing) return;
+    installing = true;
+    if (hooks.installUpdate(channel) === false) installing = false;
+  };
 
   const toggle = async () => {
     if (open) {
@@ -164,7 +228,10 @@ export function installUpdatePanel(services = {}, hooks) {
       // and absent when the channel has not been published at all.
       const platform = shellPlatform();
       const own = info.channels.find((c) => c.id === platform);
+      installLine = null;
       if (own?.ok) {
+        const installable =
+          own.available && typeof hooks.installUpdate === 'function';
         const hero = doc.createElement('div');
         hero.className = 'app-update-hero';
         const state = doc.createElement('span');
@@ -178,20 +245,38 @@ export function installUpdatePanel(services = {}, hooks) {
         heroAction.className = 'app-update-hero-action';
         if (own.available) heroAction.classList?.add('app-update-hero-open');
         heroAction.textContent = own.available
-          ? t('Get the {platform} update', { platform: t(own.label) })
+          ? installable
+            ? t('Download and install')
+            : t('Get the {platform} update', { platform: t(own.label) })
           : t('Open release');
         heroAction.title = String(own.openUrl);
         heroAction.addEventListener?.('click', () => {
-          hooks.openExternal(String(own.openUrl));
+          if (!installable) {
+            hooks.openExternal(String(own.openUrl));
+            return;
+          }
+          beginInstall(own);
         });
         hero.appendChild(heroAction);
         panel.appendChild(hero);
+        if (installable) {
+          installLine = doc.createElement('p');
+          installLine.className = 'app-update-install-status';
+          installLine.textContent = describeUpdateEvent(lastUpdateEvent);
+          panel.appendChild(installLine);
+        }
       }
 
       const list = doc.createElement('div');
       list.className = 'app-update-rows';
+      // The row action shares the hero's one-at-a-time guard, and a shell with
+      // no installer keeps the plain external link.
+      const rowHooks =
+        typeof hooks.installUpdate === 'function'
+          ? { ...hooks, installUpdate: beginInstall }
+          : hooks;
       for (const channel of info.channels) {
-        list.appendChild(channelRow(doc, channel, platform, hooks));
+        list.appendChild(channelRow(doc, channel, platform, rowHooks));
       }
       panel.appendChild(list);
     } catch (error) {
@@ -229,6 +314,7 @@ export function installUpdatePanel(services = {}, hooks) {
       btn.removeEventListener('click', buttonListener);
       doc.removeEventListener?.('keydown', onKey);
       doc.removeEventListener?.('click', onClickOutside, true);
+      stopWatching();
       panel?.remove();
       panel = null;
     },

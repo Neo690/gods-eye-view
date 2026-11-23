@@ -149,6 +149,17 @@
   background: rgba(127, 209, 255, 0.08);
 }
 
+/* The in-app installer's progress line: empty until the shell reports
+   something, and an empty line must not leave a gap above the rows. */
+.app-update-install-status {
+  margin: 0 0 8px;
+  color: rgba(214, 236, 255, 0.75);
+}
+
+.app-update-install-status:empty {
+  display: none;
+}
+
 /* ── Top-center Globe Actions ────────────────── */
 #top-center-actions {
   position: fixed;
