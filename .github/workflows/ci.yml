@@ -280,11 +280,15 @@ jobs:
       # and it is keyed to the Sentinel step rather than to the Device Sweep, so
       # a Sentinel failure still gets its assertions checked — the one case
       # where knowing they bite matters most. Its budget is its own: the pair
-      # boot stops after two scans, as soon as the repetition is caught.
+      # boot stops after two scans, as soon as the repetition is caught. Three
+      # boots measure about 3.5 minutes on a developer machine; a shared runner
+      # can be twice as slow, and a 6-minute cap killed a run whose boots were
+      # still working, so the cap leaves room for the work without hiding a
+      # failed assertion.
       - name: Sentinel self-check
         id: sentinel-self-check
         if: ${{ !cancelled() && (success() || steps.sentinel-rotation-gate.outcome == 'failure') }}
-        timeout-minutes: 6
+        timeout-minutes: 10
         run: npm run qa:sentinel-rotation -- --self-check --url "http://localhost:$PREVIEW_PORT"
 
       - name: Preview server log

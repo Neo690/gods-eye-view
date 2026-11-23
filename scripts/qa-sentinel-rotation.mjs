@@ -1378,6 +1378,7 @@ async function main() {
   try {
     await assertPreview(url);
   } catch (error) {
+    annotateFailure('Sentinel preview', error);
     console.error(`${error.message}; start the preview first`);
     process.exit(2);
   }
@@ -1396,6 +1397,9 @@ async function main() {
     for (const boot of boots) {
       const error = await runBoot(browser, boot);
       if (error) failures.push({ label: boot.label, error });
+    }
+    for (const failure of failures) {
+      annotateFailure(failure.label, failure.error);
     }
     if (failures.length) {
       throw new Error(
@@ -1427,8 +1431,36 @@ async function main() {
   }
 }
 
+/**
+ * GitHub turns `::error::` into a check annotation, so a red gate names the
+ * assertion in public without anyone downloading the job log. `boots` already
+ * carries the failure message; this only changes where it is visible.
+ */
+function escapeAnnotation(text) {
+  return String(text)
+    .replace(/%/g, '%25')
+    .replace(/\r/g, '%0D')
+    .replace(/\n/g, '%0A');
+}
+
+function annotateFailure(label, error) {
+  if (!process.env.GITHUB_ACTIONS) return;
+  const line = String(error.message ?? error).split('\n')[0];
+  console.log(
+    `::error title=${escapeAnnotation(label)}::${escapeAnnotation(line)}`,
+  );
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
+    // A browser launch or preview failure never reaches a boot, so it needs
+    // the same public annotation the boots get.
+    if (process.env.GITHUB_ACTIONS) {
+      const line = String(error.message ?? error).split('\n')[0];
+      console.log(
+        `::error title=Sentinel gate::${escapeAnnotation(line)}`,
+      );
+    }
     console.error(error);
     process.exit(1);
   });
