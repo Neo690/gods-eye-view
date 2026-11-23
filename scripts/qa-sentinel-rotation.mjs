@@ -584,7 +584,11 @@ async function observeScans(page, count) {
       window.__godsEyeView.dataManager.layers.get('ai-agent')?.module;
     const out = [];
     let wasScanning = false;
-    const deadline = Date.now() + 120_000;
+    // The pair's six scans take about 125s on a developer machine, so a fixed
+    // 120s deadline cut the slowest runs off at five scans and failed the boot
+    // as if the Sentinel had stopped. Scale with the count instead: one scan
+    // keeps its two-minute grace, each additional one gets its own budget.
+    const deadline = Date.now() + Math.max(120_000, wanted * 40_000);
     while (Date.now() < deadline && out.length < wanted) {
       const stats = module()?.getStats?.();
       if (stats?.scanning && !wasScanning) {
@@ -1445,9 +1449,11 @@ function escapeAnnotation(text) {
 
 function annotateFailure(label, error) {
   if (!process.env.GITHUB_ACTIONS) return;
-  const line = String(error.message ?? error).split('\n')[0];
+  // Keep the whole message: Node's assertion puts the actual and expected
+  // values on the lines after the label, and those are what name the bug.
+  const message = String(error.message ?? error);
   console.log(
-    `::error title=${escapeAnnotation(label)}::${escapeAnnotation(line)}`,
+    `::error title=${escapeAnnotation(label)}::${escapeAnnotation(message)}`,
   );
 }
 
@@ -1456,9 +1462,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     // A browser launch or preview failure never reaches a boot, so it needs
     // the same public annotation the boots get.
     if (process.env.GITHUB_ACTIONS) {
-      const line = String(error.message ?? error).split('\n')[0];
+      const message = String(error.message ?? error);
       console.log(
-        `::error title=Sentinel gate::${escapeAnnotation(line)}`,
+        `::error title=Sentinel gate::${escapeAnnotation(message)}`,
       );
     }
     console.error(error);
