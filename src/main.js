@@ -15,14 +15,18 @@ document.documentElement.dataset.boot = 'started';
 // carries; outside it this is a no-op. Installed before anything can fetch.
 installInAppApi();
 
+const pageParams = new URLSearchParams(location.search);
+const qaMode = pageParams.get('qa') === '1';
 const application = createStandaloneApplication({
   googleApiKey: import.meta.env.GOOGLE_MAPS_API_KEY,
   cesiumToken: import.meta.env.CESIUM_ION_TOKEN,
-  allowQaRegistration: import.meta.env.DEV,
+  // `?qa=1` also enables the QA layer-registration hooks in a production
+  // preview; the module bridge itself is installed by app/tools.js.
+  allowQaRegistration: import.meta.env.DEV || qaMode,
   // `?qaStall=<phase>` parks one startup phase forever so the 30 s guard can be
   // driven in a browser (scripts/qa-device-sweep.mjs). Nothing in the UI sets
   // it, and without the parameter it is null.
-  stallPhase: new URLSearchParams(location.search).get('qaStall'),
+  stallPhase: pageParams.get('qaStall'),
 });
 
 const loadingScreen = document.getElementById('loading-screen');

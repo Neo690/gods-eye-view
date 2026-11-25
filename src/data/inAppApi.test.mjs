@@ -818,6 +818,11 @@ test('the in-app shell serves the key registry with the desktop removal control,
     assert.equal(byId.openai.managed, 'file', 'a key saved here is removable');
     assert.equal(byId.openai.set, true);
     assert.equal(
+      byId.openai.testable,
+      false,
+      'this shell has no server-side probe to offer',
+    );
+    assert.equal(
       byId.tomtom.managed,
       null,
       'a shipped default is not removable',

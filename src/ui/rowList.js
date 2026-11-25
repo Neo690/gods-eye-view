@@ -52,6 +52,21 @@ export function syncRowList(container, list) {
     const bodyText = String(item.text ?? '');
     if (lead && lead.textContent !== leadText) lead.textContent = leadText;
     if (text && text.textContent !== bodyText) text.textContent = bodyText;
+    // A second line carries what the one-line body had to drop (an event's
+    // date and actors); lists without `details` keep their single row.
+    let details = button.querySelector('.data-row-list-details');
+    const detailsText = String(item.details ?? '');
+    if (detailsText) {
+      if (!details) {
+        details = document.createElement('span');
+        details.className = 'data-row-list-details';
+        button.appendChild(details);
+      }
+      if (details.textContent !== detailsText)
+        details.textContent = detailsText;
+    } else if (details) {
+      details.remove();
+    }
     // An entry may offer one extra action beside its main one: reaching a
     // device without moving the camera, say. It is a sibling button, not a
     // nested one, so both keep their own label, focus and disabled state.
@@ -99,7 +114,11 @@ export function syncRowList(container, list) {
       track.setAttribute('aria-hidden', 'true');
       button.appendChild(track);
     } else if (!isSwitch && track) track.remove();
-    set(button, 'title', item.title || bodyText);
+    set(
+      button,
+      'title',
+      item.title || [bodyText, detailsText].filter(Boolean).join(' · '),
+    );
     if (item.current) activeButton = button;
   }
   for (const node of stale.values()) node.remove();

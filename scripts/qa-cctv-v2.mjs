@@ -98,6 +98,7 @@ const getFlag = (name) => argv.includes(name);
 const BASE_URL = process.env.QA_BASE_URL || 'http://localhost:4173';
 const CCTV_URL = new URL(getOpt('--url', BASE_URL));
 CCTV_URL.searchParams.set('welcome', '0');
+CCTV_URL.searchParams.set('qa', '1');
 const APP_URL = CCTV_URL.href;
 const HEADFUL = getFlag('--headful');
 const SHOTS_DIR = path.join(REPO_ROOT, 'qa-shots', 'cctv-v2');
@@ -1289,7 +1290,8 @@ async function main() {
       const canvas = scene.canvas;
       const rect = canvas.getBoundingClientRect();
       const { hitTestWorldOverlay } =
-        await import('/src/overlays/worldOverlay.js');
+        window.__gevQaModules?.worldOverlay ??
+        (await import('/src/overlays/worldOverlay.js'));
       const candidates = [
         [0.55, 0.72],
         [0.45, 0.72],

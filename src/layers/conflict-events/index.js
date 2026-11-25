@@ -1,5 +1,7 @@
 import * as Cesium from 'cesium';
-import { msg, t, tn } from '../../i18n/index.js';
+import { formatDate, msg, t, tn } from '../../i18n/index.js';
+import { ACLED_CREDIT } from '../../data/dataCredits.js';
+import { isPointerFree } from '../../data/inputOwnership.js';
 import {
   CONFLICT_OVERLAY_SOURCE_ID,
   CONFLICT_OVERLAY_COHORT_LIMIT,
@@ -13,6 +15,10 @@ import {
 export * from './model.js';
 export { createConflictEventsSource } from './source.js';
 
+/** Entity ids are prefixed so a sibling layer's pick is never claimed. */
+const CONFLICT_ENTITY_PREFIX = 'conflict:';
+/** A surface listening for one selected event opens its detail window. */
+export const CONFLICT_EVENT_SELECTED_EVENT = 'gev:conflict-event-selected';
 /** Events listed in the readout card. */
 const READOUT_LIMIT = 5;
 /** Severity bands, in the order the legend states them. */
@@ -22,8 +28,29 @@ const SEVERITY_BANDS = [
   { label: msg('10+ killed'), fatalities: 10 },
 ];
 
+/**
+ * The stable event id from a Cesium pick, or null. A CustomDataSource entity
+ * surfaces itself as `picked.id`; some pick paths put it on the primitive.
+ * @param {*} picked Result of `scene.pick()`.
+ * @returns {string|null}
+ */
+export function conflictEventIdFromPick(picked) {
+  for (const candidate of [picked?.id, picked?.primitive?.id]) {
+    const raw = typeof candidate === 'string' ? candidate : candidate?.id;
+    if (typeof raw === 'string' && raw.startsWith(CONFLICT_ENTITY_PREFIX))
+      return raw.slice(CONFLICT_ENTITY_PREFIX.length);
+  }
+  return null;
+}
+
 /** Own one conflict-event display and its refresh lifecycle. */
-export function createConflictEventsLayer({ source, overlayHost } = {}) {
+export function createConflictEventsLayer({
+  source,
+  overlayHost,
+  screenSpaceEventHandlerFactory = (viewer) =>
+    new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas),
+  eventTarget = globalThis.document,
+} = {}) {
   if (typeof source?.getSnapshot !== 'function')
     throw new TypeError('Conflict events require a snapshot source');
   if (!overlayHost)
@@ -34,11 +61,52 @@ export function createConflictEventsLayer({ source, overlayHost } = {}) {
   let _rows = [];
   let _count = 0;
   let _lastUpdate = null;
+  let _generatedAt = null;
   let _lastError = null;
   let _enabled = false;
   let rowControlsListener = null;
+  let _clickHandler = null;
+  let _rowById = new Map();
+  let _credit = null;
+  let _creditShown = false;
 
   const notify = () => rowControlsListener?.();
+
+  function removeClickHandler() {
+    _clickHandler?.destroy();
+    _clickHandler = null;
+  }
+
+  function showCredit() {
+    if (_creditShown || !_viewer?.creditDisplay?.addStaticCredit) return;
+    _credit ??= new Cesium.Credit(ACLED_CREDIT.html, true);
+    _viewer.creditDisplay.addStaticCredit(_credit);
+    _creditShown = true;
+    _viewer.scene?.requestRender?.();
+  }
+
+  function hideCredit() {
+    if (!_creditShown) return;
+    _viewer?.creditDisplay?.removeStaticCredit?.(_credit);
+    _creditShown = false;
+    _viewer?.scene?.requestRender?.();
+  }
+
+  function installClickHandler() {
+    if (_clickHandler || !_viewer) return;
+    _clickHandler = screenSpaceEventHandlerFactory(_viewer);
+    _clickHandler.setInputAction((click) => {
+      // A tool owns the pointer (src/data/inputOwnership.js): yield the click.
+      if (!isPointerFree()) return;
+      const id = conflictEventIdFromPick(_viewer?.scene?.pick(click.position));
+      if (!id || !_rowById.has(id)) return;
+      eventTarget?.dispatchEvent?.(
+        new CustomEvent(CONFLICT_EVENT_SELECTED_EVENT, {
+          detail: { eventId: id },
+        }),
+      );
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  }
 
   const layer = {
     id: 'conflict-events',
@@ -55,11 +123,14 @@ export function createConflictEventsLayer({ source, overlayHost } = {}) {
       _dataSource.show = false;
       viewer.dataSources.add(_dataSource);
       _rows = [];
+      _rowById = new Map();
       _count = 0;
       _lastUpdate = null;
+      _generatedAt = null;
       _lastError = null;
       _enabled = false;
       overlayHost.setVisible(CONFLICT_OVERLAY_SOURCE_ID, false);
+      _creditShown = false;
       console.log('[Data:ConflictEvents] Initialized');
     },
 
@@ -67,18 +138,22 @@ export function createConflictEventsLayer({ source, overlayHost } = {}) {
       _enabled = true;
       if (_dataSource) _dataSource.show = true;
       overlayHost.setVisible(CONFLICT_OVERLAY_SOURCE_ID, true);
+      showCredit();
+      installClickHandler();
     },
 
     disable() {
       _request?.abort();
       _request = null;
       _enabled = false;
+      removeClickHandler();
       if (_dataSource) _dataSource.show = false;
       overlayHost.clearSource(CONFLICT_OVERLAY_SOURCE_ID);
       overlayHost.setVisible(CONFLICT_OVERLAY_SOURCE_ID, false);
+      hideCredit();
     },
 
-    async update() {
+    async update({ force = false } = {}) {
       // A manual read (the error line's retry) must work while the layer is
       // off: a failed enable leaves exactly that state. Only the data
       // source is required; overlays stay gated on _enabled below.
@@ -87,8 +162,16 @@ export function createConflictEventsLayer({ source, overlayHost } = {}) {
       const request = new AbortController();
       _request = request;
       try {
-        const rows = await source.getSnapshot({ signal: request.signal });
+        const snapshot = await source.getSnapshot({
+          signal: request.signal,
+          force,
+        });
         if (request.signal.aborted || _request !== request) return false;
+        const rows = Array.isArray(snapshot) ? snapshot : snapshot?.rows;
+        if (!Array.isArray(rows))
+          throw Object.assign(new Error('Malformed conflicts snapshot'), {
+            code: 'unparseable',
+          });
 
         const nextEntities = [];
         const overlayEntries = [];
@@ -97,7 +180,7 @@ export function createConflictEventsLayer({ source, overlayHost } = {}) {
           const color = fatalityColor(row.fatalities);
           nextEntities.push(
             new Cesium.Entity({
-              id: `conflict:${row.stableId}`,
+              id: `${CONFLICT_ENTITY_PREFIX}${row.stableId}`,
               position,
               point: {
                 pixelSize: fatalityPixelSize(row.fatalities),
@@ -146,15 +229,18 @@ export function createConflictEventsLayer({ source, overlayHost } = {}) {
         }
 
         _rows = rows;
+        _rowById = new Map(rows.map((row) => [row.stableId, row]));
         _count = nextEntities.length;
         _lastUpdate = Date.now();
+        _generatedAt = Number.isFinite(snapshot?.generatedAt)
+          ? snapshot.generatedAt
+          : _lastUpdate;
         _lastError = null;
         console.log(`[Data:ConflictEvents] Updated: ${_count} events`);
         notify();
         return true;
       } catch (e) {
-        if (request.signal.aborted || _request !== request || !_enabled)
-          return false;
+        if (request.signal.aborted || _request !== request) return false;
         console.warn('[Data:ConflictEvents] Fetch error:', e);
         _lastError = e?.code || e?.message || msg('Conflict feed unavailable');
         notify();
@@ -172,13 +258,19 @@ export function createConflictEventsLayer({ source, overlayHost } = {}) {
      */
     refresh() {
       // A manual read is allowed while the layer is off: a failed enable
-      // leaves exactly that state, and the error line retries from it.
-      return this.update();
+      // leaves exactly that state, and the error line retries from it. It
+      // also bypasses the proxy's ten-minute cache, so fixed credentials are
+      // tested against ACLED now rather than against the previous snapshot.
+      return this.update({ force: true });
     },
 
     destroy(viewer = _viewer) {
       _request?.abort();
       _request = null;
+      removeClickHandler();
+      hideCredit();
+      _credit = null;
+      _rowById = new Map();
       _viewer = null;
       _enabled = false;
       _rows = [];
@@ -191,6 +283,7 @@ export function createConflictEventsLayer({ source, overlayHost } = {}) {
       }
       _count = 0;
       _lastUpdate = null;
+      _generatedAt = null;
       _lastError = null;
     },
 
@@ -208,22 +301,40 @@ export function createConflictEventsLayer({ source, overlayHost } = {}) {
      *
      * Sorted by toll, then by stable id so equal tolls keep one order.
      *
-     * @param {number} [limit=50] Maximum items to project.
-     * @returns {Array<{id: string, ordinal: number, lead: string, text: string, accent: string}>}
+     * Each item carries the event's calendar day and actors as a second line:
+     * the severity and place are not enough to identify one event among many.
+     * A selected event outside the top slice is prepended, so clicking a dot
+     * always lands on a row the window can show.
+     *
+     * @param {number} [limit=50] How many of the deadliest events to project;
+     *   a selected extra may add one.
+     * @param {string|null} [extraId=null] A selected event to include even when
+     *   it falls outside the top `limit`.
+     * @returns {Array<{id: string, ordinal: number, lead: string, text: string,
+     *   details: string, date: string|null, actors: string|null,
+     *   accent: string}>}
      */
-    getRecentEvents(limit = 50) {
+    getRecentEvents(limit = 50, extraId = null) {
       const count = Number.isFinite(limit)
         ? Math.max(1, Math.floor(limit))
         : 50;
-      return _rows
+      const sorted = _rows
         .slice()
         .sort(
           (a, b) =>
             (b.fatalities ?? 0) - (a.fatalities ?? 0) ||
             String(a.stableId).localeCompare(String(b.stableId)),
-        )
-        .slice(0, count)
-        .map((row, index) => ({
+        );
+      const itemFor = (row, index) => {
+        const date = Number.isFinite(row.timeMs)
+          ? formatDate(row.timeMs, {
+              month: 'short',
+              day: 'numeric',
+              timeZone: 'UTC',
+            })
+          : null;
+        const actors = row.actors || null;
+        return {
           id: row.stableId,
           ordinal: index + 1,
           lead:
@@ -231,8 +342,18 @@ export function createConflictEventsLayer({ source, overlayHost } = {}) {
               ? tn(row.fatalities, '{count} killed', '{count} killed')
               : t('Incident'),
           text: [row.type, row.country].filter(Boolean).join(' · '),
+          details: [date, actors].filter(Boolean).join(' · '),
+          date,
+          actors,
           accent: fatalityColor(row.fatalities).toCssColorString(),
-        }));
+        };
+      };
+      const items = sorted.slice(0, count).map(itemFor);
+      if (extraId && !items.some((item) => item.id === extraId)) {
+        const index = sorted.findIndex((row) => row.stableId === extraId);
+        if (index >= count) items.unshift(itemFor(sorted[index], index));
+      }
+      return items;
     },
 
     /**
@@ -275,6 +396,7 @@ export function createConflictEventsLayer({ source, overlayHost } = {}) {
       return {
         count: _count,
         lastUpdate: _lastUpdate,
+        generatedAt: _generatedAt,
         lastError: _lastError,
       };
     },
@@ -321,6 +443,7 @@ export function createConflictEventsLayer({ source, overlayHost } = {}) {
         enabled: _enabled,
         count: _count,
         lastUpdate: _lastUpdate,
+        generatedAt: _generatedAt,
         lastError: _lastError,
       };
     },

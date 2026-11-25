@@ -21,6 +21,7 @@ import {
  */
 
 import { t, msg, tn, registerUnsavedWork } from './i18n/index.js';
+import { KEY_SETUP_OPEN_EVENT } from './keySetupCore.mjs';
 
 /**
  * Chip label — pure, exported for tests (keySetup.test.mjs pins the English).
@@ -94,6 +95,8 @@ const SAVE_REFUSALS = Object.freeze({
     'The key was not saved: the existing configuration could not be read, so nothing was changed',
   ),
   'write-failed': msg('Could not write the {store} store'),
+  'no-key': msg('Save this key first; there is nothing to test.'),
+  'not-testable': msg('This provider has no server-side key test.'),
 });
 
 /**
@@ -265,6 +268,31 @@ export function openaiCheckText(check) {
   });
 }
 
+/**
+ * The post-test ACLED answer as one panel sentence. A 401 is a refused login;
+ * 403 means the login worked but the account has no API access yet — the two
+ * states need different fixes, so they never collapse into one message.
+ * Pure, exported for tests.
+ * @param {{status?: number|null}|null} check
+ * @returns {string}
+ */
+export function acledCheckText(check) {
+  if (check?.status === 200) return t('ACLED accepted the credentials.');
+  if (check?.status === 401) return t('ACLED rejected the credentials');
+  if (check?.status === 403)
+    return t('ACLED denied API access for this account');
+  if (check?.status == null) return t('ACLED did not answer');
+  return t(
+    'ACLED answered {status} — verify the account on the ACLED portal.',
+    { status: String(check.status) },
+  );
+}
+
+/** The provider's own verdict, rendered by the row that was tested. */
+export function keyCheckText(id, check) {
+  return id === 'acled' ? acledCheckText(check) : openaiCheckText(check);
+}
+
 function updateCloudVoiceAuthControl(auth, busy = false) {
   const mode = readStoredCloudVoiceAuthMode();
   const state = auth.querySelector('.key-setup-cloud-auth-state');
@@ -285,8 +313,25 @@ function updateCloudVoiceAuthControl(auth, busy = false) {
   toggle.setAttribute('aria-disabled', String(busy));
 }
 
+/**
+ * The rendered row for one registry id, or null. Rows are compared by their
+ * dataset rather than interpolated into a selector: an event detail is not a
+ * trusted CSS fragment.
+ * @param {{querySelectorAll?: Function}|null} host
+ * @param {unknown} keyId
+ * @returns {object|null}
+ */
+export function keySetupRowFor(host, keyId) {
+  const id = String(keyId ?? '');
+  if (!id || typeof host?.querySelectorAll !== 'function') return null;
+  for (const row of host.querySelectorAll('.key-setup-row')) {
+    if (row?.dataset?.keyId === id) return row;
+  }
+  return null;
+}
+
 /** Build one key row. All content is our own registry text, set via textContent. */
-function buildRow(documentRef, key, openaiCheck = null) {
+export function buildRow(documentRef, key, openaiCheck = null) {
   const row = documentRef.createElement('section');
   row.className = 'key-setup-row';
   row.dataset.keyId = key.id;
@@ -375,6 +420,23 @@ function buildRow(documentRef, key, openaiCheck = null) {
     }
     row.append(fields);
   }
+  if (key.testable && key.set) {
+    // The button re-tests the key ALREADY saved: the server reads it from its
+    // own environment (POST /api/setup/test-key) and no value crosses the page.
+    const actions = documentRef.createElement('div');
+    actions.className = 'key-setup-actions';
+    const test = documentRef.createElement('button');
+    test.type = 'button';
+    test.className = 'key-setup-test';
+    test.dataset.keySetupTest = key.id;
+    test.textContent = t('TEST KEY');
+    test.setAttribute(
+      'aria-label',
+      t('Test the saved {title} key', { title: key.title }),
+    );
+    actions.append(test);
+    row.append(actions);
+  }
   if (key.id === 'openai') {
     const auth = documentRef.createElement('div');
     auth.className = 'key-setup-cloud-auth';
@@ -393,7 +455,8 @@ function buildRow(documentRef, key, openaiCheck = null) {
       // in the row until the next save or re-render — there is no way to
       // pin this to a status whose provider answer was never asked.
       const check = documentRef.createElement('p');
-      check.className = 'key-setup-openai-check';
+      check.className = 'key-setup-check';
+      check.dataset.keySetupCheck = key.id;
       check.textContent = openaiCheckText(openaiCheck);
       row.append(check);
     }
@@ -536,15 +599,31 @@ export async function initKeySetup({
     onEscape: () => close(),
   });
 
-  const openDialog = () => {
-    if (disposed || open) return;
+  const focusKeyRow = (keyId) => {
+    const row = keySetupRowFor(rowsHost, keyId);
+    if (!row) return false;
+    row.scrollIntoView?.({ block: 'nearest' });
+    row.querySelector?.('input')?.focus?.({ preventScroll: true });
+    return true;
+  };
+
+  const openDialog = (options = {}) => {
+    if (disposed) return;
+    // A chip click passes its MouseEvent; only `detail.keyId` from a surface
+    // asking for one row is meaningful.
+    const keyId = options?.keyId;
+    if (open) {
+      focusKeyRow(keyId);
+      return;
+    }
     open = true;
     keyboard.activate();
     root.hidden = false;
     globalThis.requestAnimationFrame?.(() => {
       if (!open) return;
       root.classList.add('visible');
-      root.querySelector('input')?.focus?.({ preventScroll: true });
+      if (!focusKeyRow(keyId))
+        root.querySelector('input')?.focus?.({ preventScroll: true });
     });
   };
 
@@ -706,6 +785,11 @@ export async function initKeySetup({
   chip.addEventListener('click', openDialog);
   closeButton?.addEventListener('click', close);
   applyButton?.addEventListener('click', onApply);
+  // A layer that names a missing key can open the exact row that fixes it.
+  const onOpenRequest = (event) => {
+    if (!disposed) openDialog({ keyId: event?.detail?.keyId });
+  };
+  documentRef?.addEventListener?.(KEY_SETUP_OPEN_EVENT, onOpenRequest);
   root.dataset.ready = 'true';
   // Remove buttons are rendered per row; delegate so re-renders stay wired.
   rowsHost?.addEventListener('click', (event) => {
@@ -820,6 +904,57 @@ export async function initKeySetup({
       })();
       return;
     }
+    const testButton = event.target?.closest?.('[data-key-setup-test]');
+    if (testButton && !disposed) {
+      const id = testButton.dataset.keySetupTest;
+      const row = testButton.closest?.('.key-setup-row');
+      if (!id || !row || testButton.disabled) return;
+      let result = row.querySelector('[data-key-setup-check]');
+      if (!result) {
+        result = documentRef.createElement('p');
+        result.className = 'key-setup-check';
+        result.dataset.keySetupCheck = id;
+        row.append(result);
+      }
+      const label = testButton.textContent;
+      testButton.disabled = true;
+      testButton.textContent = t('TESTING…');
+      result.hidden = false;
+      result.textContent = t('TESTING…');
+      say(t('TESTING…'));
+      void (async () => {
+        try {
+          const response = await doFetch('/api/setup/test-key', {
+            method: 'POST',
+            signal: lifetime.signal,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (disposed || lifetime.signal.aborted) return;
+          if (!response.ok || !payload.ok) {
+            const text = saveRefusalText(payload, response.status);
+            result.textContent = text;
+            say(text);
+            return;
+          }
+          const text = keyCheckText(id, payload.check);
+          result.textContent = text;
+          say(text);
+        } catch (error) {
+          if (disposed || lifetime.signal.aborted) return;
+          const text = t('Test failed: {detail}', {
+            detail: error?.message || error,
+          });
+          result.textContent = text;
+          say(text);
+        } finally {
+          testButton.disabled = false;
+          testButton.textContent = label;
+        }
+      })();
+      return;
+    }
     const button = event.target?.closest?.('[data-key-setup-remove]');
     if (disposed || !button || busy) return;
     let envVars = [];
@@ -859,6 +994,7 @@ export async function initKeySetup({
   disposeControls = () => {
     open = false;
     keyboard.destroy();
+    documentRef?.removeEventListener?.(KEY_SETUP_OPEN_EVENT, onOpenRequest);
     chip.removeEventListener('click', openDialog);
     closeButton?.removeEventListener('click', close);
     applyButton?.removeEventListener('click', onApply);

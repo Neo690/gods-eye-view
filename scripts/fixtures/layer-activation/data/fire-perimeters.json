@@ -1,0 +1,134 @@
+{
+  "fetchedAt": 1795422842281,
+  "rows": [
+    {
+      "stableId": "2026-ALALF-000531",
+      "name": "Tedford",
+      "acres": 10,
+      "containedPct": null,
+      "state": "US-AL",
+      "category": "WF",
+      "discoveredTime": 1794691997000,
+      "updatedTime": 1794844162515,
+      "cause": "Undetermined",
+      "behavior": null,
+      "personnel": null,
+      "county": "Lawrence",
+      "costToDate": null,
+      "complexity": null,
+      "complexName": null,
+      "polygons": [
+        [
+          [
+            [
+              -97.74,
+              30.27
+            ],
+            [
+              -97.72999999999999,
+              30.27
+            ],
+            [
+              -97.72999999999999,
+              30.28
+            ],
+            [
+              -97.74,
+              30.28
+            ],
+            [
+              -97.74,
+              30.27
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "stableId": "2026-ALALF-000533",
+      "name": "Wolf Skull Assist",
+      "acres": 55,
+      "containedPct": null,
+      "state": "US-AL",
+      "category": "WF",
+      "discoveredTime": 1795007340000,
+      "updatedTime": 1795388300187,
+      "cause": "Undetermined",
+      "behavior": null,
+      "personnel": null,
+      "county": "Talladega",
+      "costToDate": null,
+      "complexity": null,
+      "complexName": null,
+      "polygons": [
+        [
+          [
+            [
+              -97.72,
+              30.29
+            ],
+            [
+              -97.71,
+              30.29
+            ],
+            [
+              -97.71,
+              30.3
+            ],
+            [
+              -97.72,
+              30.3
+            ],
+            [
+              -97.72,
+              30.29
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "stableId": "2026-AROUF-003218",
+      "name": "Spring Mountain",
+      "acres": 15.8,
+      "containedPct": null,
+      "state": "US-OK",
+      "category": "WF",
+      "discoveredTime": 1794756944000,
+      "updatedTime": 1794932480000,
+      "cause": "Human",
+      "behavior": null,
+      "personnel": null,
+      "county": "Le Flore",
+      "costToDate": null,
+      "complexity": "Type 5 Incident",
+      "complexName": null,
+      "polygons": [
+        [
+          [
+            [
+              -97.69999999999999,
+              30.31
+            ],
+            [
+              -97.68999999999998,
+              30.31
+            ],
+            [
+              -97.68999999999998,
+              30.32
+            ],
+            [
+              -97.69999999999999,
+              30.32
+            ],
+            [
+              -97.69999999999999,
+              30.31
+            ]
+          ]
+        ]
+      ]
+    }
+  ]
+}

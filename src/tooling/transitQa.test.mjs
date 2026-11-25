@@ -383,6 +383,7 @@ test('sensor sampler waits for postRender and reads framebuffer pixels; stopped 
   };
   globalThis.document = {
     getElementById: () => null,
+    querySelectorAll: () => [],
     createElement: () => ({
       getContext: () => ({
         drawImage() {},
@@ -391,6 +392,14 @@ test('sensor sampler waits for postRender and reads framebuffer pixels; stopped 
     }),
   };
   globalThis.window = {
+    // The sampler resolves the overlay module through this cache in the app;
+    // without it the callback falls back to a browser-only root import.
+    __gevQaModules: {
+      worldOverlay: {
+        WORLD_OVERLAY_OCCLUDER_SELECTORS: [],
+        getOverlayPaintRect: () => null,
+      },
+    },
     __godsEyeView: {
       viewer: { scene },
       dataManager: {
@@ -566,6 +575,60 @@ test('sensor sampler waits for postRender and reads framebuffer pixels; stopped 
     'stroke centre is sampled away from the top label plate',
   );
   document.getElementById = () => null;
+  // The QA cache is the app's overlay seam, so make it non-vacuous: an
+  // occluder selector must reject the sprite and releasing it must restore
+  // eligibility. A stub that always returns no overlay would silently skip
+  // this whole branch of the sampler.
+  const overlay = window.__gevQaModules.worldOverlay;
+  const occluder = {
+    hidden: false,
+    checkVisibility: () => true,
+    getBoundingClientRect: () => ({
+      left: 0,
+      top: 0,
+      width: 400,
+      height: 400,
+    }),
+  };
+  document.querySelectorAll = (selector) =>
+    selector === '#qa-occluder' ? [occluder] : [];
+  overlay.WORLD_OVERLAY_OCCLUDER_SELECTORS = ['#qa-occluder'];
+  assert.equal(
+    (await sampleTransitPixels(page, {})).length,
+    0,
+    'an occluder panel from the shared overlay must reject the sprite',
+  );
+  overlay.WORLD_OVERLAY_OCCLUDER_SELECTORS = [];
+  assert.equal(
+    (await sampleTransitPixels(page, {})).length,
+    1,
+    'removing the occluder keeps the sprite eligible',
+  );
+  // A selected card is looked up through the same cache. Point the selection
+  // at another key so the bus stays in the unselected sprite set and the card
+  // rectangle alone decides eligibility.
+  const transitStateForTest = sampledLayer._transitStateForTest;
+  sampledLayer._transitStateForTest = () => {
+    const state = transitStateForTest();
+    state._selectedKey = 'other';
+    return state;
+  };
+  overlay.getOverlayPaintRect = (sourceId, entryId) =>
+    sourceId === 'transit-selected' && entryId === 'other'
+      ? { x: 190, y: 190, w: 20, h: 20 }
+      : null;
+  assert.equal(
+    (await sampleTransitPixels(page, {})).length,
+    0,
+    'a selected-card rectangle from the shared overlay must reject a nearby sprite',
+  );
+  sampledLayer._transitStateForTest = transitStateForTest;
+  overlay.getOverlayPaintRect = () => null;
+  assert.equal(
+    (await sampleTransitPixels(page, {})).length,
+    1,
+    'releasing the selected-card rectangle keeps the sprite eligible',
+  );
   render = false;
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const pending = sampleTransitPixels(page, {});

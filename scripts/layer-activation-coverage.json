@@ -1,0 +1,291 @@
+{
+  "version": 1,
+  "description": "Coverage contract for scripts/qa-layer-activation-matrix.mjs. Every runtime layer id must be listed with at least one network fixture id OR a specific, reviewable exception. The matrix validates this file against the runtime layer registry and fails closed on a missing, orphaned or contradictory entry. The contract block is the ratchet: fixture-backed coverage may only rise and exceptions may only fall without a deliberate edit to those numbers.",
+  "contract": {
+    "fixtureBackedMin": 37,
+    "exceptionsMax": 17
+  },
+  "layers": {
+    "bhote-koshi-2026": {
+      "exception": "Bundled 2026 event package (imagery, reconstruction and terrain) ships inside the app; enabling it performs no network read.",
+      "data": { "kind": "count", "min": 1 },
+      "credit": "Bhote Koshi|Vantor|GeoPera"
+    },
+    "bhote-koshi-locator": {
+      "exception": "Bundled GeoPera river centerline; enabling it performs no network read.",
+      "data": { "kind": "count", "min": 1 },
+      "credit": "GeoPera"
+    },
+    "flights": {
+      "fixtures": ["flights", "adsbdb"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "OpenSky|adsb\\.lol"
+    },
+    "military": {
+      "fixtures": ["military"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "adsb\\.lol"
+    },
+    "local-adsb": {
+      "exception": "Reads a user's own RTL-SDR/WebUSB receiver; there is no server or third-party network source to fixture.",
+      "data": { "kind": "activation" },
+      "creditException": "Receiver data is supplied by the user's own hardware; no third-party attribution is registered."
+    },
+    "earthquakes": {
+      "fixtures": ["earthquakes"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "USGS|Geological Survey"
+    },
+    "emsc-seismic": {
+      "fixtures": ["emsc"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "EMSC|seismicportal"
+    },
+    "conflict-events": {
+      "fixtures": ["conflicts"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "ACLED"
+    },
+    "insider": {
+      "fixtures": ["insider"],
+      "data": { "kind": "count", "min": 1 },
+      "creditException": "SEC EDGAR filings are non-spatial analyst rows; no Cesium credit is registered for this layer."
+    },
+    "global-disasters": {
+      "fixtures": ["gdacs", "effis", "copernicus"],
+      "data": { "kind": "count", "min": 3 },
+      "credit": "GDACS|EFFIS|Copernicus"
+    },
+    "ai-agent": {
+      "exception": "Sentinel is an analyst assistant with no map dataset of its own; it has no network source to fixture.",
+      "data": { "kind": "activation" },
+      "creditException": "The assistant renders no third-party map data and registers no Cesium credit."
+    },
+    "radiation": {
+      "fixtures": ["radiation"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "BfS|Health Canada|Safecast|radmon"
+    },
+    "space-weather": {
+      "fixtures": ["space-weather"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "NOAA SWPC"
+    },
+    "orbit-changes": {
+      "fixtures": ["tle"],
+      "note": "The first enable records a baseline and by design reports zero changes; a second epoch is required before a changed TLE can be compared. Activation, credit and teardown are still verified here.",
+      "data": { "kind": "activation" },
+      "credit": "CelesTrak"
+    },
+    "satellite-watch": {
+      "fixtures": ["tle-catalogue", "tle-catnr", "n2yo-above", "spacetrack"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "TLE API|Space-Track|CelesTrak"
+    },
+    "air-quality": {
+      "fixtures": ["air-quality"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "ECCC|Environment and Climate Change"
+    },
+    "fire-perimeters": {
+      "fixtures": ["fire-perimeters"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "WFIGS|National Interagency Fire"
+    },
+    "gnss-integrity": {
+      "fixtures": ["gnss"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "adsb\\.lol"
+    },
+    "cell-towers": {
+      "fixtures": ["cell-towers"],
+      "data": { "kind": "count", "min": 1 },
+      "creditException": "The layer carries its ANFR/OpenCelliD attribution in its own source row; it does not register a Cesium credit."
+    },
+    "osm-places": {
+      "fixtures": ["overpass"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "OpenStreetMap"
+    },
+    "iot-sensors": {
+      "fixtures": ["iot-sensors"],
+      "data": { "kind": "count", "min": 1 },
+      "creditException": "The layer carries its openSenseMap/TTN attribution in its own source row; it does not register a Cesium credit."
+    },
+    "netmon": {
+      "fixtures": ["netmon"],
+      "data": { "kind": "count", "min": 1 },
+      "creditException": "Nodes are the operator's own authorized targets; there is no third-party data source to credit."
+    },
+    "private-wifi": {
+      "exception": "Reads a user-selected local Wi-Fi capture file; there is no network source to fixture.",
+      "data": { "kind": "activation" },
+      "creditException": "User-supplied capture data; no third-party attribution is registered."
+    },
+    "device-sweep": {
+      "exception": "Drives the browser's Web Bluetooth/USB/NFC capability against nearby hardware; no server source exists to fixture.",
+      "data": { "kind": "activation" },
+      "creditException": "Local hardware scan; no third-party map data is shown."
+    },
+    "s2-ghostmaps": {
+      "fixtures": ["ghostmaps", "ghostmaps-events", "ghostmaps-file"],
+      "data": { "kind": "updated" },
+      "credit": "S2 Underground|GhostMaps"
+    },
+    "alpr-cameras": {
+      "exception": "Camera tiles are a signed MVT/OnEarth journey with interactive framing; qa-alpr-journey.mjs owns that data contract, and the matrix still verifies activation, credit and teardown.",
+      "data": { "kind": "activation" },
+      "creditException": "The layer registers attribution dynamically when tile data is shown; the exception is recorded here because the matrix does not exercise the MVT journey."
+    },
+    "street-level": {
+      "exception": "Requires Mapillary photo coverage and an interactive panorama viewer; qa-street-level.mjs owns that imagery contract.",
+      "data": { "kind": "activation" },
+      "credit": "Mapillary"
+    },
+    "satellites": {
+      "fixtures": ["tle"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "CelesTrak"
+    },
+    "rocket-launches": {
+      "fixtures": ["launches"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "Launch Library|LL2"
+    },
+    "traffic": {
+      "fixtures": ["traffic"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "TomTom|OpenStreetMap",
+      "view": "local",
+      "timeoutMs": 30000,
+      "freshPage": true
+    },
+    "cctv": {
+      "fixtures": ["cctv", "cctv-frame"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "Austin|Caltrans|CCTV",
+      "view": "local"
+    },
+    "camera-advisories": {
+      "fixtures": ["camera-advisories"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "CISA|NVD"
+    },
+    "plate-reader": {
+      "exception": "Runs an on-device plate-detection model against a user camera or image; there is no network source to fixture.",
+      "data": { "kind": "activation" },
+      "creditException": "On-device inference over user-supplied imagery; no third-party map data is shown."
+    },
+    "face-privacy": {
+      "exception": "Runs an on-device face-detection model against a user camera or image; there is no network source to fixture.",
+      "data": { "kind": "activation" },
+      "creditException": "On-device inference over user-supplied imagery; no third-party map data is shown."
+    },
+    "radio": {
+      "fixtures": ["radio"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "Radio Browser"
+    },
+    "transit": {
+      "fixtures": ["transit-feeds", "transit-vehicles"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "GTFS|MBTA|Transit",
+      "view": "local"
+    },
+    "railway-stations": {
+      "fixtures": ["overpass", "rail-departures"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "OpenStreetMap|SNCF",
+      "view": "close"
+    },
+    "bikeshare": {
+      "fixtures": ["gbfs"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "GBFS|bikeshare",
+      "view": "street"
+    },
+    "directions": {
+      "exception": "A route only exists after the operator picks two points and runs an OSRM query; qa-directions.mjs owns that interactive contract.",
+      "data": { "kind": "activation" },
+      "credit": "OSRM"
+    },
+    "recent-imagery": {
+      "exception": "NASA GIBS imagery is a tiled raster journey with date selection; qa-recent-imagery.mjs owns that imagery contract.",
+      "data": { "kind": "activation" },
+      "creditException": "GIBS attribution is registered when an imagery frame is displayed, which the activation-only exception does not render; qa-recent-imagery.mjs verifies the credited imagery path."
+    },
+    "ais-live-vessels": {
+      "fixtures": ["vessels"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "AISStream",
+      "view": "regional"
+    },
+    "military-installations": {
+      "fixtures": ["military-installations", "google-places"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "OpenStreetMap",
+      "view": "close"
+    },
+    "military-awareness": {
+      "exception": "A derived view over flights, military aircraft, vessels and installations; it owns no data source of its own.",
+      "data": { "kind": "activation" },
+      "creditException": "Derived view; every underlying source carries its own credit."
+    },
+    "wind": {
+      "fixtures": ["wind", "wind-grid"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "NOAA GFS|GFS"
+    },
+    "weather-radar": {
+      "fixtures": ["weather-manifest", "weather-image"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "NOAA"
+    },
+    "weather-satellite": {
+      "fixtures": ["weather-manifest", "weather-image"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "NOAA"
+    },
+    "weather-lightning": {
+      "fixtures": ["weather-manifest", "weather-image"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "NOAA"
+    },
+    "weather-cyclones": {
+      "fixtures": ["cyclones"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "NOAA"
+    },
+    "local-datacenters": {
+      "exception": "Uses the app's bundled local OpenStreetMap extract; enabling it performs no network read.",
+      "data": { "kind": "count", "min": 1 },
+      "credit": "OpenStreetMap|datacenter"
+    },
+    "local-dams": {
+      "exception": "Uses the app's bundled Open Infrastructure Map extract; enabling it performs no network read.",
+      "data": { "kind": "count", "min": 1 },
+      "credit": "Open Infrastructure Map|dam"
+    },
+    "israeli-transport": {
+      "exception": "Bundled Israeli transport/company reference dataset; enabling it performs no network read.",
+      "data": { "kind": "count", "min": 1 },
+      "creditException": "Bundled public-reference data; the layer carries its own source links in the panel."
+    },
+    "telegeography-submarine-cables": {
+      "exception": "Bundled TeleGeography cable and landing-point GeoJSON; enabling it performs no network read.",
+      "data": { "kind": "count", "min": 1 },
+      "credit": "TeleGeography"
+    },
+    "local-firms": {
+      "fixtures": ["firms"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "NASA FIRMS|FIRMS"
+    },
+    "fishing-effort": {
+      "fixtures": ["fishing"],
+      "data": { "kind": "count", "min": 1 },
+      "credit": "Global Fishing Watch",
+      "view": "regional"
+    }
+  }
+}

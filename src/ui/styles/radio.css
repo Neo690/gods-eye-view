@@ -995,6 +995,7 @@ html:not([lang='en'])
 .data-row-list-item {
   counter-increment: gev-step;
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 6px;
   width: 100%;
@@ -1055,6 +1056,19 @@ html:not([lang='en'])
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A full-width second line under lead + text; the left padding clears the
+   step counter so it reads as the same entry, not a new one. */
+.data-row-list-details {
+  flex: 0 0 100%;
+  box-sizing: border-box;
+  padding-left: 19px;
+  color: var(--text-dim);
+  font-size: 0.9em;
+  line-height: 1.3;
+  opacity: 0.8;
+  overflow-wrap: anywhere;
 }
 
 /* A translated instruction wraps under itself rather than losing its tail:

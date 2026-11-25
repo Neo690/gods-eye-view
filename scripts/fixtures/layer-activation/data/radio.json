@@ -1,0 +1,121 @@
+{
+  "stations": [
+    {
+      "id": "12e68964-5928-4623-b82e-4bf9a4963780",
+      "name": "RMC Info Talk Sport",
+      "lat": 47.27922900257085,
+      "lon": 3.1640625000000004,
+      "streamUrl": "https://audio.bfmtv.com/rmcradio_128.mp3?aw_0_1st.playerId=RMC_audio_web&aggregator=RMC_audio_web",
+      "homepage": "https://rmc.bfmtv.com/",
+      "tags": [
+        "sports news"
+      ],
+      "languages": [
+        "french"
+      ],
+      "state": "",
+      "country": "France",
+      "countryCode": "FR",
+      "metadataTrust": "untrusted-community",
+      "codec": "MP3",
+      "bitrate": 128
+    },
+    {
+      "id": "1c3e8be2-5b14-4933-bad3-87cbc227cba4",
+      "name": "Deutschlandfunk | DLF | MP3 128k",
+      "lat": 52.4802578,
+      "lon": 13.3347639,
+      "streamUrl": "https://st01.sslstream.dlf.de/dlf/01/128/mp3/stream.mp3?aggregator=web",
+      "homepage": "https://www.deutschlandfunk.de/",
+      "tags": [
+        "culture",
+        "news",
+        "public service",
+        "information"
+      ],
+      "languages": [
+        "german"
+      ],
+      "state": "Berlin",
+      "country": "Germany",
+      "countryCode": "DE",
+      "metadataTrust": "untrusted-community",
+      "codec": "MP3",
+      "bitrate": 128
+    },
+    {
+      "id": "717e3749-b9e8-4497-bd6a-61ccec935922",
+      "name": "Deutschlandfunk | DLF | AAC 192k",
+      "lat": 52.4802578,
+      "lon": 13.3347639,
+      "streamUrl": "https://st01.sslstream.dlf.de/dlf/01/high/aac/stream.aac?aggregator=web",
+      "homepage": "https://www.deutschlandfunk.de/",
+      "tags": [
+        "culture",
+        "news",
+        "public service",
+        "information"
+      ],
+      "languages": [
+        "german"
+      ],
+      "state": "Berlin",
+      "country": "Germany",
+      "countryCode": "DE",
+      "metadataTrust": "untrusted-community",
+      "codec": "AAC",
+      "bitrate": 256
+    },
+    {
+      "id": "5532c4d9-616e-4d62-a49f-984a13e3189c",
+      "name": "50s 60s RETRO HITS",
+      "lat": 41.35825713137815,
+      "lon": 13.34703019410145,
+      "streamUrl": "https://stream.zeno.fm/pxzwykxbluitv",
+      "homepage": "https://zeno.fm/radio/50s-60s-retro-hits/",
+      "tags": [
+        "50s",
+        "60s",
+        "classic hits",
+        "classic rock",
+        "community radio",
+        "fm",
+        "hits",
+        "music",
+        "news",
+        "oldies",
+        "pop",
+        "pop rock",
+        "public radio",
+        "radio",
+        "retro",
+        "retro music",
+        "rock",
+        "rocknroll",
+        "talk"
+      ],
+      "languages": [
+        "english"
+      ],
+      "state": "Lazio",
+      "country": "Italy",
+      "countryCode": "IT",
+      "metadataTrust": "untrusted-community",
+      "codec": "MP3",
+      "bitrate": 128
+    }
+  ],
+  "updatedAt": "2026-11-23T08:34:02.281Z",
+  "stale": false,
+  "degraded": false,
+  "degradedReason": null,
+  "coverage": {
+    "successfulQueries": 8,
+    "totalQueries": 9,
+    "stationCount": 750,
+    "healthyStationMinimum": 375
+  },
+  "acceptedGeneration": 1,
+  "catalogInstance": "qa-fixture",
+  "rejectedStationCount": 0
+}

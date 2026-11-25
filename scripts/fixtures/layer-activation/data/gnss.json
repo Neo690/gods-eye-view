@@ -1,0 +1,66 @@
+{
+  "fetchedAt": 1795423576457,
+  "anchor": {
+    "lat": 30,
+    "lon": -97
+  },
+  "radiusNm": 250,
+  "classifier": "gev-nic-nacp-v2",
+  "rows": [
+    {
+      "hex": "qa3e8",
+      "lat": 30.26,
+      "lon": -97.74,
+      "nic": 0,
+      "nacp": 0,
+      "gpsLost": true,
+      "degraded": true
+    },
+    {
+      "hex": "qa3e9",
+      "lat": 30.270000000000003,
+      "lon": -97.72999999999999,
+      "nic": 0,
+      "nacp": 0,
+      "gpsLost": true,
+      "degraded": true
+    },
+    {
+      "hex": "qa3ea",
+      "lat": 30.28,
+      "lon": -97.72,
+      "nic": 0,
+      "nacp": 0,
+      "gpsLost": true,
+      "degraded": true
+    },
+    {
+      "hex": "qa3eb",
+      "lat": 30.290000000000003,
+      "lon": -97.71,
+      "nic": 0,
+      "nacp": 0,
+      "gpsLost": true,
+      "degraded": true
+    },
+    {
+      "hex": "qa3ec",
+      "lat": 30.3,
+      "lon": -97.69999999999999,
+      "nic": 0,
+      "nacp": 0,
+      "gpsLost": true,
+      "degraded": true
+    },
+    {
+      "hex": "qa3ed",
+      "lat": 30.310000000000002,
+      "lon": -97.69,
+      "nic": 0,
+      "nacp": 0,
+      "gpsLost": true,
+      "degraded": true
+    }
+  ],
+  "ageMs": 1000
+}

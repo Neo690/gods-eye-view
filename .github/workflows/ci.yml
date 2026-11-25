@@ -70,6 +70,12 @@ jobs:
       - name: Check package boundaries
         run: npm run check:boundaries
 
+      # Windows, Android and iOS publish from one web bundle, but each shell
+      # names its own identifier, artifact and version. This reads those
+      # declarations so a rename cannot leave one store on the previous asset.
+      - name: Check cross-platform release contracts
+        run: npm run qa:platform-contracts
+
       - name: Check published layer-token allocations
         if: github.event_name == 'pull_request'
         run: npm run layer-token:check -- --base-ref origin/main
@@ -178,12 +184,13 @@ jobs:
     # Sentinel rotation gate reuses this same Chrome/fonts/build/preview setup.
     name: Device Sweep browser gate
     runs-on: ubuntu-latest
-    # Two 12-minute gates and a 6-minute self-check plus the browser, build and
+    # Two 12-minute gates, their 10-minute self-check, the 20-minute layer
+    # activation matrix and its 10-minute self-check, plus browser, build and
     # preview setup: the job cap has to outlast them, so a slow gate times out
     # inside its own step and still uploads evidence instead of the job being
-    # cancelled mid-step. Each gate also runs after the previous one's failure,
-    # so three of them can spend their full budget in one run.
-    timeout-minutes: 42
+    # cancelled mid-step. Gates run after a previous gate's failure, so every
+    # one of them can spend its full budget in the same run.
+    timeout-minutes: 85
     env:
       GEV_REQUIRE_ALLOCATION_GATE: '0'
       # The browser is installed explicitly below. npm refuses dependency
@@ -291,6 +298,135 @@ jobs:
         timeout-minutes: 10
         run: npm run qa:sentinel-rotation -- --self-check --url "http://localhost:$PREVIEW_PORT"
 
+      # The activation matrix is deliberately a sibling of the two gates: it
+      # reuses this job's Chrome, production build and preview server, and it
+      # runs even when an earlier gate failed so one red gate cannot hide a
+      # layer that fails to activate. Every /api request a layer needs is
+      # answered by a fixture or an explicit passthrough; an unmatched route
+      # is a 503 that fails that layer, never a quiet skip. Its own budget is
+      # 20 minutes because it boots once and walks the runtime registry, not
+      # one layer per browser launch.
+      - name: Layer activation matrix
+        id: layer-activation-matrix
+        if: ${{ !cancelled() }}
+        timeout-minutes: 20
+        run: npm run qa:layer-matrix -- --url "http://localhost:$PREVIEW_PORT" --strict
+
+      # Sabotaged probes for the matrix's own assertions: an empty fixture must
+      # fail the data check, a removed attribution must fail the credit check,
+      # and a visible object left after disable must fail teardown. A green
+      # matrix whose checks cannot fail is not evidence.
+      - name: Layer activation matrix self-check
+        id: layer-activation-self-check
+        if: ${{ !cancelled() }}
+        timeout-minutes: 10
+        run: npm run qa:layer-matrix -- --self-check --url "http://localhost:$PREVIEW_PORT" --strict
+
+      # A green matrix still produces a useful baseline, and a red one needs
+      # its failing layers visible without opening the artifact. Write both
+      # outcomes to the job summary; the self-check is included when it ran.
+      - name: Summarize layer activation matrix
+        if: ${{ !cancelled() && steps.layer-activation-matrix.outcome != 'skipped' }}
+        run: |
+          node --input-type=module <<'EOF'
+          import { appendFileSync, readFileSync } from 'node:fs';
+
+          const reportPath = 'qa-artifacts/layer-activation/report.json';
+          const selfCheckPath = 'qa-artifacts/layer-activation/self-check.json';
+          const read = (path) => {
+            try {
+              return JSON.parse(readFileSync(path, 'utf8'));
+            } catch {
+              return null;
+            }
+          };
+          const cell = (value) =>
+            String(value ?? '')
+              .replace(/\|/g, '\\|')
+              .replace(/\r?\n/g, ' ')
+              .slice(0, 500);
+          const report = read(reportPath);
+          const selfCheck = read(selfCheckPath);
+          const lines = ['## Layer activation matrix', ''];
+
+          if (!report) {
+            lines.push('No matrix report was produced.');
+            appendFileSync(
+              process.env.GITHUB_STEP_SUMMARY,
+              `${lines.join('\n')}\n`,
+            );
+            process.exit(0);
+          }
+
+          const summary = report.summary ?? {};
+          const failedLayers = (report.layers ?? []).filter(
+            (layer) => layer.status !== 'PASS',
+          );
+          lines.push(
+            `Overall: **${report.ok ? 'PASS' : 'FAIL'}** · ${summary.passed ?? 0}/${summary.total ?? 0} layers passed`,
+          );
+          lines.push('');
+          lines.push(
+            `Fixture-backed ${summary.fixtureBacked ?? 0} · exceptions ${summary.exceptions ?? 0} · no-API ${summary.noApiActivations ?? 0} · unmocked API requests ${summary.unmockedApiRequests ?? 0}`,
+          );
+
+          if (failedLayers.length) {
+            lines.push('', '### Failing layers', '', '| Layer | Reason |', '|---|---|');
+            for (const layer of failedLayers) {
+              const reasons = [];
+              for (const [name, check] of [
+                ['data', layer.data],
+                ['credit', layer.credit],
+                ['teardown', layer.teardown],
+                ['network', layer.network],
+              ]) {
+                if (check && check.ok === false)
+                  reasons.push(`${name}: ${check.reason ?? 'failed'}`);
+              }
+              if (!reasons.length && layer.error)
+                reasons.push(String(layer.error));
+              lines.push(
+                `| \`${cell(layer.id)}\` | ${cell(reasons.join('; ') || 'failed')} |`,
+              );
+            }
+          } else {
+            lines.push('', 'No layer failed.');
+          }
+
+          if (summary.unmockedUrls?.length) {
+            lines.push('', '### Unmocked API requests', '');
+            for (const url of summary.unmockedUrls)
+              lines.push(`- \`${cell(url)}\``);
+          }
+          if (report.pageErrors?.length) {
+            lines.push('', '### Page errors', '');
+            for (const error of report.pageErrors.slice(0, 10))
+              lines.push(`- ${cell(`${error.type}: ${error.text}`)}`);
+          }
+
+          if (selfCheck) {
+            const failedChecks = (selfCheck.checks ?? []).filter(
+              (check) => !check.ok,
+            );
+            lines.push(
+              '',
+              `### Matrix self-check: **${selfCheck.ok ? 'PASS' : 'FAIL'}**`,
+            );
+            if (failedChecks.length) {
+              lines.push('', '| Check | Reason |', '|---|---|');
+              for (const check of failedChecks)
+                lines.push(
+                  `| ${cell(check.name)} | ${cell(check.detail || 'failed')} |`,
+                );
+            }
+          }
+
+          appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            `${lines.join('\n')}\n`,
+          );
+          EOF
+
       - name: Preview server log
         if: failure()
         run: cat preview.log
@@ -318,6 +454,18 @@ jobs:
         with:
           name: sentinel-rotation-gate-evidence
           path: qa-artifacts/sentinel-rotation/
+          retention-days: 14
+
+      # Matrix and self-check deliberately write separate files. Upload both
+      # whenever the matrix ran, including a green run: report.json is the
+      # baseline, and self-check.json proves the probes still bite. Keeping the
+      # report on success makes a later regression comparable with a good run.
+      - name: Upload layer activation evidence
+        if: ${{ !cancelled() && steps.layer-activation-matrix.outcome != 'skipped' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: layer-activation-matrix-evidence
+          path: qa-artifacts/layer-activation/
           retention-days: 14
 
   windows-onboarding:

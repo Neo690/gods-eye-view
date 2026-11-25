@@ -1,0 +1,34 @@
+{
+  "feeds": [
+    {
+      "id": "mbta",
+      "name": "MBTA",
+      "operator": "Massachusetts Bay Transportation Authority",
+      "region": "Boston, MA",
+      "center": {
+        "lat": 42.3601,
+        "lon": -71.0589
+      },
+      "loadRadiusKm": 70,
+      "license": "MassDOT Developers License Agreement",
+      "licenseUrl": "https://cdn.mbta.com/sites/default/files/2023-08/mbta-massdot-develop-license-agreement.pdf",
+      "attribution": "MBTA / MassDOT",
+      "historyRetention": true
+    },
+    {
+      "id": "capmetro-austin",
+      "name": "CapMetro",
+      "operator": "Capital Metropolitan Transportation Authority",
+      "region": "Austin, TX",
+      "center": {
+        "lat": 30.2672,
+        "lon": -97.7431
+      },
+      "loadRadiusKm": 60,
+      "license": "CapMetro Developer Tools license",
+      "licenseUrl": "https://www.capmetro.org/developertools",
+      "attribution": "Capital Metropolitan Transportation Authority — data.texas.gov",
+      "historyRetention": false
+    }
+  ]
+}

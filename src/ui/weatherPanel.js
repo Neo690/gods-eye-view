@@ -169,8 +169,17 @@ export function createWeatherPanel({
     });
     const models = active.map((entry) => {
       const { id, icon, summary, legend = [], list } = entry;
+      // Layers may expose the legend as an entry array or as the shared
+      // {colors, labels} descriptor. Normalise here so both reach one renderer.
+      const legendEntries = Array.isArray(legend)
+        ? legend
+        : (legend?.labels || []).map((label, index) => ({
+            label,
+            color: legend.colors?.[index],
+          }));
       // Discrete classes (storm geometry, AQHI bands) list swatches, not a ramp.
-      const categorical = entry.legendCategorical === true;
+      const categorical =
+        entry.legendCategorical === true || legend?.categorical === true;
       let detail = summary.detail;
       const product = state.products.find((item) => item.id === id);
       if (OBSERVED.has(id)) {
@@ -212,16 +221,16 @@ export function createWeatherPanel({
         type: 'legend',
         legend: {
           categorical,
-          colors: legend.map(({ color }) => color),
-          labels: legend.map(({ label }) => label),
+          colors: legendEntries.map(({ color }) => color),
+          labels: legendEntries.map(({ label }) => label),
           units: categorical ? '' : summary.units,
-          zeroIndex: legend.findIndex(({ label }) => label === '0'),
+          zeroIndex: legendEntries.findIndex(({ label }) => label === '0'),
         },
       };
       const blocks = [
         ...(list?.items?.length ? [{ id: 'list', type: 'list', list }] : []),
         { id: 'details', type: 'lines', lines },
-        ...(legend.length ? [legendBlock] : []),
+        ...(legendEntries.length ? [legendBlock] : []),
         ...(summary.settings?.length
           ? [{ id: 'settings', type: 'settings', settings: summary.settings }]
           : []),

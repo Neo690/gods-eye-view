@@ -1,0 +1,90 @@
+name: Published assets gate
+
+# Post-publish gate over the rolling releases the three packaging workflows
+# write. A release page cannot tell a good artifact from a broken one: a feed
+# that hashes different bytes, an APK signed with the wrong key, or an `.ipa`
+# left behind after the Apple secrets went away all look the same. This job
+# downloads what is actually published and checks it:
+#
+#   desktop-latest  latest.yml's size and base64 SHA-512 against the installer
+#                   byte-for-byte, and its version against the release notes.
+#   apk-latest      the APK's package, versionName/versionCode, apksigner
+#                   signature and v2/v3 scheme; when ANDROID_CERT_SHA256 is set
+#                   the signer must also match that pinned certificate.
+#   ios-latest      no `.ipa` while the Apple signing secrets are absent; the
+#                   `.ipa` present when they are configured.
+#
+# It also runs daily: removing a repository secret triggers no workflow, so a
+# schedule is the only way the "no IPA without signing" promise is checked
+# without a human remembering to.
+#
+# The gate runs on the default branch (a `workflow_run` job always does), so it
+# checks the released artifacts with the checks that branch has merged.
+on:
+  workflow_run:
+    workflows: ['Windows installer', 'Android APK', 'iOS app']
+    types: [completed]
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: published-assets-gate
+  # Three publishers can finish seconds apart; the surviving run checks the same
+  # rolling releases, so a cancelled duplicate only saves a second download.
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify the published releases
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.14.0
+
+      # aapt2 and apksigner come from the Android SDK the ubuntu image installs;
+      # the APK workflow already depends on the same `$ANDROID_HOME/build-tools`.
+      # Printing the path means a missing tool is a named failure, not a mystery.
+      - name: Report the Android tools
+        run: |
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+          ls -d "$ANDROID_HOME"/build-tools/* 2>/dev/null || echo 'no build-tools directory'
+
+      - name: Verify the published assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Every secret the iOS packaging job needs. Absent, that job is
+          # skipped and the release must carry no IPA; the gate is told which
+          # case it is looking at rather than guessing from an empty secret.
+          APPLE_SIGNING_SECRETS: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.APPLE_PROVISIONING_PROFILE_BASE64 != '' && secrets.APPLE_TEAM_ID != '' }}
+          # Optional pin: set this repository variable to the SHA-256 of the
+          # signing certificate so the gate also proves the APK is signed by
+          # the key the phones already trust.
+          ANDROID_CERT_SHA256: ${{ vars.ANDROID_CERT_SHA256 }}
+        run: >-
+          node scripts/verify-published-assets.mjs
+          --repo "$GITHUB_REPOSITORY"
+          --json published-assets.json
+
+      # The report is kept whether the gate passed or failed: on a failure it
+      # names the release, the expected and the observed value, which is what a
+      # later investigation of a rolling release has to work from.
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: published-assets-report
+          path: published-assets.json
+          if-no-files-found: ignore
+          retention-days: 30

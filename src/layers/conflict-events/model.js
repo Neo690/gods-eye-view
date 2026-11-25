@@ -7,7 +7,7 @@ export const CONFLICT_OVERLAY_COLLISION_CAPACITY = 60;
 
 /**
  * Severity by reported fatalities. Everything without a casualty count
- * (GDELT) lands in the lowest band, which reads as "reported incident".
+ * lands in the lowest band, which reads as "reported incident".
  */
 export function fatalityColor(fatalities) {
   const count = Number(fatalities);

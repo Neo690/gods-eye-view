@@ -314,7 +314,11 @@ chip in the bottom-right corner: Provider Settings lists every supported key,
 what it switches on, and where to get it. Paste, hit **SAVE KEYS**, and the app
 restarts itself with the new capability on. Once everything is configured the
 chip reads **POWERED UP** — and if a compact layout hides it, `?setup=1`
-reopens the same panel.
+reopens the same panel. A saved key that has a cheap provider check can be
+re-tested without saving it again: **TEST KEY** in the OPENAI or ACLED row asks
+the local server to call the provider with the stored credential and shows the
+answer in that row. The ACLED check also reads one event, so it separates a
+refused login from an account that still needs API access.
 
 - **Where keys land:** Pinokio → the app's ignored `pinokio/ENVIRONMENT`; a
   terminal clone → the repo-root `.env`. Either file is made owner-only
@@ -695,6 +699,8 @@ push later edits into it — so add each name of the tables below by hand once.
 | `FIRMS_MAP_KEY` | 🔥 Active fires for everything reading **the server** — a browser at the service URL, the desktop app. Unset, `/api/firms` answers `{"error":"no_key"}`. The phone's own fire layer reads the keyless NASA feed through the shell and draws either way. |
 | `OPENSKY_CLIENT_ID` + `OPENSKY_CLIENT_SECRET` | ✈️ Your own flight-polling allowance for the server. Without a pair the shared quota answers `429 OpenSky rate limited`; the phone then reads ADS-B from its own address instead of going empty. |
 | `ADSBX_API_KEY` | 🎖️ Optional third military feed (ADS-B Exchange) merged into `/api/military`. Off unless set — the layer already merges keyless adsb.lol and adsb.fi — and its terms forbid redistributing the data, so keep it to your own key and use. |
+| `ACLED_EMAIL` + `ACLED_PASSWORD` | ⚔️ Conflict Events through `/api/conflicts`: the server logs in to myACLED and serves the last good snapshot through a short outage. Unset, the route answers `{"error":"no_key"}` and the layer says the ACLED account is missing. Server-side only. |
+| `OPENCELLID_API_KEY` | 📡 Worldwide estimated cell towers in Radio Sites: `/api/cell-towers` asks OpenCelliD outside France. Unset, it answers from the bundled ANFR extract (France only). Server-side only. |
 | `OPENSKY_AUTH_MODE` | `auto` (set in the blueprint): OAuth if the pair exists, then Basic, then anonymous — a missing key degrades instead of failing. |
 
 Already declared there and worth confirming against your `.env`:

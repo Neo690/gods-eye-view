@@ -1781,6 +1781,17 @@ preview returns JSON 404 for those endpoints. Server credentials come from the
 local environment; browser keys are captured at build time. Rebuild after changing
 a browser key. Preview is for local build verification, not a production server.
 
+Provider Settings can re-test a saved key without saving it again. The
+registry's `testable` flag renders **TEST KEY** in that row; `POST
+/api/setup/test-key` accepts only the registry id (never a credential),
+reads the key from the live server environment, and answers with the provider's
+HTTP status and short error code. Two probes exist: OpenAI's bounded
+`GET /v1/models` (also used by a save), and ACLED's password grant followed by
+a one-row read, which tells a refused login (401) from an account without API
+access (403). Shells with their own key
+store but no server probe (the Android shell) clear the flag so the button is
+not offered there.
+
 ## CCTV and radio provider modules
 
 CCTV direction text resolves travel tokens first, then intercardinals, then

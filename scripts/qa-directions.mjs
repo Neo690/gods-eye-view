@@ -209,7 +209,7 @@ async function placeEndpoints(a, b) {
 }
 
 try {
-  await page.goto(`${BASE}/?welcome=0`, {
+  await page.goto(`${BASE}/?welcome=0&qa=1`, {
     waitUntil: 'domcontentloaded',
     timeout: 90000,
   });
@@ -219,10 +219,12 @@ try {
   // Two module reads the assertions need. Both are the app's OWN module
   // instances (Vite serves one copy), so this observes rather than simulates.
   await page.evaluate(async () => {
-    const [own, verbs] = await Promise.all([
-      import('/src/data/inputOwnership.js'),
-      import('/src/cameraVerbs.js'),
-    ]);
+    const own =
+      window.__gevQaModules?.inputOwnership ??
+      (await import('/src/data/inputOwnership.js'));
+    const verbs =
+      window.__gevQaModules?.cameraVerbs ??
+      (await import('/src/cameraVerbs.js'));
     window.__gevQa = {
       pointerOwner: own.pointerOwner,
       claimPointer: own.claimPointer,

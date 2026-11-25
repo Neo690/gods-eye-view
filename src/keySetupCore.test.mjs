@@ -93,6 +93,16 @@ test('the status payload reports presence without any credential material', () =
   assert.equal(google.set, true);
   const opensky = status.keys.find((key) => key.id === 'opensky');
   assert.equal(opensky.set, false, 'half a credential pair is not configured');
+  assert.equal(
+    status.keys.find((key) => key.id === 'openai').testable,
+    true,
+    'OpenAI has a server-side acceptance probe',
+  );
+  assert.equal(
+    status.keys.find((key) => key.id === 'tomtom').testable,
+    false,
+    'a provider without a server probe is not advertised as testable',
+  );
   const serialized = JSON.stringify(status);
   assert.ok(
     !serialized.includes('AIzaSyFakeFakeFakeFake1234'),
@@ -887,6 +897,38 @@ test('server Google key remains supported without appearing in setup or its miss
   );
   assert.ok(!JSON.stringify(status).includes('GOOGLE_MAPS_SERVER_API_KEY'));
   assert.ok(!JSON.stringify(status).includes(secret));
+});
+
+test('ACLED is one POWER UP entry saved as the email/password pair the proxy reads', () => {
+  const entry = KEY_SETUP_KEYS.find((key) => key.id === 'acled');
+  assert.ok(entry, 'ACLED must be listed in Provider Settings');
+  assert.ok(!entry.hidden, 'a working entry must be visible');
+  assert.equal(
+    entry.testable,
+    true,
+    'the saved pair can be re-tested against ACLED',
+  );
+  assert.deepEqual(entry.envVars, ['ACLED_EMAIL', 'ACLED_PASSWORD']);
+  assert.equal(entry.getUrl, 'https://acleddata.com/user/register');
+  assert.match(entry.unlocks, /after registering, request API access/i);
+
+  const saved = validateKeySetupUpdates({
+    ACLED_EMAIL: 'analyst@example.test',
+    ACLED_PASSWORD: 'test-only-password',
+  });
+  assert.equal(saved.ok, true, 'both values POWER UP writes must validate');
+
+  const half = keySetupStatus({ ACLED_EMAIL: 'analyst@example.test' });
+  assert.equal(
+    half.keys.find((key) => key.id === 'acled').set,
+    false,
+    'an email without its password is not configured',
+  );
+  const configured = keySetupStatus({
+    ACLED_EMAIL: 'analyst@example.test',
+    ACLED_PASSWORD: 'test-only-password',
+  });
+  assert.equal(configured.keys.find((key) => key.id === 'acled').set, true);
 });
 
 test('key guidance can offer another source that works with a key already set', () => {

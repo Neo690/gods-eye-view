@@ -1,4 +1,5 @@
 import {
+  KEY_SETUP_KEYS,
   knownKeySetupEnvVars,
   admitKeySetupRequest,
   isKeySetupExternallyManaged,
@@ -8,6 +9,7 @@ import {
   upsertDotenvValues,
 } from '../../src/keySetupCore.mjs';
 import { openUrlInBrowser } from './open-external.mjs';
+import { probeAcledCredentials } from '../providers/conflicts.js';
 import { defaultSourceRoot } from '../providers/common/source-root.js';
 import path from 'node:path';
 import { readEnvironmentSource as readPinokioEnvironmentSource } from '../../scripts/pinokio-environment.mjs';
@@ -99,11 +101,52 @@ async function pingOpenAiKey(
 }
 
 /**
+ * Server-side acceptance probes for SAVED keys, by registry id. A probe reads
+ * the live process environment — where the panel's store is applied on save —
+ * and never a credential sent by the caller. Only providers whose acceptance
+ * can be checked cheaply and without spending model credits belong here.
+ */
+const KEY_TEST_PROBES = Object.freeze({
+  acled: async ({ env, probeAcled }) => {
+    const email = String(env.ACLED_EMAIL ?? '').trim();
+    const password = String(env.ACLED_PASSWORD ?? '').trim();
+    if (!email || !password)
+      return {
+        status: 409,
+        error: {
+          error: 'ACLED_EMAIL and ACLED_PASSWORD are not both set',
+          code: 'no-key',
+          params: { name: 'ACLED_EMAIL' },
+        },
+      };
+    return { check: await probeAcled({ email, password }) };
+  },
+  openai: async ({ env, pingOpenAi }) => {
+    const name = 'OPENAI_API_KEY';
+    const key = String(env[name] ?? '').trim();
+    if (!key)
+      return {
+        status: 409,
+        error: {
+          error: `${name} is not set`,
+          code: 'no-key',
+          params: { name },
+        },
+      };
+    return { check: await pingOpenAi(key) };
+  },
+});
+
+/**
  * In-app key setup ("POWER UP" panel) — served by the dev AND preview servers.
  *
  * GET  /api/setup/status → which keys are configured, as presence plus a
  *   source classification. Never a value or suffix. The panel renders itself entirely from
  *   this payload, so the key registry stays in one place (src/keySetupCore.mjs).
+ * POST /api/setup/test-key → ask one provider about the key ALREADY saved, by
+ *   registry id. It never accepts a credential from the page and never writes
+ *   the store; the answer is the provider's verdict (status + short code), so
+ *   the panel can re-test a working key long after the save that stored it.
  * POST /api/setup/keys → validate {ENV_VAR: value} pairs and upsert them into
  *   the repo-root .env (created if absent), then set process.env live. A dev
  *   server follows that with a restart, so the client-exposed defines
@@ -127,6 +170,7 @@ function keySetupEndpoint({
   sourceRoot = defaultSourceRoot,
   openUrl = openUrlInBrowser,
   pingOpenAi = pingOpenAiKey,
+  probeAcled = probeAcledCredentials,
 } = {}) {
   const respond = (res, statusCode, payload) => {
     res.statusCode = statusCode;
@@ -381,6 +425,43 @@ function keySetupEndpoint({
               });
             respond(res, 200, { ok: true, browser: opened });
           });
+      });
+    });
+    server.middlewares.use('/api/setup/test-key', (req, res) => {
+      if (req.method !== 'POST')
+        return respond(res, 405, {
+          error: 'Method not allowed',
+          code: 'method',
+        });
+      const admission = admit(req);
+      if (!admission.ok)
+        return respond(res, admission.status, refusal(admission));
+      readJsonBody(req, res, (parsed) => {
+        const entry = KEY_SETUP_KEYS.find(
+          (candidate) => candidate.id === parsed?.id,
+        );
+        const probe = entry && KEY_TEST_PROBES[entry.id];
+        if (!probe)
+          return respond(res, 400, {
+            error: 'This provider has no server-side key test',
+            code: 'not-testable',
+          });
+        Promise.resolve()
+          .then(() => probe({ env: process.env, pingOpenAi, probeAcled }))
+          .then((result) => {
+            if (result?.error) return respond(res, result.status, result.error);
+            respond(res, 200, {
+              ok: true,
+              id: entry.id,
+              check: result.check,
+            });
+          })
+          .catch(() =>
+            respond(res, 500, {
+              error: 'The key test failed',
+              code: 'test-failed',
+            }),
+          );
       });
     });
     server.middlewares.use('/api/setup/keys', (req, res) => {

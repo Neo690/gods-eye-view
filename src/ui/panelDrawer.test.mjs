@@ -182,7 +182,13 @@ test('the drawer hides itself on a phone, in Cockpit and in embeds', () => {
   );
   assert.match(
     css,
-    /body\.panel-drawer:not\(\.cockpit-mode\):not\(\.ui-embed\)\s*#right-context-rail\s*>\s*\.panel-collapsible\.collapsed\s*\{\s*display:\s*none;/,
+    /body\.panel-drawer:not\(\.cockpit-mode\):not\(\.ui-embed\)\s*#right-context-rail\s*>\s*\.panel-collapsible\.collapsed:not\(#weather-panel\):not\(\s*#recent-imagery-panel\s*\)\s*\{\s*display:\s*none;/,
+  );
+  // Weather and Recent Imagery are readouts, not drawer windows: their
+  // collapsed header stays on the rail as its own launcher.
+  assert.doesNotMatch(
+    css,
+    /#right-context-rail\s*>\s*\.panel-collapsible\.collapsed\s*\{\s*display:\s*none;/,
   );
 });
 

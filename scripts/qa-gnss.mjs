@@ -173,6 +173,87 @@ function paintedOverlayPixels() {
   return count;
 }
 
+/**
+ * Painted-overlay pixel count and viewport-space bounding box. Lets a check
+ * name the card it measured without reading private overlay state, so it runs
+ * against a production preview as well as the dev server.
+ */
+function paintedOverlayBox() {
+  const canvas = document.getElementById('world-overlay-canvas');
+  if (!canvas) return { count: -1, box: null };
+  const { width, height } = canvas;
+  if (!width || !height) return { count: 0, box: null };
+  const data = canvas.getContext('2d').getImageData(0, 0, width, height).data;
+  let count = 0;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      if (data[(row + x) * 4 + 3] === 0) continue;
+      count++;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (!count) return { count: 0, box: null };
+  const rect = canvas.getBoundingClientRect();
+  const sx = rect.width / width;
+  const sy = rect.height / height;
+  return {
+    count,
+    box: {
+      left: rect.left + minX * sx,
+      top: rect.top + minY * sy,
+      right: rect.left + (maxX + 1) * sx,
+      bottom: rect.top + (maxY + 1) * sy,
+    },
+  };
+}
+
+/**
+ * One pass over the overlay canvas: total painted pixels and the painted
+ * pixels still inside the viewport-space box the card occupied. Reading both
+ * together is what distinguishes "the card moved out of its old box" from
+ * "the card is actually gone".
+ */
+function paintedState(box) {
+  const canvas = document.getElementById('world-overlay-canvas');
+  if (!canvas) return { total: -1, inBox: -1 };
+  const { width, height } = canvas;
+  if (!width || !height) return { total: 0, inBox: 0 };
+  const data = canvas.getContext('2d').getImageData(0, 0, width, height).data;
+  let x0 = 0;
+  let y0 = 0;
+  let x1 = -1;
+  let y1 = -1;
+  if (box) {
+    const rect = canvas.getBoundingClientRect();
+    const sx = width / rect.width;
+    const sy = height / rect.height;
+    x0 = Math.max(0, Math.floor((box.left - rect.left) * sx));
+    y0 = Math.max(0, Math.floor((box.top - rect.top) * sy));
+    x1 = Math.min(width, Math.ceil((box.right - rect.left) * sx));
+    y1 = Math.min(height, Math.ceil((box.bottom - rect.top) * sy));
+  }
+  let total = 0;
+  let inBox = 0;
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    const rowInBox = y >= y0 && y < y1;
+    for (let x = 0; x < width; x++) {
+      if (data[(row + x) * 4 + 3] === 0) continue;
+      total++;
+      if (rowInBox && x >= x0 && x < x1) inBox++;
+    }
+  }
+  return { total, inBox };
+}
+
 async function shoot(page, name) {
   await page
     .waitForFunction(
@@ -568,27 +649,19 @@ async function main() {
       },
       { timeout: TIMEOUT_MS, polling: 250 },
     );
-    const pickProbe = await page.evaluate(() => {
+    const centre = await page.evaluate(() => {
       const v = window.__godsEyeView.viewer,
-        c = v.scene.canvas;
-      const centre = { x: c.clientWidth / 2, y: c.clientHeight / 2 };
-      const empty = { x: centre.x + 300, y: centre.y };
-      const picked = v.scene.pick(empty),
+        c = v.scene.canvas,
         box = c.getBoundingClientRect();
       return {
-        centre: { x: centre.x + box.left, y: centre.y + box.top },
-        empty: { x: empty.x + box.left, y: empty.y + box.top },
-        surface: !picked || picked.id === undefined,
+        x: c.clientWidth / 2 + box.left,
+        y: c.clientHeight / 2 + box.top,
         height: v.camera.positionCartographic.height,
       };
     });
     record('PICK: a perimeter remains selectable under GNSS', true);
-    record(
-      'PICK: street ground remains a surface pick under GNSS',
-      pickProbe.surface,
-    );
     const beforeCardPixels = await page.evaluate(paintedOverlayPixels);
-    await page.mouse.click(pickProbe.centre.x, pickProbe.centre.y);
+    await page.mouse.click(centre.x, centre.y);
     await page.waitForFunction(
       `(${paintedOverlayPixels})() > ${beforeCardPixels + 100}`,
       { timeout: 10000, polling: 250 },
@@ -602,18 +675,122 @@ async function main() {
     await page.screenshot({
       path: path.join(SHOTS_DIR, 'gnss-perimeter-selected.png'),
     });
-    await page.mouse.click(pickProbe.empty.x, pickProbe.empty.y);
-    await page.waitForFunction(
-      `(${paintedOverlayPixels})() <= ${beforeCardPixels}`,
-      { timeout: 10000, polling: 250 },
-    );
-    const clearedCardPixels = await page.evaluate(paintedOverlayPixels);
+    // The card owns a painted box and a hit rect only after its first frame.
+    // Re-probe an empty point now: a point sampled before the card opened can
+    // sit under it, and a click on the card itself never deselects.
+    await sleep(500);
+    const cardPaint = await page.evaluate(paintedOverlayBox);
+    const emptyProbe = await page.evaluate((card) => {
+      const v = window.__godsEyeView.viewer;
+      const c = v.scene.canvas;
+      const cBox = c.getBoundingClientRect();
+      const overlay = document.getElementById('world-overlay-canvas');
+      const oBox = overlay.getBoundingClientRect();
+      const ox = overlay.width / oBox.width;
+      const oy = overlay.height / oBox.height;
+      const ctx = overlay.getContext('2d', { willReadFrequently: true });
+      const alphaAt = (x, y) => {
+        const px = Math.round((x - oBox.left) * ox);
+        const py = Math.round((y - oBox.top) * oy);
+        if (px < 0 || py < 0 || px >= overlay.width || py >= overlay.height)
+          return 255;
+        return ctx.getImageData(px, py, 1, 1).data[3];
+      };
+      const centre = {
+        x: cBox.left + c.clientWidth / 2,
+        y: cBox.top + c.clientHeight / 2,
+      };
+      const box = card?.box;
+      const margin = 24;
+      const offsets = [
+        [300, 0],
+        [-300, 0],
+        [0, 300],
+        [0, -300],
+        [400, 150],
+        [-400, 150],
+        [400, -150],
+        [-400, -150],
+        [250, 250],
+        [-250, 250],
+        [250, -250],
+        [-250, -250],
+      ];
+      for (const [dx, dy] of offsets) {
+        const x = centre.x + dx;
+        const y = centre.y + dy;
+        if (
+          x < cBox.left + 4 ||
+          x > cBox.right - 4 ||
+          y < cBox.top + 4 ||
+          y > cBox.bottom - 4
+        )
+          continue;
+        if (
+          box &&
+          x >= box.left - margin &&
+          x <= box.right + margin &&
+          y >= box.top - margin &&
+          y <= box.bottom + margin
+        )
+          continue;
+        const top = document.elementsFromPoint(x, y)[0];
+        if (!top || top.tagName !== 'CANVAS') continue;
+        const picked = v.scene.pick({ x: x - cBox.left, y: y - cBox.top });
+        if (picked && picked.id !== undefined) continue;
+        if (alphaAt(x, y) !== 0) continue;
+        return {
+          x,
+          y,
+          offset: [dx, dy],
+          surface: !picked || picked.id === undefined,
+          overlayAlpha: alphaAt(x, y),
+        };
+      }
+      return null;
+    }, cardPaint);
     record(
-      'PICK: empty ground clears the perimeter card',
-      clearedCardPixels <= beforeCardPixels,
-      `${selectedCardPixels} → ${clearedCardPixels} pixels`,
+      'PICK: re-probing after the card opens finds empty unpainted ground outside it',
+      Boolean(
+        cardPaint?.box && emptyProbe?.surface && emptyProbe.overlayAlpha === 0,
+      ),
+      JSON.stringify({ cardPaint, emptyProbe }),
     );
-    await page.mouse.click(pickProbe.empty.x, pickProbe.empty.y, {
+    if (!emptyProbe)
+      throw new Error(
+        'PICK: no empty, unpainted ground outside the open card was found',
+      );
+    await page.mouse.click(emptyProbe.x, emptyProbe.y);
+    const residualTolerance = Math.max(
+      2,
+      Math.round((selectedCardPixels - beforeCardPixels) * 0.02),
+    );
+    // Clearing the old card box is not enough: the card can still be painted
+    // elsewhere for a frame or two while the overlay re-solves. Wait until the
+    // whole overlay is back to its pre-selection background, then call the
+    // selection empty. The bound is generous (the observed clear takes ~1 s);
+    // a real leak still fails instead of hanging the run.
+    const clearDeadline = Date.now() + 15_000;
+    let clearState = { total: Infinity, inBox: Infinity };
+    let clearAttempts = 0;
+    while (Date.now() < clearDeadline) {
+      clearAttempts++;
+      clearState = await page.evaluate(paintedState, cardPaint.box);
+      if (
+        clearState.inBox <= 1 &&
+        clearState.total <= beforeCardPixels + residualTolerance
+      )
+        break;
+      await sleep(200);
+    }
+    record(
+      'PICK: clicking outside clears the card everywhere, leaving no selection',
+      Boolean(cardPaint?.box) &&
+        clearState.inBox <= 1 &&
+        clearState.total <= beforeCardPixels + residualTolerance,
+      `${selectedCardPixels} → ${clearState.total} pixels; card box ${cardPaint?.count} → ${clearState.inBox} (${clearAttempts} reads / ${Date.now() - (clearDeadline - 15_000)} ms)`,
+    );
+    await page.mouse.click(emptyProbe.x, emptyProbe.y, {
       clickCount: 2,
     });
     await sleep(1000);
@@ -625,7 +802,7 @@ async function main() {
             window.__godsEyeView.viewer.camera.positionCartographic.height -
               height,
           ) < 200,
-        pickProbe.height,
+        centre.height,
       ),
     );
     await page.evaluate(async () => {

@@ -33,6 +33,13 @@ const OPENMAPTILES_CREDIT = {
   key: 'openfreemap',
   html: 'Vector tiles: <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> © <a href="https://openmaptiles.org" target="_blank" rel="noopener">OpenMapTiles</a>',
 };
+/** ACLED requires its full name and a link wherever its events are shown. */
+export const ACLED_CREDIT = {
+  key: 'acled',
+  html:
+    'Data: ACLED (Armed Conflict Location &amp; Event Data) · ' +
+    '<a href="https://acleddata.com" target="_blank" rel="noopener">acleddata.com</a>',
+};
 
 const osmDisplays = new WeakMap();
 
@@ -137,6 +144,7 @@ export const DATA_CREDITS = [
       'copied, published, or incorporated into other databases without the ' +
       'explicit permission of David J Taylor, Edinburgh',
   },
+  ACLED_CREDIT,
   {
     key: 'aisstream',
     html:

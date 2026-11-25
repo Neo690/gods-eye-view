@@ -38,6 +38,14 @@ test('adsbdb is credited and carries its published route-data restriction', () =
   assert.match(credit.html, /href="https:\/\/www\.adsbdb\.com"/);
 });
 
+test('ACLED is credited by full name and links its source', () => {
+  const credit = DATA_CREDITS.find((entry) => entry.key === 'acled');
+  assert.ok(credit, 'Conflict Events data must carry an ACLED credit');
+  assert.match(credit.html, /ACLED/);
+  assert.match(credit.html, /Armed Conflict Location &amp; Event Data/);
+  assert.match(credit.html, /href="https:\/\/acleddata\.com"/);
+});
+
 test('OpenStreetMap has one generic data credit with separate tile and names distributors', () => {
   const osm = DATA_CREDITS.filter((entry) =>
     entry.html.includes('openstreetmap.org/copyright'),

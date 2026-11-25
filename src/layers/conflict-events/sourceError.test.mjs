@@ -48,6 +48,41 @@ test('a body without an error code falls back to the HTTP status', async () => {
   );
 });
 
+test('a success that is not ACLED is malformed, never a fallback snapshot', async () => {
+  const wrongProvider = sourceWith({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      ok: true,
+      provider: 'gdelt',
+      data: [{ event_id_cnty: 'X', latitude: '1', longitude: '2' }],
+    }),
+  });
+  await assert.rejects(
+    wrongProvider.getSnapshot(),
+    /Malformed conflicts response/,
+  );
+
+  const featureCollection = sourceWith({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [30.52, 50.45] },
+          properties: { name: 'Shelling reported' },
+        },
+      ],
+    }),
+  });
+  await assert.rejects(
+    featureCollection.getSnapshot(),
+    /Malformed conflicts response/,
+  );
+});
+
 test('a successful read still normalizes events', async () => {
   const source = sourceWith({
     ok: true,
@@ -68,7 +103,38 @@ test('a successful read still normalizes events', async () => {
       ],
     }),
   });
-  const rows = await source.getSnapshot();
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].fatalities, 23);
+  const before = Date.now();
+  const snapshot = await source.getSnapshot();
+  assert.equal(snapshot.rows.length, 1);
+  assert.equal(snapshot.rows[0].fatalities, 23);
+  assert.ok(
+    snapshot.generatedAt >= before && snapshot.generatedAt <= Date.now(),
+    'a payload without a stamp gets the read time',
+  );
+});
+
+test('a forced read asks the proxy for refresh=1 and keeps generatedAt', async () => {
+  const requests = [];
+  const generatedAt = Date.parse('2026-11-20T10:00:00Z');
+  const source = createConflictEventsSource({
+    url: '/api/conflicts',
+    fetchImpl: async (url) => {
+      requests.push(url);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          provider: 'acled',
+          data: [],
+          generatedAt,
+        }),
+      };
+    },
+  });
+
+  const snapshot = await source.getSnapshot({ force: true });
+  assert.equal(requests[0], '/api/conflicts?refresh=1');
+  assert.deepEqual(snapshot.rows, []);
+  assert.equal(snapshot.generatedAt, generatedAt);
 });

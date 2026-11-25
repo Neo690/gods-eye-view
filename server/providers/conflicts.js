@@ -83,6 +83,95 @@ export function conflictsFailure(errorCode, { generatedAt = Date.now() } = {}) {
   return { ok: false, provider: null, error: errorCode, generatedAt };
 }
 
+/** A manual read asks the proxy to skip its ten-minute snapshot cache. */
+export function wantsFreshConflictRead(url) {
+  const query = String(url ?? '').split('?')[1] ?? '';
+  return new URLSearchParams(query).get('refresh') === '1';
+}
+
+/** Connect mounts the route with its prefix stripped; both forms are ours. */
+export function isConflictRoute(url) {
+  const pathname = String(url ?? '').split('?')[0];
+  return pathname === '' || pathname === '/' || pathname === CONFLICTS_ROUTE;
+}
+
+/**
+ * One credential check for Provider Settings.
+ *
+ * It performs the same OAuth password grant as the route, then asks for a
+ * single ACLED row: a valid login and an account allowed to read the API are
+ * different states, and the panel should say which one failed. Never throws;
+ * `status` is the answer the panel turns into a sentence (401 refused login,
+ * 403 no API access, null unreachable or unreadable).
+ */
+export async function probeAcledCredentials({
+  email,
+  password,
+  fetchImpl = (...args) => globalThis.fetch(...args),
+  timeoutMs = CONFLICTS_TIMEOUT_MS,
+  maxBytes = CONFLICTS_MAX_BYTES,
+} = {}) {
+  const who = String(email ?? '').trim();
+  const secret = String(password ?? '').trim();
+  if (!who || !secret) return { status: 409, code: 'no-credentials' };
+
+  const request = async (url, init) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetchImpl(url, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  const readDocument = async (response) => {
+    const { tooLarge, text } = await readCappedResponseText(response, maxBytes);
+    if (tooLarge) return null;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
+  };
+
+  try {
+    const tokenResponse = await request(ACLED_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'application/json',
+      },
+      body: buildTokenBody({ email: who, password: secret }),
+    });
+    // ACLED answers 400/401 for a refused grant and 403 when the account may
+    // not use the API; all three are credential answers, not outages.
+    if (tokenResponse.status === 400 || tokenResponse.status === 401)
+      return { status: 401 };
+    if (tokenResponse.status === 403) return { status: 403 };
+    if (!tokenResponse.ok) return { status: tokenResponse.status };
+    const document = await readDocument(tokenResponse);
+    const bearer = document?.access_token;
+    if (typeof bearer !== 'string' || !bearer) return { status: null };
+
+    const { start, end } = conflictWindow(Date.now());
+    const dataResponse = await request(
+      buildAcledUrl({ start, end, limit: 1 }),
+      {
+        headers: {
+          authorization: `Bearer ${bearer}`,
+          accept: 'application/json',
+        },
+      },
+    );
+    if (dataResponse.status === 401 || dataResponse.status === 403)
+      return { status: 403 };
+    return { status: dataResponse.ok ? 200 : dataResponse.status };
+  } catch {
+    return { status: null };
+  }
+}
+
 export function createConflictsHandler({
   fetchImpl = (...args) => globalThis.fetch(...args),
   acledEmail,
@@ -207,9 +296,16 @@ export function createConflictsHandler({
     }
   };
 
-  const cached = async () => {
+  const cached = async ({ force = false } = {}) => {
     const at = now();
-    if (cache.payload && cache.bestBefore > at) return cache.payload;
+    if (!force && cache.payload && cache.bestBefore > at) return cache.payload;
+    if (force) {
+      // A manual read may follow an ACLED_EMAIL/ACLED_PASSWORD fix. Dropping
+      // the bearer token makes the retry authenticate with the new pair instead
+      // of reusing a token minted from the old one.
+      token.value = null;
+      token.bestBefore = 0;
+    }
     if (cache.promise) return cache.promise;
     cache.promise = (async () => {
       const payload = await readUpstream();
@@ -236,7 +332,7 @@ export function createConflictsHandler({
       }
       let payload;
       try {
-        payload = await cached();
+        payload = await cached({ force: wantsFreshConflictRead(request.url) });
       } catch {
         payload = conflictsFailure('upstream');
       }
@@ -253,7 +349,7 @@ export function conflictsProxy({ logger = console } = {}) {
   const { handle } = createConflictsHandler({ logger });
   const mount = (server) => {
     server.middlewares.use(CONFLICTS_ROUTE, (request, response, next) => {
-      if (request.url !== '/' && request.url !== '') return next();
+      if (!isConflictRoute(request.url)) return next();
       void handle(request, response);
     });
   };

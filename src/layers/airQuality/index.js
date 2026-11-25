@@ -239,10 +239,12 @@ export function createAirQualityLayer({ source, overlayHost } = {}) {
                 ),
           units: provider.scale,
         },
-        legend: AIR_QUALITY_BANDS.map((band) => ({
-          color: band.color,
-          label: t(band.label),
-        })),
+        legend: {
+          colors: AIR_QUALITY_BANDS.map((band) => band.color),
+          labels: AIR_QUALITY_BANDS.map((band) => t(band.label)),
+          units: provider.scale,
+          categorical: true,
+        },
         legendCategorical: true,
         list: {
           ariaLabel: t('Highest air-quality readings in view'),

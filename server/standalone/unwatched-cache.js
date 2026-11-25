@@ -1,10 +1,13 @@
 /**
- * Directories the app writes to while it runs. None is source, and none
- * should reload anything.
+ * Directories the standalone server and its local tooling write to while it
+ * runs. None is source, and none should reload anything.
  */
 const RUNTIME_WRITE_GLOBS = Object.freeze([
   '**/.gev-cache/**',
   '**/.gev-logs/**',
+  // The local tool root may contain an extracted system tree with X11 symlink
+  // loops; watching one makes Vite abort with ELOOP.
+  '**/.gev-tools/**',
 ]);
 
 /**

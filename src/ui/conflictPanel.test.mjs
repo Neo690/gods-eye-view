@@ -83,14 +83,30 @@ function node(tag = 'div') {
 }
 
 function fakeHost() {
-  const document = { createElement: node };
+  const dispatched = [];
+  const listeners = new Map();
+  const document = {
+    createElement: node,
+    addEventListener(type, handler) {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type).add(handler);
+    },
+    removeEventListener(type, handler) {
+      listeners.get(type)?.delete(handler);
+    },
+    dispatchEvent(event) {
+      dispatched.push(event);
+      for (const handler of listeners.get(event.type) || []) handler(event);
+      return true;
+    },
+  };
   const badge = node('span');
   badge.textContent = '0 events';
   const panel = { querySelector: () => badge };
   const host = node('div');
   host.ownerDocument = document;
   host.panel = panel;
-  return { host, badge };
+  return { host, badge, dispatched };
 }
 
 function event(index) {
@@ -99,6 +115,9 @@ function event(index) {
     ordinal: index,
     lead: `${index} killed`,
     text: 'Battles · Ukraine',
+    details: `Nov 20 · Armed Group A / Armed Group B`,
+    date: 'Nov 20',
+    actors: 'Armed Group A / Armed Group B',
     accent: '#ffd700',
   };
 }
@@ -115,16 +134,23 @@ function fakeManager({
   rows = [],
   info = 'ACLED · Last 7 days · 0 events',
   error = null,
+  generatedAt = null,
   refresh,
 } = {}) {
   const listeners = [];
   const layer = {
     rows,
     error,
+    generatedAt,
     refreshCalls: 0,
     getRecentEvents: (limit) => rows.slice(0, limit),
     getRowControls: () => ({ info }),
     getLastError: () => layer.error,
+    getStats: () => ({
+      count: rows.length,
+      generatedAt: layer.generatedAt,
+      lastError: layer.error,
+    }),
     refresh: async () => {
       layer.refreshCalls += 1;
       if (refresh) return refresh(layer);
@@ -157,7 +183,35 @@ function render(panelHost) {
   const status = panelHost.children.find(
     (child) => child.className === 'conflict-panel-status',
   );
-  return { errorLine, list, status };
+  const fix = panelHost.children.find(
+    (child) => child.className === 'conflict-panel-fix',
+  );
+  const freshness = panelHost.children.find(
+    (child) => child.className === 'conflict-panel-freshness',
+  );
+  const freshnessText = freshness?.children.find(
+    (child) => child.className === 'conflict-panel-freshness-text',
+  );
+  const refreshButton = freshness?.children.find(
+    (child) => child.className === 'conflict-panel-refresh',
+  );
+  const credit = panelHost.children.find(
+    (child) => child.className === 'conflict-panel-credit',
+  );
+  const creditLink = credit?.children.find((child) => child.tagName === 'A');
+  const creditMeta = credit?.children.at(-1);
+  return {
+    errorLine,
+    list,
+    status,
+    fix,
+    freshness,
+    freshnessText,
+    refreshButton,
+    credit,
+    creditLink,
+    creditMeta,
+  };
 }
 
 test('the window lists more than the row card five', () => {
@@ -217,8 +271,177 @@ test('the source error code and its reason are shown, not hidden behind the list
   assert.equal(errorLine.type, 'button');
   assert.match(errorLine.textContent, /no_key/);
   assert.match(errorLine.textContent, /ACLED_EMAIL/);
+  assert.match(errorLine.textContent, /POWER UP/);
+  assert.match(errorLine.textContent, /Provider Settings/);
+  assert.doesNotMatch(errorLine.textContent, /\.env/);
   assert.match(errorLine.getAttribute('aria-label'), /Retry the read/);
   assert.equal(status.hidden, true);
+  panel.destroy();
+});
+
+test('a missing ACLED key opens POWER UP at that exact row', () => {
+  const { dataManager } = fakeManager({ error: 'no_key' });
+  const { host, dispatched } = fakeHost();
+  const panel = createConflictPanel({ container: host, dataManager });
+
+  const { fix } = render(host);
+  assert.ok(fix, 'the window must render the fix action');
+  assert.equal(fix.tagName, 'BUTTON');
+  assert.equal(fix.type, 'button');
+  assert.equal(fix.hidden, false);
+  assert.equal(fix.textContent, 'POWER UP');
+  assert.match(fix.getAttribute('aria-label'), /ACLED_EMAIL/);
+
+  fix.onclick();
+  assert.equal(dispatched.length, 1);
+  assert.equal(dispatched[0].type, 'gev:open-key-setup');
+  assert.deepEqual(dispatched[0].detail, { keyId: 'acled' });
+  panel.destroy();
+});
+
+test('a rejected pair still offers the row that replaces it', () => {
+  const { dataManager } = fakeManager({ error: 'auth' });
+  const { host } = fakeHost();
+  const panel = createConflictPanel({ container: host, dataManager });
+
+  const { fix } = render(host);
+  assert.equal(fix.hidden, false);
+  assert.match(fix.getAttribute('aria-label'), /rejected the credentials/);
+  panel.destroy();
+});
+
+test('an upstream failure keeps retry, not POWER UP, as the offered action', () => {
+  const { dataManager } = fakeManager({ error: 'upstream' });
+  const { host } = fakeHost();
+  const panel = createConflictPanel({ container: host, dataManager });
+
+  const { errorLine, fix } = render(host);
+  assert.equal(errorLine.hidden, false);
+  assert.equal(fix.hidden, true);
+  panel.destroy();
+});
+
+test('selecting a dot opens the window, marks its row, and shows date and actors', () => {
+  const manager = fakeManager({
+    rows: [event(1), event(2), event(3)],
+  });
+  const { host } = fakeHost();
+  let revealed = 0;
+  const panel = createConflictPanel({
+    container: host,
+    dataManager: manager.dataManager,
+    reveal: () => {
+      revealed += 1;
+    },
+  });
+  const { list } = render(host);
+
+  host.ownerDocument.dispatchEvent(
+    new CustomEvent('gev:conflict-event-selected', {
+      detail: { eventId: 'e2' },
+    }),
+  );
+
+  assert.equal(revealed, 1, 'the window is revealed for the selected dot');
+  const button = list.children[1].children[0];
+  assert.match(button.className, /\bactive\b/);
+  assert.equal(button.getAttribute('aria-pressed'), 'true');
+  const details = button.children.find(
+    (child) => child.className === 'data-row-list-details',
+  );
+  assert.ok(details, 'the row carries a second line');
+  assert.match(details.textContent, /Nov 20/);
+  assert.match(details.textContent, /Armed Group A/);
+
+  // Teardown releases the document listener, so a later pick cannot revive a
+  // destroyed window.
+  panel.destroy();
+  host.ownerDocument.dispatchEvent(
+    new CustomEvent('gev:conflict-event-selected', {
+      detail: { eventId: 'e1' },
+    }),
+  );
+  assert.equal(revealed, 1);
+});
+
+test('a selected event outside the top slice is still projected into the window', () => {
+  const manager = fakeManager({ rows: [event(1)] });
+  manager.layer.getRecentEvents = (limit, extraId) =>
+    extraId === 'e9' ? [event(9), event(1)] : [event(1)];
+  const { host } = fakeHost();
+  const panel = createConflictPanel({
+    container: host,
+    dataManager: manager.dataManager,
+  });
+  const { list } = render(host);
+
+  host.ownerDocument.dispatchEvent(
+    new CustomEvent('gev:conflict-event-selected', {
+      detail: { eventId: 'e9' },
+    }),
+  );
+
+  assert.equal(list.children.length, 2);
+  assert.equal(list.children[0].dataset.listItemId, 'e9');
+  assert.match(list.children[0].children[0].className, /\bactive\b/);
+  panel.destroy();
+});
+
+test('the freshness line states the snapshot age and REFRESH forces a read', async () => {
+  const generatedAt = Date.now() - 120_000;
+  const manager = fakeManager({ rows: [event(1)], generatedAt });
+  const { host } = fakeHost();
+  const panel = createConflictPanel({
+    container: host,
+    dataManager: manager.dataManager,
+  });
+
+  const { freshness, freshnessText, refreshButton } = render(host);
+  assert.ok(freshness, 'the window must state the snapshot freshness');
+  assert.match(freshnessText.textContent, /Feed updated/);
+  assert.match(freshnessText.textContent, /2 minutes ago/);
+  assert.equal(refreshButton.textContent, 'REFRESH');
+  assert.equal(refreshButton.hidden, false);
+  assert.equal(refreshButton.disabled, false);
+
+  refreshButton.onclick();
+  assert.equal(refreshButton.disabled, true);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(manager.layer.refreshCalls, 1);
+  assert.equal(refreshButton.disabled, false);
+  panel.destroy();
+});
+
+test('a layer without a successful read says no snapshot yet', () => {
+  const { dataManager } = fakeManager();
+  const { host } = fakeHost();
+  const panel = createConflictPanel({ container: host, dataManager });
+
+  const { freshnessText } = render(host);
+  assert.equal(freshnessText.textContent, 'No snapshot yet');
+  panel.destroy();
+});
+
+test('the window credits ACLED, links its source, and states the access date', () => {
+  const manager = fakeManager({
+    rows: [event(1)],
+    generatedAt: Date.parse('2026-11-20T12:00:00Z'),
+  });
+  const { host } = fakeHost();
+  const panel = createConflictPanel({
+    container: host,
+    dataManager: manager.dataManager,
+  });
+
+  const { credit, creditLink, creditMeta } = render(host);
+  assert.ok(credit, 'the window must carry the ACLED source credit');
+  assert.equal(creditLink.textContent, 'acleddata.com');
+  assert.equal(creditLink.href, 'https://acleddata.com');
+  assert.equal(creditLink.target, '_blank');
+  assert.equal(creditLink.rel, 'noopener');
+  assert.match(creditMeta.textContent, /Last 7 days/);
+  assert.match(creditMeta.textContent, /accessed/);
+  assert.match(creditMeta.textContent, /2026/);
   panel.destroy();
 });
 

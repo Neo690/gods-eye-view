@@ -6,8 +6,9 @@ const DEFAULT_URL = '/api/conflicts';
  * Same-origin acquisition source for conflict events.
  *
  * The API key never reaches the browser: the server proxy behind `/api/conflicts`
- * holds the ACLED credentials and falls back to a keyless provider when they are
- * absent. Validation happens before the snapshot can replace displayed events.
+ * holds the ACLED credentials and answers `no_key` when they are absent. There
+ * is no keyless fallback. Validation happens before the snapshot can replace
+ * displayed events.
  */
 export function createConflictEventsSource({
   fetchImpl = (...args) => globalThis.fetch(...args),
@@ -23,9 +24,14 @@ export function createConflictEventsSource({
   }
   const resolved = endpoint || DEFAULT_URL;
   return {
-    async getSnapshot({ signal } = {}) {
+    async getSnapshot({ signal, force = false } = {}) {
       signal?.throwIfAborted();
-      const response = await fetchImpl(resolved, {
+      // The proxy caches a successful read for ten minutes. A manual refresh
+      // asks it for a new upstream read instead of that cached snapshot.
+      const requestUrl = force
+        ? `${resolved}${resolved.includes('?') ? '&' : '?'}refresh=1`
+        : resolved;
+      const response = await fetchImpl(requestUrl, {
         signal,
         headers: { accept: 'application/json' },
       });
@@ -51,10 +57,21 @@ export function createConflictEventsSource({
       }
       const payload = await response.json();
       signal?.throwIfAborted();
-      const provider = payload?.provider === 'acled' ? 'acled' : 'gdelt';
-      const rows = normalizeConflictSnapshot(payload, { provider });
+      // ACLED is the only provider this route serves. A payload that does not
+      // name it is malformed, not a second provider's snapshot.
+      const rows =
+        payload?.provider === 'acled'
+          ? normalizeConflictSnapshot(payload)
+          : null;
       if (!rows) throw new Error('Malformed conflicts response');
-      return rows;
+      return {
+        rows,
+        // The proxy stamps the upstream read, not the cache hit, so the panel
+        // can state the real age of the displayed snapshot.
+        generatedAt: Number.isFinite(payload.generatedAt)
+          ? payload.generatedAt
+          : Date.now(),
+      };
     },
   };
 }

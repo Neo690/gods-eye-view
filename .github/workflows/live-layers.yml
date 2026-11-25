@@ -1,0 +1,247 @@
+name: Live layer canary
+
+# The activation matrix answers every /api request from a fixture, so it proves
+# the app's layer wiring but not that today's upstream responses still parse.
+# This canary enables the keyless live layers and lets their real providers
+# answer. It runs on a schedule, not on pull requests: an upstream outage must
+# not turn every review red.
+#
+# One live job runs both gates so checkout, install, build and Chrome are paid
+# once. The keyless preview is started WITHOUT provider secrets, keeping that
+# gate honest; a second preview on another port is started only when keyed
+# secrets exist, so the two gates cannot contaminate each other.
+#
+# The gates are non-strict by default: EMPTY, UNCONFIGURED and EXTERNAL outcomes
+# are reported but non-blocking, while a FAIL/MISSING layer, a teardown leak or
+# an uncaught page error always exits 1. A missing or rejected credential is
+# never classified as EXTERNAL. Use the manual dispatch with `strict` when the
+# providers are known healthy and PASS-only is wanted for both gates.
+on:
+  schedule:
+    - cron: '41 6 * * *'
+  workflow_dispatch:
+    inputs:
+      strict:
+        description: Fail on EMPTY, UNCONFIGURED and EXTERNAL outcomes too
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-layer-canary
+  cancel-in-progress: true
+
+env:
+  GEV_REQUIRE_ALLOCATION_GATE: '0'
+  PUPPETEER_SKIP_DOWNLOAD: '1'
+  PREVIEW_PORT: '4173'
+  KEYED_PREVIEW_PORT: '4174'
+
+jobs:
+  live:
+    name: Live layer canary
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.14.0
+          cache: npm
+
+      # Secrets cannot be read in a job-level `if:`, but they can be read here.
+      # The output is only the fixed list of layer ids whose credentials exist;
+      # no secret value is printed. An empty list skips the keyed preview.
+      - name: Detect keyed provider secrets
+        id: keys
+        env:
+          FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+          ACLED_EMAIL: ${{ secrets.ACLED_EMAIL }}
+          ACLED_PASSWORD: ${{ secrets.ACLED_PASSWORD }}
+          GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
+          TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
+        run: |
+          set -euo pipefail
+          only=""
+          add() { only="${only:+$only,}$1"; }
+          if [ -n "${FIRMS_MAP_KEY:-}" ]; then add local-firms; fi
+          if [ -n "${ACLED_EMAIL:-}" ] && [ -n "${ACLED_PASSWORD:-}" ]; then add conflict-events; fi
+          if [ -n "${GFW_API_TOKEN:-}" ]; then add fishing-effort; fi
+          if [ -n "${TOMTOM_API_KEY:-}" ]; then add traffic; fi
+          echo "only=$only" >> "$GITHUB_OUTPUT"
+          if [ -z "$only" ]; then
+            echo "::notice::No keyed provider secrets are configured; the keyed live canary is skipped."
+          fi
+
+      # Same retry as the other browser jobs: the ffmpeg-static post-install
+      # downloads its binary from a GitHub release asset, which 504s in bursts.
+      - name: Install locked dependencies
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4; do
+            if npm ci; then
+              exit 0
+            fi
+            rm -rf node_modules
+            echo "npm ci failed on attempt $attempt"
+            sleep 30
+          done
+          exit 1
+
+      # Catch a stale canary contract before spending time on a browser or a
+      # build. These are the same static tests CI runs.
+      - name: Static canary contracts
+        run: node --test scripts/qa-keyless-live-layers.test.mjs scripts/qa-layer-activation-matrix.test.mjs
+
+      # npm does not run dependency install scripts, so the Puppeteer
+      # postinstall is skipped. Install the browser at the pinned version.
+      - name: Install the browser the gate drives
+        run: npx puppeteer browsers install chrome
+
+      - name: Build production bundle
+        id: build
+        run: npm run build
+
+      - name: Start keyless preview
+        run: |
+          npx vite preview --port "$PREVIEW_PORT" --strictPort > preview-keyless.log 2>&1 &
+          for attempt in $(seq 1 90); do
+            curl -sf "http://127.0.0.1:$PREVIEW_PORT/" > /dev/null && exit 0
+            sleep 2
+          done
+          cat preview-keyless.log
+          exit 1
+
+      - name: Keyless live layer gate
+        env:
+          STRICT: ${{ inputs.strict }}
+        run: |
+          args=(
+            --url "http://127.0.0.1:$PREVIEW_PORT"
+            --json qa-artifacts/keyless-live/report.json
+          )
+          if [ "$STRICT" = "true" ]; then
+            args+=(--strict)
+          fi
+          npm run qa:keyless-layers -- "${args[@]}"
+
+      # A keyed failure must not hide the keyless result, so this starts even
+      # when the keyless gate failed. A successful build is the only prerequisite:
+      # an install/static-test/build failure skips the keyed path, while a
+      # keyless-preview failure on its port does not.
+      - name: Start keyed preview
+        id: keyed-preview
+        if: ${{ !cancelled() && steps.keys.outputs.only != '' && steps.build.outcome == 'success' }}
+        env:
+          FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+          ACLED_EMAIL: ${{ secrets.ACLED_EMAIL }}
+          ACLED_PASSWORD: ${{ secrets.ACLED_PASSWORD }}
+          GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
+          TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
+        run: |
+          npx vite preview --port "$KEYED_PREVIEW_PORT" --strictPort > preview-keyed.log 2>&1 &
+          for attempt in $(seq 1 90); do
+            curl -sf "http://127.0.0.1:$KEYED_PREVIEW_PORT/" > /dev/null && exit 0
+            sleep 2
+          done
+          cat preview-keyed.log
+          exit 1
+
+      - name: Keyed live layer gate
+        if: ${{ !cancelled() && steps.keyed-preview.outcome == 'success' }}
+        env:
+          ONLY: ${{ steps.keys.outputs.only }}
+          STRICT: ${{ inputs.strict }}
+        run: |
+          args=(
+            --url "http://127.0.0.1:$KEYED_PREVIEW_PORT"
+            --json qa-artifacts/keyed-live/report.json
+            --only "$ONLY"
+          )
+          if [ "$STRICT" = "true" ]; then
+            args+=(--strict)
+          fi
+          npm run qa:keyed-layers -- "${args[@]}"
+
+      - name: Preview server logs
+        if: failure()
+        run: |
+          for log in preview-keyless.log preview-keyed.log; do
+            if [ -f "$log" ]; then
+              echo "::group::$log"
+              cat "$log"
+              echo "::endgroup::"
+            fi
+          done
+
+      # Keep both reports on success as well: they are the trend line for
+      # provider health, and the summary reads the same files.
+      - name: Upload live layer reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: live-layer-reports
+          path: qa-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Summarize live layer outcomes
+        if: always()
+        run: |
+          node --input-type=module <<'EOF'
+          import { appendFileSync, readFileSync } from 'node:fs';
+
+          const reports = [
+            ['Keyless live layers', 'qa-artifacts/keyless-live/report.json'],
+            ['Keyed live layers', 'qa-artifacts/keyed-live/report.json'],
+          ];
+          const cell = (value) =>
+            String(value ?? '')
+              .replace(/\|/g, '\\|')
+              .replace(/\r?\n/g, ' ')
+              .slice(0, 500);
+          const lines = [];
+          for (const [title, path] of reports) {
+            let report;
+            try {
+              report = JSON.parse(readFileSync(path, 'utf8'));
+            } catch {
+              continue;
+            }
+            const summary = report.summary ?? {};
+            lines.push(
+              `## ${title}`,
+              '',
+              `Overall: **${report.ok ? 'PASS' : 'FAIL'}** (${report.strict ? 'strict' : 'non-strict'})`,
+              '',
+              `PASS ${summary.pass ?? 0} · EMPTY ${summary.empty ?? 0} · UNCONFIGURED ${summary.unconfigured ?? 0} · EXTERNAL ${summary.external ?? 0} · FAIL ${summary.fail ?? 0} · MISSING ${summary.missing ?? 0}`,
+              '',
+              '| Layer | Status | Reason |',
+              '|---|---|---|',
+              ...(report.layers ?? []).map(
+                (layer) =>
+                  `| ${cell(layer.id)} | ${cell(layer.status)} | ${cell(layer.reason)} |`,
+              ),
+              '',
+            );
+          }
+          if (!lines.length) {
+            lines.push(
+              '## Live layer canary',
+              '',
+              'No live layer report was produced.',
+              '',
+            );
+          }
+          appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            `${lines.join('\n')}\n`,
+          );
+          EOF

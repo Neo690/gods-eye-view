@@ -1,0 +1,92 @@
+{
+  "fetchedAt": 1795422842281,
+  "stations": [
+    {
+      "id": "032530172",
+      "network": "bfs",
+      "name": "Uetze",
+      "lat": 52.47,
+      "lon": 10.2,
+      "usvh": 0.082,
+      "at": "2026-11-23T07:00:00.000Z"
+    },
+    {
+      "id": "082250140",
+      "network": "bfs",
+      "name": "Buchen",
+      "lat": 49.52,
+      "lon": 9.33,
+      "usvh": 0.121,
+      "at": "2026-11-23T07:00:00.000Z"
+    },
+    {
+      "id": "032510261",
+      "network": "bfs",
+      "name": "Martfeld",
+      "lat": 52.88,
+      "lon": 9.06,
+      "usvh": 0.074,
+      "at": "2026-11-23T07:00:00.000Z"
+    },
+    {
+      "id": "064380031",
+      "network": "bfs",
+      "name": "Egelsbach",
+      "lat": 49.96,
+      "lon": 8.66,
+      "usvh": 0.11,
+      "at": "2026-11-23T07:00:00.000Z"
+    },
+    {
+      "id": "031520091",
+      "network": "bfs",
+      "name": "Friedland-Groß Schneen",
+      "lat": 51.44,
+      "lon": 9.93,
+      "usvh": 0.134,
+      "at": "2026-11-23T07:00:00.000Z"
+    },
+    {
+      "id": "034580101",
+      "network": "bfs",
+      "name": "Hude",
+      "lat": 53.11,
+      "lon": 8.46,
+      "usvh": 0.082,
+      "at": "2026-11-23T07:00:00.000Z"
+    }
+  ],
+  "sources": [
+    {
+      "id": "bfs",
+      "ok": true,
+      "count": 1557,
+      "fetchedAt": 1795422671146
+    },
+    {
+      "id": "canada",
+      "ok": true,
+      "count": 83,
+      "fetchedAt": 1795422671146
+    },
+    {
+      "id": "safecast",
+      "ok": true,
+      "count": 997,
+      "fetchedAt": 1795422671146
+    },
+    {
+      "id": "radmon",
+      "ok": true,
+      "count": 294,
+      "fetchedAt": 1795422671146
+    }
+  ],
+  "space": {
+    "protonFlux": 0.24248893558979034,
+    "protonAt": "2026-11-23T08:20:00.000Z",
+    "kp": 0,
+    "kpAt": "2026-11-23T08:27:00.000Z",
+    "band": "calm"
+  }
+}

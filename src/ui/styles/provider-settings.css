@@ -273,7 +273,8 @@
   font-size: 0.66rem;
 }
 
-.key-setup-openai-check {
+.key-setup-openai-check,
+.key-setup-check {
   margin: 0.4rem 0 0;
   color: rgba(190, 214, 222, 0.72);
   font-family: var(--font-mono);
@@ -284,6 +285,36 @@
 .key-setup-fields {
   display: grid;
   gap: 0.3rem;
+}
+
+.key-setup-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.key-setup-test {
+  justify-self: start;
+  padding: 0.28rem 0.55rem;
+  color: rgba(54, 220, 255, 0.9);
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.08rem;
+  background: rgba(54, 220, 255, 0.08);
+  border: 1px solid rgba(54, 220, 255, 0.28);
+  border-radius: 0.32rem;
+  cursor: pointer;
+}
+
+.key-setup-test:hover:not(:disabled),
+.key-setup-test:focus-visible {
+  border-color: rgba(54, 220, 255, 0.65);
+  outline: none;
+}
+
+.key-setup-test:disabled {
+  cursor: wait;
+  opacity: 0.5;
 }
 
 .key-setup-fields input {

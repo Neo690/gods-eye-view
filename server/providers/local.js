@@ -77,8 +77,9 @@ function localProviderPlugins({ realtime, gemini } = {}) {
     // Copernicus EMS sends no CORS headers; this route fronts the first
     // activations page for the disasters layer.
     copernicusEmsProxy(),
-    // ACLED is keyed and sends no CORS headers; GDELT backs the same route when
-    // no credential is configured, so the layer is never a dead toggle.
+    // ACLED is keyed and sends no CORS headers; this route is the only way the
+    // browser reads conflict events. Without ACLED credentials it answers
+    // `no_key` — there is no keyless fallback.
     conflictsProxy(),
     // EDGAR demands a declared User-Agent and sends no CORS headers; the route
     // answers prepared Form 4 rows so the browser never talks to sec.gov.

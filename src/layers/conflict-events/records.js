@@ -1,9 +1,9 @@
 /**
  * Normalize a conflict-event payload into rows the layer can draw.
  *
- * Two providers share this seam:
- *  - ACLED  — keyed, structured rows with reported fatalities.
- *  - GDELT  — keyless, geo-coded news articles (no casualty field).
+ * ACLED is the only provider: keyed, structured rows with reported fatalities.
+ * The proxy has no keyless fallback, and a payload that is not ACLED's is
+ * malformed — there is no second shape to read it as.
  *
  * A malformed payload returns null so the layer keeps its last good snapshot
  * instead of blanking the globe. Individual unusable rows are skipped; a
@@ -31,11 +31,9 @@ function asText(value) {
 function parseTimeMs(value) {
   const text = asText(value);
   if (!text) return null;
-  // GDELT uses "20261101T120000Z"; ACLED uses "2026-11-01".
-  const normalized = /^\d{8}T\d{6}Z$/.test(text)
-    ? `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}T${text.slice(9, 11)}:${text.slice(11, 13)}:${text.slice(13, 15)}Z`
-    : text.replace(' ', 'T');
-  const ms = Date.parse(normalized);
+  // ACLED sends a calendar day ("2026-11-01"); a timestamp with a space is
+  // still accepted.
+  const ms = Date.parse(text.replace(' ', 'T'));
   return Number.isFinite(ms) ? ms : null;
 }
 
@@ -86,63 +84,13 @@ export function normalizeAcledRows(input) {
 }
 
 /**
- * Normalize GDELT's DOC-API GeoJSON shape (one point per article cluster).
- * @param {unknown} payload - GeoJSON FeatureCollection.
- * @returns {Array<object>|null} Rows, or null when the payload is malformed.
- */
-export function normalizeGdeltGeoJson(payload) {
-  const features = payload?.features;
-  if (!Array.isArray(features)) return null;
-  const out = [];
-  const ids = new Set();
-  for (const [index, feature] of features.entries()) {
-    if (!feature || typeof feature !== 'object') return null;
-    const geometry = feature.geometry;
-    if (geometry?.type != null && geometry.type !== 'Point') continue;
-    const coordinates = geometry?.coordinates;
-    if (!Array.isArray(coordinates) || coordinates.length < 2) continue;
-    const lon = asFinite(coordinates[0]);
-    const lat = asFinite(coordinates[1]);
-    if (lat == null || lon == null) continue;
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
-    const properties =
-      feature.properties &&
-      typeof feature.properties === 'object' &&
-      !Array.isArray(feature.properties)
-        ? feature.properties
-        : {};
-    const url = asText(properties.url) ?? asText(properties.documentidentifier);
-    pushRow(out, ids, {
-      stableId: url ?? asText(feature.id) ?? `gdelt-${index + 1}`,
-      provider: 'gdelt',
-      lat,
-      lon,
-      timeMs: parseTimeMs(properties.seendate),
-      type: asText(properties.eventtype) ?? asText(properties.name),
-      subType: null,
-      actors: null,
-      // GDELT carries no casualty count: absent is not zero, but the layer's
-      // severity scale only needs a floor, so it maps to the lowest band.
-      fatalities: 0,
-      country: asText(properties.sourcecountry),
-      sourceUrl: url,
-    });
-    if (out.length >= MAX_CONFLICT_EVENTS) break;
-  }
-  return out;
-}
-
-/**
- * Validate and normalize one provider payload.
- * @param {unknown} payload - Raw provider response.
- * @param {{provider?: 'acled'|'gdelt'}} [options]
+ * Validate and normalize the ACLED payload the proxy serves.
+ *
+ * One name for the snapshot seam: the source and the panel never depend on the
+ * provider's row shape, and there is no second provider to select.
+ * @param {unknown} payload - Raw proxy response.
  * @returns {Array<object>|null}
  */
-export function normalizeConflictSnapshot(
-  payload,
-  { provider = 'gdelt' } = {},
-) {
-  return provider === 'acled'
-    ? normalizeAcledRows(payload)
-    : normalizeGdeltGeoJson(payload);
+export function normalizeConflictSnapshot(payload) {
+  return normalizeAcledRows(payload);
 }

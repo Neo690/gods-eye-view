@@ -35,10 +35,24 @@ services:
         sync: false
       - key: AISSTREAM_API_KEY
         sync: false
+      # Optional third military feed (/api/military). Off unless set; the layer
+      # already merges keyless adsb.lol and adsb.fi. Server-side only, and the
+      # provider's terms forbid redistributing the data, so this is one
+      # operator's own key for their own use.
+      - key: ADSBX_API_KEY
+        sync: false
       # Active fires (/api/firms). Unset, the route answers {"error":"no_key"}
       # and the phone's fire layer stays empty. Server-side only: the app never
       # sees this key.
       - key: FIRMS_MAP_KEY
+        sync: false
+      # Conflict Events (/api/conflicts). The proxy logs in to myACLED with this
+      # account and serves the last good snapshot through a short outage. Unset,
+      # the route answers {"error":"no_key"} and the layer says the ACLED
+      # account is missing. Server-side only: neither value reaches the browser.
+      - key: ACLED_EMAIL
+        sync: false
+      - key: ACLED_PASSWORD
         sync: false
       # Apparent fishing effort (/api/fishing-effort). Unset, the route answers
       # {"error":"no_key"} and the Fishing Effort layer says a key is missing
@@ -100,4 +114,9 @@ services:
       - key: URADMONITOR_USER_ID
         sync: false
       - key: URADMONITOR_USER_HASH
+        sync: false
+      # Worldwide estimated cell towers (/api/cell-towers). Unset, the route
+      # answers from the bundled ANFR extract (France only); set, it asks
+      # OpenCelliD outside France. Server-side only.
+      - key: OPENCELLID_API_KEY
         sync: false

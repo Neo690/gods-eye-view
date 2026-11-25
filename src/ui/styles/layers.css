@@ -1486,6 +1486,66 @@ body.recording-mode #right-context-rail > [data-panel-id] {
   background: rgba(255, 165, 0, 0.35);
   border-radius: 3px;
 }
+.conflict-panel-freshness {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 18px;
+  font-size: 0.66rem;
+  letter-spacing: 0.05em;
+  opacity: 0.72;
+}
+.conflict-panel-freshness-text {
+  min-width: 0;
+}
+.conflict-panel-refresh {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+.conflict-panel-refresh[hidden] {
+  display: none;
+}
+.conflict-panel-refresh:hover:not([disabled]) {
+  background: rgba(255, 255, 255, 0.08);
+}
+.conflict-panel-refresh:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+  outline-offset: 1px;
+}
+.conflict-panel-refresh[disabled] {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.conflict-panel-credit {
+  margin: 0;
+  font-size: 0.62rem;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  opacity: 0.72;
+}
+.conflict-panel-credit a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.conflict-panel-credit a:hover {
+  opacity: 1;
+}
+.conflict-panel-credit a:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+  outline-offset: 1px;
+}
+
 .conflict-panel-status {
   margin: 0;
   font-size: 0.72rem;
@@ -1528,4 +1588,30 @@ body.recording-mode #right-context-rail > [data-panel-id] {
 .conflict-panel-error[disabled] {
   cursor: progress;
   opacity: 0.85;
+}
+
+.conflict-panel-fix {
+  margin: 6px 0 0;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.conflict-panel-fix[hidden] {
+  display: none;
+}
+
+.conflict-panel-fix:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.conflict-panel-fix:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.7);
+  outline-offset: 1px;
 }

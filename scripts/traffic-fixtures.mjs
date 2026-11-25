@@ -78,7 +78,12 @@ export function trafficFixtureResponse(request) {
         attribution:
           'Synthetic flat terrain for Traffic QA; not live elevation data',
       });
-    if (/\/0\/[01]\/0\.terrain$/.test(url.pathname))
+    // Cesium's ellipsoid mesh asks for /cesium-mesh/ellipsoid/{z}/{x}/{y}.terrain
+    // while the simpler source asks for /0/0/0.terrain. Both are one flat tile.
+    if (
+      /\/(?:\d+\/){2}\d+\.terrain$/.test(url.pathname) ||
+      /\/0\/[01]\/0\.terrain$/.test(url.pathname)
+    )
       return {
         status: 200,
         contentType: 'application/octet-stream',

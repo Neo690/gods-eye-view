@@ -190,10 +190,21 @@ test('the proxy mounts the route in dev and preview servers', () => {
 });
 
 test('failure payloads are pure helpers with the short codes', () => {
-  assert.deepEqual(copernicusEmsFailure('body-too-large'), {
-    ok: false,
-    error: 'body-too-large',
-    activations: [],
-    generatedAt: copernicusEmsFailure('body-too-large').generatedAt,
-  });
+  const before = Date.now();
+  const payload = copernicusEmsFailure('body-too-large');
+  const after = Date.now();
+  assert.ok(Number.isInteger(payload.generatedAt));
+  assert.ok(
+    payload.generatedAt >= before && payload.generatedAt <= after,
+    `generatedAt ${payload.generatedAt} outside [${before}, ${after}]`,
+  );
+  assert.deepEqual(
+    { ...payload, generatedAt: 0 },
+    {
+      ok: false,
+      error: 'body-too-large',
+      activations: [],
+      generatedAt: 0,
+    },
+  );
 });

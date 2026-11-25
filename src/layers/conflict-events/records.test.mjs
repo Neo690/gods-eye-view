@@ -6,7 +6,6 @@ import {
   MAX_CONFLICT_EVENTS,
   normalizeAcledRows,
   normalizeConflictSnapshot,
-  normalizeGdeltGeoJson,
 } from './records.js';
 import { mapAnalystRecord, selectConflictOverlayCohort } from './model.js';
 
@@ -70,59 +69,21 @@ test('acled: accepts the {data: [...]} envelope', () => {
   assert.equal(rows.length, 1);
 });
 
-test('gdelt: a point feature maps to a row with no casualty count', () => {
-  const payload = {
-    type: 'FeatureCollection',
-    features: [
-      {
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [37.68, 48.51] },
-        properties: {
-          url: 'https://example.test/story',
-          seendate: '20261103T120000Z',
-          name: 'Shelling reported',
+test('snapshot: only the ACLED shape is accepted', () => {
+  assert.equal(normalizeConflictSnapshot({ data: [ACLED_ROW] }).length, 1);
+  assert.equal(
+    normalizeConflictSnapshot({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [37.68, 48.51] },
+          properties: { name: 'Shelling reported' },
         },
-      },
-    ],
-  };
-  const [row] = normalizeGdeltGeoJson(payload);
-  assert.equal(row.stableId, 'https://example.test/story');
-  assert.equal(row.provider, 'gdelt');
-  assert.equal(row.lat, 48.51);
-  assert.equal(row.lon, 37.68);
-  assert.equal(row.timeMs, Date.parse('2026-11-03T12:00:00Z'));
-  assert.equal(row.fatalities, 0);
-  assert.equal(row.sourceUrl, 'https://example.test/story');
-});
-
-test('gdelt: non-point geometry and empty coordinates are skipped', () => {
-  const rows = normalizeGdeltGeoJson({
-    features: [
-      { geometry: { type: 'Polygon', coordinates: [] }, properties: {} },
-      { geometry: { type: 'Point', coordinates: [] }, properties: {} },
-      {
-        geometry: { type: 'Point', coordinates: [1, 2] },
-        properties: {},
-      },
-    ],
-  });
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].stableId, 'gdelt-3');
-});
-
-test('gdelt: a payload without features fails the snapshot', () => {
-  assert.equal(normalizeGdeltGeoJson({}), null);
-  assert.equal(normalizeGdeltGeoJson(null), null);
-});
-
-test('snapshot: provider selects the normalizer', () => {
-  assert.equal(
-    normalizeConflictSnapshot([ACLED_ROW], { provider: 'acled' }).length,
-    1,
-  );
-  assert.equal(
-    normalizeConflictSnapshot([ACLED_ROW], { provider: 'gdelt' }),
+      ],
+    }),
     null,
+    'a news-cluster FeatureCollection is not a conflict snapshot',
   );
 });
 

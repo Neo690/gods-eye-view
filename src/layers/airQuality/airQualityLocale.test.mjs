@@ -63,7 +63,7 @@ for (const locale of ['es', 'ru']) {
       controls.summary.label,
       controls.summary.coverage,
       controls.summary.status,
-      ...controls.legend.map((entry) => entry.label),
+      ...controls.legend.labels,
       ...controls.list.items.map((item) => item.text),
     ].filter((text) =>
       /\b(Air quality|Canada only|stations reporting|Low|Moderate|High|health risk)\b/.test(

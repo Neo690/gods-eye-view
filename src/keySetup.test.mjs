@@ -7,7 +7,12 @@ import {
   bindKeySetupPlacement,
   waitForChatGptOAuth,
   initKeySetup,
+  buildRow,
   openaiCheckText,
+  acledCheckText,
+  keyCheckText,
+  keySetupRowFor,
+  saveRefusalText,
 } from './keySetup.js';
 import { describeUnsavedWork } from './i18n/index.js';
 
@@ -62,10 +67,20 @@ test('setup placement moves the same button only in Cyber and disconnects on tea
 });
 
 test('the chip counts what is missing, and retires the count at zero', () => {
-  assert.equal(keySetupChipLabel({ setCount: 0, total: 8 }), 'POWER UP · 8 KEYS WAITING');
-  assert.equal(keySetupChipLabel({ setCount: 7, total: 8 }), 'POWER UP · 1 KEY WAITING');
+  assert.equal(
+    keySetupChipLabel({ setCount: 0, total: 8 }),
+    'POWER UP · 8 KEYS WAITING',
+  );
+  assert.equal(
+    keySetupChipLabel({ setCount: 7, total: 8 }),
+    'POWER UP · 1 KEY WAITING',
+  );
   assert.equal(keySetupChipLabel({ setCount: 8, total: 8 }), 'POWERED UP');
-  assert.equal(keySetupChipLabel(null), 'POWERED UP', 'no status is not a broken label');
+  assert.equal(
+    keySetupChipLabel(null),
+    'POWERED UP',
+    'no status is not a broken label',
+  );
 });
 
 test('collectKeyUpdates keeps only non-empty trimmed values', () => {
@@ -105,14 +120,27 @@ test('OAuth login polling stops as soon as local ChatGPT auth becomes available'
 
 test('OAuth login polling stops on login or HTTP failure instead of waiting for timeout', async () => {
   for (const result of [
-    { ok: true, payload: { available: false, loginFailed: true, error: 'Sign-in failed.' } },
+    {
+      ok: true,
+      payload: {
+        available: false,
+        loginFailed: true,
+        error: 'Sign-in failed.',
+      },
+    },
     { ok: false, payload: { error: 'Sign-in is local only.' } },
   ]) {
     let checks = 0;
-    await assert.rejects(waitForChatGptOAuth({
-      fetchImpl: async () => { checks += 1; return { ok: result.ok, json: async () => result.payload }; },
-      sleep: () => assert.fail('failed login must stop polling'),
-    }), { message: result.payload.error });
+    await assert.rejects(
+      waitForChatGptOAuth({
+        fetchImpl: async () => {
+          checks += 1;
+          return { ok: result.ok, json: async () => result.payload };
+        },
+        sleep: () => assert.fail('failed login must stop polling'),
+      }),
+      { message: result.payload.error },
+    );
     assert.equal(checks, 1);
   }
 });
@@ -120,12 +148,34 @@ test('OAuth login polling stops on login or HTTP failure instead of waiting for 
 test('OAuth login polling respects timeout and an aborted setup surface', async () => {
   let clock = 0;
   let checks = 0;
-  const poll = { fetchImpl: async () => { checks += 1; return { ok: true, json: async () => ({ available: false, pending: true }) }; } };
-  assert.equal(await waitForChatGptOAuth({ ...poll, timeoutMs: 100, pollMs: 100, now: () => clock, sleep: async (ms) => { clock += ms; } }), false);
+  const poll = {
+    fetchImpl: async () => {
+      checks += 1;
+      return {
+        ok: true,
+        json: async () => ({ available: false, pending: true }),
+      };
+    },
+  };
+  assert.equal(
+    await waitForChatGptOAuth({
+      ...poll,
+      timeoutMs: 100,
+      pollMs: 100,
+      now: () => clock,
+      sleep: async (ms) => {
+        clock += ms;
+      },
+    }),
+    false,
+  );
   assert.equal(checks, 2);
   const controller = new AbortController();
   controller.abort();
-  assert.equal(await waitForChatGptOAuth({ ...poll, signal: controller.signal }), false);
+  assert.equal(
+    await waitForChatGptOAuth({ ...poll, signal: controller.signal }),
+    false,
+  );
   assert.equal(checks, 2, 'aborted polling does not fetch');
 });
 
@@ -133,14 +183,22 @@ test('OAuth polling ignores a ready response received after the surface was abor
   const controller = new AbortController();
   const available = await waitForChatGptOAuth({
     signal: controller.signal,
-    fetchImpl: async () => ({ ok: true, json: async () => { controller.abort(); return { available: true }; } }),
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => {
+        controller.abort();
+        return { available: true };
+      },
+    }),
     sleep: () => assert.fail('aborted polling must not continue'),
   });
   assert.equal(available, false);
 });
 
 test('the first Google key strips ONLY the keyless OSM basemap from the share hash', () => {
-  const stripped = stripKeylessBasemapFromHash('lat=30.2&lon=-97.7&map=osm&style=normal');
+  const stripped = stripKeylessBasemapFromHash(
+    'lat=30.2&lon=-97.7&map=osm&style=normal',
+  );
   assert.ok(stripped !== null);
   const params = new URLSearchParams(stripped);
   assert.equal(params.get('map'), null, 'osm basemap removed');
@@ -148,7 +206,11 @@ test('the first Google key strips ONLY the keyless OSM basemap from the share ha
   assert.equal(params.get('style'), 'normal', 'style survives');
   // A stack under any other name was chosen or shared on purpose.
   assert.equal(stripKeylessBasemapFromHash('map=bing-aerial&lat=1'), null);
-  assert.equal(stripKeylessBasemapFromHash('lat=1&lon=2'), null, 'no stack, nothing to do');
+  assert.equal(
+    stripKeylessBasemapFromHash('lat=1&lon=2'),
+    null,
+    'no stack, nothing to do',
+  );
   assert.equal(stripKeylessBasemapFromHash(''), null);
   assert.equal(stripKeylessBasemapFromHash(undefined), null);
 });
@@ -162,11 +224,15 @@ test('aborting pending setup removes its surface and ignores a late response', a
   let requestSignal;
   const controller = new AbortController();
   const pending = initKeySetup({
-    documentRef: { getElementById: (id) => id === 'key-setup-chip' ? chip : root },
+    documentRef: {
+      getElementById: (id) => (id === 'key-setup-chip' ? chip : root),
+    },
     signal: controller.signal,
     fetchImpl: (_url, { signal }) => {
       requestSignal = signal;
-      return new Promise((resolve) => { resolveResponse = resolve; });
+      return new Promise((resolve) => {
+        resolveResponse = resolve;
+      });
     },
   });
   controller.abort();
@@ -216,9 +282,135 @@ test('a pasted, unsaved key makes the language switch ask first until teardown',
   assert.deepEqual(describeUnsavedWork(), []);
 });
 
+function fakeDocument() {
+  class Node {
+    constructor(tag) {
+      this.tagName = tag.toUpperCase();
+      this.children = [];
+      this.dataset = {};
+      this.attributes = {};
+      this.className = '';
+      this.textContent = '';
+      this.hidden = false;
+    }
+    append(...nodes) {
+      this.children.push(...nodes);
+    }
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    }
+  }
+  return { createElement: (tag) => new Node(tag) };
+}
+
+test('a saved testable key renders TEST KEY; unset or untestable rows do not', () => {
+  const documentRef = fakeDocument();
+  const key = {
+    id: 'probe-provider',
+    title: 'PROBE PROVIDER',
+    unlocks: 'A fixture feed',
+    getUrl: 'https://example.test/keys',
+    envVars: ['PROBE_API_KEY'],
+    tier: 'free',
+    set: true,
+    managed: 'external',
+    testable: true,
+  };
+  const row = buildRow(documentRef, key);
+  const actions = row.children.find(
+    (child) => child.className === 'key-setup-actions',
+  );
+  const button = actions?.children.find(
+    (child) => child.dataset.keySetupTest === 'probe-provider',
+  );
+  assert.equal(button?.textContent, 'TEST KEY');
+  assert.equal(
+    button?.attributes['aria-label'],
+    'Test the saved PROBE PROVIDER key',
+  );
+  for (const variant of [{ set: false }, { testable: false }]) {
+    const hidden = buildRow(documentRef, { ...key, ...variant });
+    assert.equal(
+      hidden.children.some((child) => child.className === 'key-setup-actions'),
+      false,
+      JSON.stringify(variant),
+    );
+  }
+});
+
+test('a requested registry row is found by id, never by selector text', () => {
+  const rows = [
+    { dataset: { keyId: 'openai' } },
+    { dataset: { keyId: 'acled' } },
+  ];
+  const host = { querySelectorAll: () => rows };
+  assert.equal(keySetupRowFor(host, 'acled'), rows[1]);
+  assert.equal(keySetupRowFor(host, 'missing'), null);
+  assert.equal(keySetupRowFor(host, ''), null);
+  assert.equal(keySetupRowFor(null, 'acled'), null);
+  assert.equal(
+    keySetupRowFor({ querySelectorAll: () => [{ dataset: {} }] }, 'acled'),
+    null,
+  );
+});
+
+test('test-key refusals read as their own sentences', () => {
+  assert.equal(
+    saveRefusalText({ code: 'no-key' }, 409),
+    'Save this key first; there is nothing to test.',
+  );
+  assert.equal(
+    saveRefusalText({ code: 'not-testable' }, 400),
+    'This provider has no server-side key test.',
+  );
+  assert.equal(
+    saveRefusalText({ error: 'The key test failed' }, 500),
+    'The key test failed',
+  );
+});
+
+test("a saved ACLED pair is reported by ACLED's own verdict", () => {
+  assert.equal(
+    acledCheckText({ status: 200 }),
+    'ACLED accepted the credentials.',
+  );
+  assert.equal(
+    acledCheckText({ status: 401 }),
+    'ACLED rejected the credentials',
+  );
+  assert.equal(
+    acledCheckText({ status: 403 }),
+    'ACLED denied API access for this account',
+  );
+  assert.equal(
+    acledCheckText({ status: null }),
+    'ACLED did not answer',
+  );
+  assert.equal(
+    acledCheckText({ status: 429 }),
+    'ACLED answered 429 — verify the account on the ACLED portal.',
+  );
+  // The row dispatches by registry id, so a provider never inherits another's
+  // sentence.
+  assert.equal(
+    keyCheckText('acled', { status: 401 }),
+    'ACLED rejected the credentials',
+  );
+  assert.equal(
+    keyCheckText('openai', { status: 401 }),
+    'OpenAI answered 401 — this key is rejected.',
+  );
+});
+
 test('the post-save OpenAI check reads as one sentence per answer, never a raw status dump', () => {
-  assert.equal(openaiCheckText({ status: 200 }), 'OpenAI answered 200 — this key works.');
-  assert.equal(openaiCheckText({ status: 401 }), 'OpenAI answered 401 — this key is rejected.');
+  assert.equal(
+    openaiCheckText({ status: 200 }),
+    'OpenAI answered 200 — this key works.',
+  );
+  assert.equal(
+    openaiCheckText({ status: 401 }),
+    'OpenAI answered 401 — this key is rejected.',
+  );
   // OpenAI's own `code` picks the 429 sentence: out of credits is a billing
   // problem, anything else is a rate limit.
   assert.equal(
@@ -233,7 +425,10 @@ test('the post-save OpenAI check reads as one sentence per answer, never a raw s
     openaiCheckText(null),
     'OpenAI could not be reached to verify the key.',
   );
-  assert.equal(openaiCheckText(undefined), 'OpenAI could not be reached to verify the key.');
+  assert.equal(
+    openaiCheckText(undefined),
+    'OpenAI could not be reached to verify the key.',
+  );
   assert.equal(
     openaiCheckText({ status: 403, code: 'region_blocked' }),
     'OpenAI answered 403 — verify the key on the OpenAI portal.',

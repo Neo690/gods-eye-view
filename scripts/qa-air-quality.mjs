@@ -10,9 +10,15 @@
  * with no reading surfacing as a confident 1 — is a real defect this catches.
  *
  * Run:  node scripts/qa-air-quality.mjs --url http://localhost:4173
+ *       node scripts/qa-air-quality.mjs --url http://localhost:4173 --fixtures
+ *
+ * --fixtures answers ECCC through the layer-activation matrix's fixtureFor()
+ * registry and aborts every other external request, so all six checks can run
+ * with no internet access. Local app assets and APIs still come from --url.
  */
 
 import puppeteer from 'puppeteer';
+import { fixtureFor } from './fixtures/layer-activation/network.mjs';
 
 const argv = process.argv.slice(2);
 const getOpt = (name, dflt) => {
@@ -20,6 +26,8 @@ const getOpt = (name, dflt) => {
   return i >= 0 && argv[i + 1] ? argv[i + 1] : dflt;
 };
 const APP_URL = getOpt('--url', 'http://localhost:4173');
+const APP_ORIGIN = new URL(APP_URL).origin;
+const FIXTURES = argv.includes('--fixtures');
 
 const results = [];
 function record(name, ok, detail) {
@@ -29,7 +37,53 @@ function record(name, ok, detail) {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Answer external reads from the matrix fixture registry and abort the rest.
+ * The app origin keeps loading from the local server, so nothing here depends
+ * on the internet; an unmatched external request is recorded and blocked.
+ */
+async function installFixtures(page) {
+  const hits = new Set();
+  const blocked = [];
+  await page.setRequestInterception(true);
+  page.on('request', async (request) => {
+    const rawUrl = request.url();
+    let url;
+    try {
+      url = new URL(rawUrl);
+    } catch {
+      await request.abort().catch(() => {});
+      return;
+    }
+    if (url.origin === APP_ORIGIN) {
+      await request.continue().catch(() => {});
+      return;
+    }
+    const matched = fixtureFor(rawUrl);
+    if (matched) {
+      hits.add(matched.id);
+      const { status = 200, headers = {}, body } = matched.response;
+      await request
+        .respond({
+          status,
+          headers,
+          body: Buffer.isBuffer(body)
+            ? body
+            : typeof body === 'string'
+              ? body
+              : JSON.stringify(body ?? null),
+        })
+        .catch(() => {});
+      return;
+    }
+    blocked.push(rawUrl);
+    await request.abort('blockedbyclient').catch(() => {});
+  });
+  return { hits, blocked };
+}
+
 async function main() {
+  let fixtureNet = null;
   let exitCode = 0;
   const consoleErrors = [];
   const browser = await puppeteer.launch({
@@ -45,9 +99,17 @@ async function main() {
 
   try {
     const page = await browser.newPage();
+    if (FIXTURES) fixtureNet = await installFixtures(page);
     page.on('pageerror', (e) => consoleErrors.push(String(e).slice(0, 160)));
     page.on('console', (m) => {
-      if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 160));
+      if (m.type() !== 'error') return;
+      const text = m.text();
+      // Blocking the live internet is the point of --fixtures; the browser's
+      // resource-load message for a deliberately aborted request is not an
+      // application error. Local 404s and app errors still count.
+      if (FIXTURES && /net::ERR_(BLOCKED_BY_CLIENT|FAILED|ABORTED)/.test(text))
+        return;
+      consoleErrors.push(text.slice(0, 160));
     });
 
     await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
@@ -72,14 +134,17 @@ async function main() {
     });
 
     const loaded = !stats?.missing && !stats?.error && stats?.count > 0;
-    record('stations report a current index', loaded,
-      `count=${stats?.count} error=${stats?.error}`);
+    record(
+      'stations report a current index',
+      loaded,
+      `count=${stats?.count} error=${stats?.error}`,
+    );
     if (!loaded) exitCode = 1;
 
     const records = await page.evaluate(
       () =>
-        window.__godsEyeView.dataManager
-          .layers.get('air-quality')
+        window.__godsEyeView.dataManager.layers
+          .get('air-quality')
           ?.module.getAnalystRecords(500) || [],
     );
 
@@ -87,20 +152,33 @@ async function main() {
     const shaped = records.every(
       (r) => r.provider && r.scale && Number.isFinite(r.value) && r.band,
     );
-    record('every reading carries provider, scale, value and band', shaped,
+    record(
+      'every reading carries provider, scale, value and band',
+      shaped,
       records.length
         ? `sample={provider:${records[0].provider}, scale:${records[0].scale}, value:${records[0].value}, band:${records[0].band}}`
-        : 'no records');
+        : 'no records',
+    );
     if (!shaped) exitCode = 1;
 
-    const published = records.every((r) => Number.isInteger(r.value) && r.value >= 1);
-    record('every AQHI value is in the published integer form, floored at 1', published,
-      `values=${[...new Set(records.map((r) => r.value))].sort((a, b) => a - b).join(',')}`);
+    const published = records.every(
+      (r) => Number.isInteger(r.value) && r.value >= 1,
+    );
+    record(
+      'every AQHI value is in the published integer form, floored at 1',
+      published,
+      `values=${[...new Set(records.map((r) => r.value))].sort((a, b) => a - b).join(',')}`,
+    );
     if (!published) exitCode = 1;
 
-    const zones = [...new Set(records.map((r) => r.zone).filter(Boolean))].sort();
-    record('coverage spans multiple ECCC administrative zones', zones.length >= 3,
-      `zones=${zones.join(',') || 'none'} stations=${records.length}`);
+    const zones = [
+      ...new Set(records.map((r) => r.zone).filter(Boolean)),
+    ].sort();
+    record(
+      'coverage spans multiple ECCC administrative zones',
+      zones.length >= 3,
+      `zones=${zones.join(',') || 'none'} stations=${records.length}`,
+    );
     if (zones.length < 3) exitCode = 1;
 
     // The card's whole point is "highest readings in view", so put the camera
@@ -129,26 +207,42 @@ async function main() {
 
     const controls = await page.evaluate(
       () =>
-        window.__godsEyeView.dataManager
-          .layers.get('air-quality')
+        window.__godsEyeView.dataManager.layers
+          .get('air-quality')
           ?.module.getRowControls?.() || null,
     );
+    // The readout descriptor declares its legend as {colors, labels}; the
+    // Weather panel renders it, and QA must keep asserting that contract.
+    const legend = controls?.legend;
     const readoutOk =
       controls?.readout === true &&
-      Array.isArray(controls?.legend?.colors) &&
-      controls.legend.colors.length === controls.legend.labels.length &&
+      controls?.legendCategorical === true &&
+      Array.isArray(legend?.colors) &&
+      Array.isArray(legend?.labels) &&
+      legend.colors.length === legend.labels.length &&
+      legend.labels.length > 0 &&
       Array.isArray(controls?.list?.items) &&
       controls.list.items.length > 0 &&
-      controls.list.items.every((item) => item.id && item.label && item.value) &&
+      // The row list renders `lead` + `text`; `label`/`value` were never the
+      // layer's contract, so checking them made a healthy card look broken.
+      controls.list.items.every(
+        (item) => item.id && item.text && item.ordinal >= 1,
+      ) &&
       /Canada only/.test(controls?.summary?.coverage || '');
-    record('the Weather readout lists the worst readings in view, with a legend', readoutOk,
+    record(
+      'the Weather readout lists the worst readings in view, with a legend',
+      readoutOk,
       controls
-        ? `bands=${controls.legend?.labels?.join('/')} inView=${controls.list?.items?.length} coverage="${controls.summary?.coverage}"`
-        : 'no descriptor');
+        ? `bands=${legend?.labels?.join('/')} inView=${controls.list?.items?.length} coverage="${controls.summary?.coverage}"`
+        : 'no descriptor',
+    );
     if (!readoutOk) exitCode = 1;
 
-    record('no console errors', consoleErrors.length === 0,
-      consoleErrors.length ? consoleErrors.slice(0, 2).join(' | ') : 'clean');
+    record(
+      'no console errors',
+      consoleErrors.length === 0,
+      consoleErrors.length ? consoleErrors.slice(0, 2).join(' | ') : 'clean',
+    );
     if (consoleErrors.length) exitCode = 1;
   } catch (e) {
     console.error('\x1b[31mHarness error:\x1b[0m', e);
@@ -159,6 +253,12 @@ async function main() {
 
   const pass = results.filter((r) => r.ok === true).length;
   const fail = results.filter((r) => r.ok === false).length;
+  if (fixtureNet) {
+    console.log(
+      `  FIXTURES: ${[...fixtureNet.hits].sort().join(',') || 'none'} · ` +
+        `${fixtureNet.blocked.length} external request(s) blocked`,
+    );
+  }
   console.log('\n' + '─'.repeat(60));
   console.log(`  RESULT: ${pass} passed, ${fail} failed`);
   console.log('─'.repeat(60) + '\n');

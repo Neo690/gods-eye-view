@@ -16,6 +16,9 @@
  * QA_RECENT_IMAGERY_SLOW_RENDER=1 permits loaded SwiftShader CI to use a
  * 4 s ZOOM IN wait and 0.8 s height-stability tail (defaults: 2 s / 1.2 s).
  * Every wait is bounded. Without NASA access the run skips with code 0.
+ * A bare container also needs fonts (install fonts-dejavu-core or point
+ * FONTCONFIG_FILE at a font directory): with no font match, text has no line
+ * boxes and the DETAILS scroll measurement is meaningless.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -376,6 +379,9 @@ try {
   );
   check('the app boots with the Recent Imagery handle', booted);
   if (!booted) throw new Error('boot timeout');
+  // Fonts load over the network: measuring the rail before they land makes a
+  // later webfont swap look like a panel-height change.
+  await page.evaluate(() => document.fonts.ready);
   await page.evaluate(installPageHelpers);
 
   await setView(AUSTIN);
@@ -996,10 +1002,12 @@ try {
     5_000,
   );
   current = await state();
+  // Units are rendered with a no-break space by formatQuantity; compare the
+  // line the operator sees, not the ASCII spelling of its separator.
+  const refusalText = current.noticeText.replace(/\u00a0/g, ' ');
   check(
     `an oversized USE VIEW (${Math.round(refusalWidth)} km) is refused in the notice line`,
-    refused &&
-      /^View is [\d,]+ km wide · limit 1,000 km$/.test(current.noticeText),
+    refused && /^View is [\d,]+ km wide · limit 1,000 km$/.test(refusalText),
     current.noticeText,
   );
   check(
@@ -1259,10 +1267,16 @@ try {
     `body=${bodyBack}`,
   );
 
-  /** Sample both panel heights for 2 s; settled = the tail never changes. */
+  /**
+   * Watch both panel heights until the last HEIGHT_TAIL_SAMPLES agree, bounded
+   * to 4 s. The observation window starts once the media inside the expanded
+   * panel has had time to replace its provisional height; the tail then has to
+   * stay still for 1.2 s, as before.
+   */
   const settledHeights = async () => {
     const samples = [];
-    for (let i = 0; i < 20; i += 1) {
+    const deadline = Date.now() + 4_000;
+    while (Date.now() < deadline) {
       samples.push(
         await page.evaluate(() => ({
           imagery: document.getElementById('recent-imagery-panel')
@@ -1271,6 +1285,13 @@ try {
         })),
       );
       await wait(100);
+      const tail = samples.slice(-HEIGHT_TAIL_SAMPLES);
+      if (
+        tail.length === HEIGHT_TAIL_SAMPLES &&
+        new Set(tail.map((s) => s.imagery)).size === 1 &&
+        new Set(tail.map((s) => s.cctv)).size === 1
+      )
+        break;
     }
     const tail = (key) =>
       new Set(samples.slice(-HEIGHT_TAIL_SAMPLES).map((s) => s[key]));
@@ -1373,18 +1394,25 @@ try {
     );
     if (imageryExpanded) await togglePanel(imageryPanel);
     await wait(400);
-    const onScreen = await page.evaluate(() =>
-      Object.fromEntries(
-        [
-          'pp-toggles',
-          'global-context-panel',
-          'recent-imagery-panel',
-          'cctv-panel',
-        ].map((id) => [id, window.__riQa.headerOnScreen(id)]),
-      ),
-    );
+    // On a desktop the drawer owns DISPLAY, CCTV and CONTEXT while they are
+    // collapsed; Recent Imagery is a readout and keeps its own header.
+    const onScreen = await page.evaluate(() => {
+      const onScreenFor = (selector) => {
+        const element = document.querySelector(selector);
+        const rect = element?.getBoundingClientRect();
+        return rect
+          ? rect.height > 0 && rect.top >= 0 && rect.bottom <= innerHeight
+          : false;
+      };
+      return {
+        display: onScreenFor('[data-panel-drawer-tab="pp-toggles"]'),
+        context: onScreenFor('[data-panel-drawer-tab="global-context-panel"]'),
+        cctv: onScreenFor('[data-panel-drawer-tab="cctv-panel"]'),
+        imagery: window.__riQa.headerOnScreen('recent-imagery-panel'),
+      };
+    });
     check(
-      `DISPLAY, CONTEXT, CCTV and the imagery header are all on screen once everything is collapsed ${at}`,
+      `the drawer tabs for DISPLAY, CONTEXT and CCTV, and the imagery header, are all on screen once everything is collapsed ${at}`,
       Object.values(onScreen).every(Boolean),
       JSON.stringify(onScreen),
     );

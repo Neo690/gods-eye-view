@@ -184,9 +184,11 @@ test('directories the server writes while it runs are kept out of the dev watche
   );
   // Dev only: preview and build have no watcher.
   assert.equal(plugin.apply, 'serve');
+  // `.qa-run` is QA scratch, not app runtime, and must stay out of this list.
   assert.deepEqual(plugin.config().server.watch.ignored, [
     '**/.gev-cache/**',
     '**/.gev-logs/**',
+    '**/.gev-tools/**',
   ]);
 });
 

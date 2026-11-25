@@ -159,15 +159,22 @@ test('the readout descriptor carries the band legend and coverage', async () => 
   const controls = layer.getRowControls();
   assert.equal(controls.readout, true);
   assert.match(controls.summary.coverage, /Canada only/);
-  // The Weather panel's legend shape: one {color, label} per band.
+  // The Weather panel consumes the shared {colors, labels} descriptor. Keep
+  // `legend.labels` present: an array-only legend renders but breaks QA and
+  // any consumer of the declared descriptor.
   assert.equal(controls.legendCategorical, true);
-  assert.deepEqual(
-    controls.legend.map((entry) => entry.label),
-    ['Low', 'Moderate', 'High', 'Very High'],
-  );
+  assert.deepEqual(controls.legend.labels, [
+    'Low',
+    'Moderate',
+    'High',
+    'Very High',
+  ]);
+  assert.equal(controls.legend.colors.length, controls.legend.labels.length);
   assert.ok(
-    controls.legend.every((entry) => /^#[0-9a-f]{6}$/i.test(entry.color)),
+    controls.legend.colors.every((color) => /^#[0-9a-f]{6}$/i.test(color)),
   );
+  assert.equal(controls.legend.categorical, true);
+  assert.equal(controls.legend.units, 'AQHI');
   // Worst first, and every item keyed.
   assert.deepEqual(
     controls.list.items.map((i) => i.text),

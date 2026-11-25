@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "model": "gfs",
+  "cycle": {
+    "date": "20261123",
+    "hour": 0,
+    "forecastHour": 9,
+    "runIso": "2026-11-23T00:00:00.000Z",
+    "validIso": "2026-11-23T09:00:00.000Z"
+  },
+  "fetchedAt": 1795422842281,
+  "level": "10 m above ground",
+  "units": "m/s",
+  "grid": {
+    "nx": 36,
+    "ny": 18,
+    "lo1": 0,
+    "la1": 90,
+    "dx": 10,
+    "dy": 10
+  },
+  "stale": false,
+  "unavailable": false,
+  "reason": null,
+  "gridUrl": "/api/wind/grid/gfs-qa-f9-1.bin?model=gfs"
+}

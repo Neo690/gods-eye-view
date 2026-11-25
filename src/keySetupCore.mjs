@@ -32,6 +32,13 @@ export const KEY_SETUP_APPEND_HEADER =
   '# Keys added by the in-app POWER UP panel';
 
 /**
+ * DOM event a surface dispatches on the document to open Provider Settings at
+ * one registry row (`detail.keyId`). A layer can then explain a missing key and
+ * offer the exact row that fixes it without importing the setup surface.
+ */
+export const KEY_SETUP_OPEN_EVENT = 'gev:open-key-setup';
+
+/**
  * Provider credentials, in display order — most magic per
  * minute first. `tier` mirrors the README's color legend: 'metered' (🔴) is a
  * billing-enabled account, 'free' (🟡) is a register-and-paste key, and
@@ -69,6 +76,9 @@ export const KEY_SETUP_KEYS = Object.freeze([
     getUrl: 'https://platform.openai.com/api-keys',
     envVars: Object.freeze(['OPENAI_API_KEY']),
     tier: 'metered',
+    // Provider Settings can ask the server to re-test this saved key against
+    // OpenAI's own /v1/models probe (POST /api/setup/test-key).
+    testable: true,
   }),
   Object.freeze({
     id: 'gemini',
@@ -93,6 +103,19 @@ export const KEY_SETUP_KEYS = Object.freeze([
     getUrl: 'https://firms.modaps.eosdis.nasa.gov/api/map_key/',
     envVars: Object.freeze(['FIRMS_MAP_KEY']),
     tier: 'free',
+  }),
+  Object.freeze({
+    id: 'acled',
+    title: 'ACLED', // i18n-ignore: provider product name
+    unlocks: msg(
+      'Conflict events with reported fatalities in the Conflict Events layer. Free: create a myACLED account; after registering, request API access, then paste its email and password; they stay on the server',
+    ),
+    getUrl: 'https://acleddata.com/user/register',
+    envVars: Object.freeze(['ACLED_EMAIL', 'ACLED_PASSWORD']),
+    tier: 'free',
+    // The server can re-test the saved pair against ACLED's OAuth grant and a
+    // one-row read (POST /api/setup/test-key).
+    testable: true,
   }),
   Object.freeze({
     id: 'tomtom',
@@ -129,6 +152,16 @@ export const KEY_SETUP_KEYS = Object.freeze([
     envVars: Object.freeze(['MAPILLARY_CLIENT_TOKEN']),
     tier: 'free',
     clientExposed: true,
+  }),
+  Object.freeze({
+    id: 'opencellid',
+    title: 'OPENCELLID', // i18n-ignore: provider product name
+    unlocks: msg(
+      'Estimated cell-tower positions outside France in the Radio Sites layer — paste the API key from your OpenCelliD dashboard; it stays on the server',
+    ),
+    getUrl: 'https://my.opencellid.org/dashboard',
+    envVars: Object.freeze(['OPENCELLID_API_KEY']),
+    tier: 'free',
   }),
   Object.freeze({
     id: 'adsb-exchange',
@@ -565,6 +598,7 @@ export function keySetupStatus(env = {}) {
       envVars: [...entry.envVars],
       tier: entry.tier,
       clientExposed: Boolean(entry.clientExposed),
+      testable: Boolean(entry.testable),
       set,
     };
   });

@@ -301,7 +301,7 @@ const shot = (name, caption) =>
   });
 
 const view = (city) =>
-  `${BASE}/?welcome=0#lat=${city.lat}&lon=${city.lon}&alt=600&heading=${city.heading}&pitch=-45`;
+  `${BASE}/?welcome=0&qa=1#lat=${city.lat}&lon=${city.lon}&alt=600&heading=${city.heading}&pitch=-45`;
 
 try {
   await page.goto(view(BOSTON), { waitUntil: 'domcontentloaded' });
@@ -1610,7 +1610,9 @@ try {
       await wait(600);
       anchor = await page.evaluate(
         async (key, durationMs) => {
-          const overlay = await import('/src/overlays/worldOverlay.js');
+          const overlay =
+            window.__gevQaModules?.worldOverlay ??
+            (await import('/src/overlays/worldOverlay.js'));
           const app = window.__godsEyeView;
           const layer = app.dataManager.layers.get('transit').module;
           const state = layer._transitStateForTest();
@@ -1623,7 +1625,8 @@ try {
                 handler: !!state._clickHandler,
                 lastPick: state._lastPickForTest ?? null,
                 pointerOwner: (
-                  await import('/src/data/inputOwnership.js')
+                  window.__gevQaModules?.inputOwnership ??
+                  (await import('/src/data/inputOwnership.js'))
                 ).pointerOwner(),
               },
             };

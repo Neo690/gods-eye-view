@@ -229,9 +229,12 @@ export async function runFleetBudgets({
       const layer =
         window.__godsEyeView.dataManager.layers.get('transit').module;
       const state = layer._transitStateForTest();
-      const { seek } = await import('/src/data/contactPlayback.js');
+      const { seek } =
+        window.__gevQaModules?.contactPlayback ??
+        (await import('/src/data/contactPlayback.js'));
       const { updatePlayback } =
-        await import('/src/layers/transit/movement.js');
+        window.__gevQaModules?.transitMovement ??
+        (await import('/src/layers/transit/movement.js'));
       for (const entry of state._vehicles.values()) {
         entry.clocks.wallNowMs = Date.now();
         entry.clocks.monoNowMs = performance.now();
@@ -662,7 +665,9 @@ export async function runTrailVisibility({
         parts.ingestion.removeVehicle(key);
       clearTimeout(state._cameraDebounceTimer);
       state._cameraDebounceTimer = null;
-      const { seek, setRate } = await import('/src/data/contactPlayback.js');
+      const { seek, setRate } =
+        window.__gevQaModules?.contactPlayback ??
+        (await import('/src/data/contactPlayback.js'));
       const now = Date.now();
       // Nine straight street fixes, 30 m apart. Use the production surface path.
       for (let i = 0; i < 9; i++) {
@@ -807,7 +812,9 @@ export async function runTrailVisibility({
     const trail = parts.trails.diagnostics();
     if (!entry || !trail)
       return { ...setup, present: 0, reason: 'selection disappeared' };
-    const { setRate } = await import('/src/data/contactPlayback.js');
+    const { setRate } =
+      window.__gevQaModules?.contactPlayback ??
+      (await import('/src/data/contactPlayback.js'));
     setRate(entry.track, 0, {
       wallNowMs: Date.now(),
       monoNowMs: performance.now(),

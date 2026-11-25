@@ -12,7 +12,7 @@ export async function runTransitHeadingRegression(base, check) {
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });
     await page.goto(
-      `${base}/?welcome=0#lat=42.3601&lon=-71.0589&alt=1200&heading=0&pitch=-90`,
+      `${base}/?welcome=0&qa=1#lat=42.3601&lon=-71.0589&alt=1200&heading=0&pitch=-90`,
       { waitUntil: 'domcontentloaded' },
     );
     await page.waitForFunction(
@@ -27,13 +27,17 @@ export async function runTransitHeadingRegression(base, check) {
       layer._loadTransitFleetForTest(4, { lat: 42.3601, lon: -71.0589 }, 100);
       const state = layer._transitStateForTest(),
         parts = layer._transitPartsForTest();
-      const { destroyTrack } = await import('/src/data/contactPlayback.js');
+      const { destroyTrack } =
+        window.__gevQaModules?.contactPlayback ??
+        (await import('/src/data/contactPlayback.js'));
       const {
         initializePlayback,
         recordFix,
         updatePlayback,
         attachFloorToPlace,
-      } = await import('/src/layers/transit/movement.js');
+      } =
+        window.__gevQaModules?.transitMovement ??
+        (await import('/src/layers/transit/movement.js'));
       // The first three are parked: held east, reported east only, unknown.
       for (let i = 0; i < 3; i++) {
         const entry = state._vehicles.get(`mbta:qa-${i}`);

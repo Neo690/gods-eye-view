@@ -1363,10 +1363,14 @@ export function vesselsResponse() {
  * key it owns in its .env (markStoredKeyManagement, src/keySetupCore.mjs).
  */
 function panelKeySetupStatus() {
-  return markStoredKeyManagement(
+  const status = markStoredKeyManagement(
     keySetupStatus(getAllApiKeys()),
     getStoredApiKeys(),
   );
+  // This shell owns no server-side provider probe, so it must not offer a
+  // TEST KEY control the page cannot complete.
+  for (const key of status.keys) key.testable = false;
+  return status;
 }
 
 /** Routes this module answers, keyed by pathname. */

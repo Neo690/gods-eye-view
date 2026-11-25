@@ -21,7 +21,7 @@ try {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(
-    `${base}/?welcome=0#lat=30.271&lon=-97.7431&alt=600&heading=0&pitch=-60`,
+    `${base}/?welcome=0&qa=1#lat=30.271&lon=-97.7431&alt=600&heading=0&pitch=-60`,
   );
   await page.waitForFunction(() =>
     window.__godsEyeView?.dataManager?.layers.has('transit'),
@@ -76,8 +76,11 @@ try {
     const state = layer._transitStateForTest(),
       parts = layer._transitPartsForTest();
     const { getRegisteredTransitFeed } =
-      await import('/src/data/transitFeeds.js');
-    const { setRate } = await import('/src/data/contactPlayback.js');
+      window.__gevQaModules?.transitFeeds ??
+      (await import('/src/data/transitFeeds.js'));
+    const { setRate } =
+      window.__gevQaModules?.contactPlayback ??
+      (await import('/src/data/contactPlayback.js'));
     const C = camera.positionCartographic.constructor;
     const feed = {
       ...getRegisteredTransitFeed('capmetro-austin'),

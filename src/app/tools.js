@@ -15,6 +15,54 @@ import {
   holdContinuousRender,
   releaseContinuousRender,
 } from '../renderGovernor.js';
+import * as qaInputOwnership from '../data/inputOwnership.js';
+import { getActiveCameraMotion } from '../cameraVerbs.js';
+import * as qaWorldOverlay from '../overlays/worldOverlay.js';
+import { distanceFade } from '../overlays/worldOverlayDraw.js';
+import {
+  destroyTrack,
+  seek as seekPlayback,
+  setRate as setPlaybackRate,
+} from '../data/contactPlayback.js';
+import { getRegisteredTransitFeed } from '../data/transitFeeds.js';
+import {
+  attachFloorToPlace,
+  initializePlayback,
+  recordFix,
+  updatePlayback,
+} from '../layers/transit/movement.js';
+
+/**
+ * Browser QA seams exposed only with `?qa=1`. They are the same module
+ * instances the application uses, not a second copy: the harness observes the
+ * live pointer, overlay and playback state instead of simulating it.
+ */
+const QA_SEAMS = Object.freeze({
+  inputOwnership: Object.freeze({
+    pointerOwner: qaInputOwnership.pointerOwner,
+    claimPointer: qaInputOwnership.claimPointer,
+    releasePointer: qaInputOwnership.releasePointer,
+  }),
+  cameraVerbs: Object.freeze({ getActiveCameraMotion }),
+  worldOverlay: Object.freeze({
+    getOverlayPaintRect: qaWorldOverlay.getOverlayPaintRect,
+    getWorldOverlayDiagnostics: qaWorldOverlay.getWorldOverlayDiagnostics,
+    hitTestWorldOverlay: qaWorldOverlay.hitTestWorldOverlay,
+  }),
+  worldOverlayDraw: Object.freeze({ distanceFade }),
+  contactPlayback: Object.freeze({
+    destroyTrack,
+    seek: seekPlayback,
+    setRate: setPlaybackRate,
+  }),
+  transitFeeds: Object.freeze({ getRegisteredTransitFeed }),
+  transitMovement: Object.freeze({
+    initializePlayback,
+    recordFix,
+    updatePlayback,
+    attachFloorToPlace,
+  }),
+});
 
 /** Attach scene tools, rendering listeners and the application debug handle. */
 export function createApplicationTools({
@@ -163,6 +211,10 @@ export function createApplicationTools({
   // loop burning behind a hidden tab. (perf wave 2 fix)
   syncVisibilitySuspension();
 
+  const qaEnabled =
+    new URLSearchParams(globalThis.location?.search ?? '').get('qa') === '1';
+  if (qaEnabled) window.__gevQaModules = QA_SEAMS;
+
   window.__godsEyeView = {
     viewer,
     styleManager,
@@ -180,6 +232,7 @@ export function createApplicationTools({
   const debug = window.__godsEyeView;
   defer(() => {
     if (window.__godsEyeView === debug) delete window.__godsEyeView;
+    if (window.__gevQaModules === QA_SEAMS) delete window.__gevQaModules;
   });
   const voiceCommands = initGevVoiceCommands({
     ...voice,

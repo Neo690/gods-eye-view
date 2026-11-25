@@ -30,6 +30,7 @@ const APP_ORIGIN = new URL(APP_URL).origin;
 // has its own acceptance harness and must not intercept those gestures.
 const RADIO_URL = new URL(APP_URL);
 RADIO_URL.searchParams.set('welcome', '0');
+RADIO_URL.searchParams.set('qa', '1');
 const HEADFUL = args.includes('--headful');
 
 const chromeCandidates = [
@@ -704,8 +705,8 @@ async function main() {
           const radio = window.__godsEyeView.dataManager.layers.get('radio').module;
           const dataSource = Array.from({ length: viewer.dataSources.length }, (_, index) => viewer.dataSources.get(index))
             .find((item) => item.name === 'Radio stations');
-          const { getOverlayPaintRect, getWorldOverlayDiagnostics } = await import('/src/overlays/worldOverlay.js');
-          const { radioStationIdFromPick } = await import('/src/data/radio.js');
+          const { getOverlayPaintRect, getWorldOverlayDiagnostics } = window.__gevQaModules?.worldOverlay ?? await import('/src/overlays/worldOverlay.js');
+          const { radioStationIdFromPick } = radio;
           return new Promise((resolve) => {
             let removePostRender = null;
             const finish = () => {
@@ -1290,7 +1291,7 @@ async function main() {
     );
     const clusterBadge = await page.evaluate(async () => {
       const viewer = window.__godsEyeView.viewer;
-      const { getOverlayPaintRect, getWorldOverlayDiagnostics } = await import('/src/overlays/worldOverlay.js');
+      const { getOverlayPaintRect, getWorldOverlayDiagnostics } = window.__gevQaModules?.worldOverlay ?? await import('/src/overlays/worldOverlay.js');
       const baselineSolveRevision = getWorldOverlayDiagnostics().solveRevision;
       const source = Array.from({ length: viewer.dataSources.length }, (_, index) => viewer.dataSources.get(index))
         .find((item) => item.name === 'Radio stations');
@@ -1399,8 +1400,8 @@ async function main() {
       const viewer = window.__godsEyeView.viewer;
       const radio = window.__godsEyeView.dataManager.layers.get('radio').module;
       const ellipsoid = viewer.scene.globe.ellipsoid;
-      const { getWorldOverlayDiagnostics } = await import('/src/overlays/worldOverlay.js');
-      const { distanceFade } = await import('/src/overlays/worldOverlayDraw.js');
+      const { getWorldOverlayDiagnostics } = window.__gevQaModules?.worldOverlay ?? await import('/src/overlays/worldOverlay.js');
+      const { distanceFade } = window.__gevQaModules?.worldOverlayDraw ?? await import('/src/overlays/worldOverlayDraw.js');
       const source = radio.getOverlayDiagnostics();
       const cameraPosition = viewer.camera.positionWC;
       const cameraRadius = Math.hypot(cameraPosition.x, cameraPosition.y, cameraPosition.z);
@@ -1461,7 +1462,7 @@ async function main() {
       const viewer = window.__godsEyeView.viewer;
       const radio = window.__godsEyeView.dataManager.layers.get('radio').module;
       const ellipsoid = viewer.scene.globe.ellipsoid;
-      const { getOverlayPaintRect, getWorldOverlayDiagnostics } = await import('/src/overlays/worldOverlay.js');
+      const { getOverlayPaintRect, getWorldOverlayDiagnostics } = window.__gevQaModules?.worldOverlay ?? await import('/src/overlays/worldOverlay.js');
       const paintedClusters = () => new Promise((resolve) => {
         let removePostRender = null;
         const timeout = setTimeout(() => {
@@ -3707,7 +3708,7 @@ async function main() {
       radio.setFilter('news');
       viewer.scene.requestRender();
       await new Promise((resolve) => setTimeout(resolve, 500));
-      const { getOverlayPaintRect, getWorldOverlayDiagnostics } = await import('/src/overlays/worldOverlay.js');
+      const { getOverlayPaintRect, getWorldOverlayDiagnostics } = window.__gevQaModules?.worldOverlay ?? await import('/src/overlays/worldOverlay.js');
       return new Promise((resolve) => {
         let removePostRender = null;
         let timeout = null;
@@ -3870,7 +3871,7 @@ async function main() {
       const viewer = window.__godsEyeView.viewer;
       const selectedEntity = window.__godsEyeView.viewer.entities.values
         .find((entity) => String(entity.id).startsWith('radio:selected:'));
-      const { getWorldOverlayDiagnostics } = await import('/src/overlays/worldOverlay.js');
+      const { getWorldOverlayDiagnostics } = window.__gevQaModules?.worldOverlay ?? await import('/src/overlays/worldOverlay.js');
       const flightTargets = window.__qaRadioFlyToCalls.map(({ destination }) => {
         const position = viewer.scene.globe.ellipsoid.cartesianToCartographic(destination);
         return {
@@ -4053,7 +4054,7 @@ async function main() {
       });
       const selectedEntity = viewer.entities.values
         .find((entity) => String(entity.id) === `radio:selected:${selected.id}`);
-      const { getOverlayPaintRect, getWorldOverlayDiagnostics } = await import('/src/overlays/worldOverlay.js');
+      const { getOverlayPaintRect, getWorldOverlayDiagnostics } = window.__gevQaModules?.worldOverlay ?? await import('/src/overlays/worldOverlay.js');
       const expectedEntryId = `selected:${selected.id}`;
       let painted = null;
       // Radio's horizon pass reveals the selected entity on its own timer
@@ -4112,7 +4113,7 @@ async function main() {
       });
       const selectedEntity = viewer.entities.values
         .find((entity) => String(entity.id) === `radio:selected:${selected.id}`);
-      const { getOverlayPaintRect, getWorldOverlayDiagnostics } = await import('/src/overlays/worldOverlay.js');
+      const { getOverlayPaintRect, getWorldOverlayDiagnostics } = window.__gevQaModules?.worldOverlay ?? await import('/src/overlays/worldOverlay.js');
       const expectedEntryId = `selected:${selected.id}`;
       let rect = null;
       for (let attempt = 0; attempt < 20 && !rect; attempt += 1) {

@@ -692,6 +692,7 @@ test('key setup writes only the supplied application root, keeps its request gua
     '/api/setup/keys',
     '/api/setup/open-key',
     '/api/setup/status',
+    '/api/setup/test-key',
   ];
   assert.deepEqual([...install(plugin).keys()].sort(), setupRoutes);
   assert.deepEqual([...install(plugin, true).keys()].sort(), setupRoutes);
@@ -814,6 +815,110 @@ test("the post-save OpenAI key probe reports OpenAI's verdict without relaying i
   assert.equal(removed.status, 200);
   assert.equal(calls, 4, 'only submitted values are probed');
   assert.equal('openaiCheck' in removed.json(), false);
+});
+
+test('a saved key is re-tested server-side without the page ever sending the credential', async (t) => {
+  env(t, 'OPENAI_API_KEY', 'sk-saved-on-this-machine');
+  const pings = [];
+  const plugin = keySetupEndpoint({
+    sourceRoot: root(t),
+    pingOpenAi: async (apiKey) => {
+      pings.push(apiKey);
+      return { status: 401, code: 'invalid_api_key' };
+    },
+  });
+  const handler = install(plugin).get('/api/setup/test-key');
+  assert.equal(typeof handler, 'function', 'the test-key route exists');
+  assert.equal((await request(handler, { method: 'GET' })).status, 405);
+  assert.equal(
+    (
+      await request(handler, {
+        method: 'POST',
+        body: JSON.stringify({ id: 'openai' }),
+        origin: 'https://example.com',
+      })
+    ).status,
+    403,
+  );
+  assert.deepEqual(pings, [], 'a refused request never reaches the provider');
+  const tested = await request(handler, {
+    method: 'POST',
+    body: JSON.stringify({ id: 'openai' }),
+  });
+  assert.equal(tested.status, 200);
+  assert.deepEqual(tested.json(), {
+    ok: true,
+    id: 'openai',
+    check: { status: 401, code: 'invalid_api_key' },
+  });
+  assert.deepEqual(pings, ['sk-saved-on-this-machine']);
+  assert.equal(tested.body.includes('sk-saved-on-this-machine'), false);
+  // An id the server has no probe for is refused; the route is not a general
+  // way to ask this machine about arbitrary credentials.
+  const unsupported = await request(handler, {
+    method: 'POST',
+    body: JSON.stringify({ id: 'tomtom' }),
+  });
+  assert.equal(unsupported.status, 400);
+  assert.equal(unsupported.json().code, 'not-testable');
+  assert.deepEqual(pings, ['sk-saved-on-this-machine']);
+});
+
+test('testing a key that is not saved answers no-key and never calls the provider', async (t) => {
+  env(t, 'OPENAI_API_KEY', undefined);
+  let pings = 0;
+  const plugin = keySetupEndpoint({
+    sourceRoot: root(t),
+    pingOpenAi: async () => {
+      pings += 1;
+      return { status: 200, code: null };
+    },
+  });
+  const handler = install(plugin).get('/api/setup/test-key');
+  const missing = await request(handler, {
+    method: 'POST',
+    body: JSON.stringify({ id: 'openai' }),
+  });
+  assert.equal(missing.status, 409);
+  assert.equal(missing.json().code, 'no-key');
+  assert.equal(pings, 0);
+});
+
+test("the ACLED test reads the saved pair and reports ACLED's verdict, never the pair", async (t) => {
+  env(t, 'ACLED_EMAIL', 'analyst@example.test');
+  env(t, 'ACLED_PASSWORD', 'test-only-password');
+  const probes = [];
+  const plugin = keySetupEndpoint({
+    sourceRoot: root(t),
+    probeAcled: async ({ email, password }) => {
+      probes.push({ email, password });
+      return { status: 403 };
+    },
+  });
+  const handler = install(plugin).get('/api/setup/test-key');
+  const tested = await request(handler, {
+    method: 'POST',
+    body: JSON.stringify({ id: 'acled' }),
+  });
+  assert.equal(tested.status, 200);
+  assert.deepEqual(tested.json(), {
+    ok: true,
+    id: 'acled',
+    check: { status: 403 },
+  });
+  assert.deepEqual(probes, [
+    { email: 'analyst@example.test', password: 'test-only-password' },
+  ]);
+  assert.equal(tested.body.includes('test-only-password'), false);
+
+  env(t, 'ACLED_PASSWORD', undefined);
+  const missing = await request(handler, {
+    method: 'POST',
+    body: JSON.stringify({ id: 'acled' }),
+  });
+  assert.equal(missing.status, 409);
+  assert.equal(missing.json().code, 'no-key');
+  assert.equal(probes.length, 1, 'no probe without both halves of the pair');
 });
 
 test('the OpenAI key probe stays a bounded GET, answers by status, and never trusts a redirect or a body', async () => {

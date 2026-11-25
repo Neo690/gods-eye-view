@@ -1,0 +1,33 @@
+{
+  "repo": "https://github.com/s2underground/GhostMaps",
+  "branch": "main",
+  "commit": "f4e784af0ee22f8b3dca81698d0e87bae6935e65",
+  "committedAt": null,
+  "message": null,
+  "checkedAt": 1795422842281,
+  "changedAt": 1795422842281,
+  "pollMs": 15000,
+  "error": null,
+  "products": [
+    {
+      "id": "cip",
+      "title": "Common Intelligence Picture",
+      "defaultOn": true,
+      "fileName": "S2Underground_Common_Intelligence_Picture_November_14_2026_Export_1.kmz",
+      "fileTitle": "Common Intelligence Picture November 14 2026 Export 1",
+      "version": "780d0b8510a5f027c39551df3dda1278a0e71ad6",
+      "size": 3410952,
+      "dateMs": 1794614400000
+    },
+    {
+      "id": "kinetic-30d",
+      "title": "Kinetic Activity (30 days)",
+      "defaultOn": true,
+      "fileName": "S2Underground_Common_Intelligence_Picture_Last_30_Days.kmz",
+      "fileTitle": "Common Intelligence Picture Last 30 Days",
+      "version": "ed4b57e32d6035ac6e66a46a969e6eae19a3c578",
+      "size": 232233,
+      "dateMs": null
+    }
+  ]
+}

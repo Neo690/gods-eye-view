@@ -6,7 +6,7 @@ import { LayerBindings } from './layerBindings.js';
 import { PanelChrome } from './panelChrome.js';
 import { initMobileShell } from './mobileShell.js';
 import { createInsiderPanel } from './insiderPanel.js';
-import { createConflictPanel } from './conflictPanel.js';
+import { CONFLICT_PANEL_ID, createConflictPanel } from './conflictPanel.js';
 import { VisualSettings } from './visualSettings.js';
 import { NavigationController } from './navigationController.js';
 import { ShareRestoration } from './shareRestoration.js';
@@ -1119,7 +1119,11 @@ export class StyleManager extends ShellFacade {
       return;
     }
     this._conflictPanel?.destroy();
-    this._conflictPanel = createConflictPanel({ container: host, dataManager });
+    this._conflictPanel = createConflictPanel({
+      container: host,
+      dataManager,
+      reveal: () => this._openPanelFromPalette(CONFLICT_PANEL_ID),
+    });
     console.log('[UI:ConflictPanel] Mounted');
   }
 

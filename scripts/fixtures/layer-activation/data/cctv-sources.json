@@ -1,0 +1,147 @@
+{
+  "trimmedPacks": [
+    {
+      "pack": "austin",
+      "available": 823,
+      "served": 250,
+      "region": {
+        "west": -97.899872,
+        "south": 30.112429,
+        "east": -97.591461,
+        "north": 30.503386
+      }
+    },
+    {
+      "pack": "caltrans",
+      "available": 1081,
+      "served": 300,
+      "region": {
+        "west": -122.15929,
+        "south": 32.55138,
+        "east": -115.498589,
+        "north": 39.789467
+      }
+    },
+    {
+      "pack": "tfl",
+      "available": 836,
+      "served": 250,
+      "region": {
+        "west": -0.49324,
+        "south": 51.3169,
+        "east": 0.23161,
+        "north": 51.6799
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "354",
+      "pack": "austin",
+      "name": "5TH ST / CONGRESS AVE",
+      "city": "Austin",
+      "cityId": "austin",
+      "provider": "Austin Transportation & Public Works",
+      "lat": 30.267119,
+      "lon": -97.743172,
+      "headingDeg": 67.5,
+      "headingConfidence": "low",
+      "pitchDeg": -18,
+      "fovDeg": 44,
+      "rangeM": 145,
+      "mountHeightM": 8,
+      "groundElevationM": 150,
+      "feedType": "image",
+      "sourceKind": "austin-open-data",
+      "model": "",
+      "manufacturer": "",
+      "modelRef": "",
+      "modelMatch": "",
+      "license": "Public city traffic camera frame",
+      "credit": "",
+      "code": "5TH ST / CONGRESS AVE",
+      "groundHeights": {
+        "poseHash": "p1-1xmaxab",
+        "mountGroundM": 120.77553555686964,
+        "supports": {
+          "bl": 160.953315227739,
+          "bm": 145.3143716464502,
+          "br": 120.27150675119053,
+          "ml": 162.26615297659762,
+          "mc": 144.9975051238873,
+          "mr": 120.17205951971671,
+          "tl": 127.0740181462164,
+          "tm": 145.37517608546767,
+          "tr": 132.99250941818116
+        }
+      }
+    },
+    {
+      "id": "ca-d11-x500",
+      "pack": "caltrans",
+      "name": "(C014) I-5 : First Avenue (San Diego)",
+      "city": "San Diego",
+      "cityId": "ca-d11",
+      "provider": "Caltrans",
+      "lat": 32.72285,
+      "lon": -117.16356,
+      "headingDeg": 180,
+      "headingConfidence": "high",
+      "pitchDeg": -24,
+      "fovDeg": 56,
+      "rangeM": 210,
+      "mountHeightM": 10,
+      "groundElevationM": 29.8704,
+      "feedType": "image",
+      "sourceKind": "caltrans-open-data",
+      "model": "",
+      "manufacturer": "",
+      "modelRef": "",
+      "modelMatch": "",
+      "license": "Public Caltrans highway camera frame",
+      "credit": "",
+      "code": "(C014) I-5 : FIRST AVENUE (…",
+      "groundHeights": null
+    },
+    {
+      "id": "tfl-00001.06502",
+      "pack": "tfl",
+      "name": "Trafalgar Square",
+      "city": "London",
+      "cityId": "london",
+      "provider": "Transport for London",
+      "lat": 51.5074,
+      "lon": -0.12765,
+      "headingDeg": 135,
+      "headingConfidence": "low",
+      "pitchDeg": -18,
+      "fovDeg": 44,
+      "rangeM": 145,
+      "mountHeightM": 8,
+      "groundElevationM": 15,
+      "feedType": "image",
+      "sourceKind": "tfl-open-data",
+      "model": "",
+      "manufacturer": "",
+      "modelRef": "",
+      "modelMatch": "",
+      "license": "Powered by TfL Open Data",
+      "credit": "",
+      "code": "TRAFALGAR SQUARE",
+      "groundHeights": {
+        "poseHash": "p1-1xij8sc",
+        "mountGroundM": 53.513290516746764,
+        "supports": {
+          "bl": 83.67674215136839,
+          "br": 52.59083848472283,
+          "ml": 86.12931599478677,
+          "mc": 74.43282220246917,
+          "mr": 54.5896971014466,
+          "tl": 88.43725996680368,
+          "tm": 72.7561332787255,
+          "tr": 49.9699057702322
+        }
+      }
+    }
+  ]
+}
