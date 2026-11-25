@@ -336,6 +336,12 @@ archives the app, exports an **ad-hoc** `.ipa`, checks it, and publishes it as
 `gods-eye-view.ipa` in a rolling `ios-latest` release, the way `apk-latest`
 carries the APK.
 
+GitHub occasionally cancels the compiling job before it starts, with the
+annotation *The job was not acquired by Runner of type hosted even after
+multiple attempts*; the run page also shows the macOS capacity notice. That is
+a hosted-runner shortage rather than a Swift failure — no step ran — so push to
+a watched path again (or use _Run workflow_) to retry the same commit.
+
 The packaging job cannot sign anything on its own, because an installable iOS
 app is signed by an Apple account. It looks for the signing material in the
 repository secrets and, when it is absent, prints a notice and skips instead of
