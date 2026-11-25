@@ -342,6 +342,9 @@ multiple attempts*; the run page also shows the macOS capacity notice. That is
 a hosted-runner shortage rather than a Swift failure — no step ran — so push to
 a watched path again (or use _Run workflow_) to retry the same commit.
 
+Retry requested on 2026-11-25 after run 45658515140 was cancelled before
+compilation (correlation ID f59f50f6-968c-42f9-9d8c-7d9e059ae3e0).
+
 The packaging job cannot sign anything on its own, because an installable iOS
 app is signed by an Apple account. It looks for the signing material in the
 repository secrets and, when it is absent, prints a notice and skips instead of
