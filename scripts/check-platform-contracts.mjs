@@ -31,7 +31,11 @@ export const PLATFORM_FILES = Object.freeze([
   'ios/xtool.yml',
   'ios/Info.xtool.plist',
   'ios/GodsEyeView/Info.plist',
+  'ios/GodsEyeView/LiveApi.swift',
+  'ios/GodsEyeView/LocalServer.swift',
   'ios/Package.swift',
+  'src/data/inAppApi.js',
+  'src/standalone/layerSources.js',
   'scripts/install-latest-apk.mjs',
   'scripts/prepare-ios-payload.mjs',
   'scripts/verify-published-assets.mjs',
@@ -359,6 +363,40 @@ export function evaluatePlatformContracts(files) {
   } catch {
     desktopVersion = null;
   }
+  // The iPhone app draws the same public layers as the APK without a hosted
+  // server. Both halves have to stay in step: the Swift routes, the key
+  // fallback, the loopback port the page matches, and the tile relay that uses
+  // it.
+  const iosLiveApi = textOf(files, 'ios/GodsEyeView/LiveApi.swift');
+  const iosServer = textOf(files, 'ios/GodsEyeView/LocalServer.swift');
+  const inAppApi = textOf(files, 'src/data/inAppApi.js');
+  const layerSources = textOf(files, 'src/standalone/layerSources.js');
+  const iosPort = capture(
+    files,
+    'ios/GodsEyeView/LocalServer.swift',
+    /static let port: UInt16 = (\d+)/,
+  );
+  checks.push(
+    check(
+      'ios.keyless-api',
+      iosPort !== null &&
+        [
+          '/api/health',
+          '/api/celestrak/',
+          '/api/flights',
+          '/api/military',
+          '/api/launches',
+          '/api/upstream',
+        ].every((route) => iosLiveApi.includes(`"${route}`)) &&
+        iosLiveApi.includes('"no_key"') &&
+        iosServer.includes('liveApi.handle') &&
+        inAppApi.includes('export function inIOSShell') &&
+        inAppApi.includes(`const IOS_SHELL_PORT = '${iosPort}'`) &&
+        layerSources.includes(`const IOS_SHELL_PORT = '${iosPort}'`),
+      `the iOS shell answers the keyless routes in-app on port ${iosPort}, names routes that need a key, and the page recognises that origin`,
+    ),
+  );
+
   checks.push(
     check(
       'desktop.version',

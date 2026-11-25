@@ -25,7 +25,7 @@ struct ApiForwarder {
 
   var isEnabled: Bool { base != nil }
 
-  var describe: String { base?.absoluteString ?? "in-app (no data server)" }
+  var describe: String { base?.absoluteString ?? "in-app keyless live API" }
 
   /// Headers that describe the WebView rather than the server call.
   private static let droppedRequestHeaders: Set<String> = [
@@ -38,12 +38,13 @@ struct ApiForwarder {
       return HTTPResponse(status: 204, headers: [:], body: Data())
     }
     guard let base else {
-      // No data server in this build: say so once, in JSON, so a layer shows
-      // "unavailable" instead of a puzzling 404 from the asset store.
+      // Not reached in the normal flow: `LocalServer` answers from `LiveApi`
+      // when no data server is configured. Keep it honest if a future caller
+      // reaches this path anyway.
       return .json(503, [
         "error": "no_server",
         "detail":
-          "This build has no data server. Set GEV_API_BASE when packaging, or deploy edge-api/.",
+          "This build has no data server; the in-app keyless API answers the feeds it can, and a route needing a key reports no_key.",
       ])
     }
     if request.method != "GET" && request.method != "HEAD" && request.method != "POST" {

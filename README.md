@@ -280,9 +280,11 @@ once and exits without opening a window.
 The same bundle in a WKWebView, served from `http://127.0.0.1:47821` out of the
 app's own bundle. The loopback origin is deliberate: it is a secure context, so
 geolocation, the microphone, workers and storage all work, and `/api/*` stays
-same-origin the way `server/` expects. `ios/` holds a Swift shell plus the
-[XcodeGen](https://github.com/yonaskolb/XcodeGen) spec that generates the Xcode
-project.
+same-origin the way `server/` expects. Like the APK, the app answers the public
+keyless feeds itself, so the live layers work with no hosted server; a source
+that needs a provider key reports that it needs one. `ios/` holds a Swift shell
+plus the [XcodeGen](https://github.com/yonaskolb/XcodeGen) spec that generates
+the Xcode project.
 
 Building it needs a Mac with Xcode 15+ (iOS 16 target) and
 `brew install xcodegen`:
@@ -290,7 +292,7 @@ Building it needs a Mac with Xcode 15+ (iOS 16 target) and
 ```bash
 npm ci
 npm run build
-GEV_API_BASE=https://your-data-server npm run ios:payload   # optional, same variable as the APK
+GEV_API_BASE=https://your-data-server npm run ios:payload   # optional, same variable as the APK; adds the routes the in-app keyless API does not serve
 cd ios && xcodegen generate && open GodsEyeView.xcodeproj
 ```
 

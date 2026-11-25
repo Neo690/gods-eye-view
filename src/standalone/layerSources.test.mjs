@@ -8,6 +8,12 @@ const shell = {
   origin: 'https://appassets.androidplatform.net',
   hostname: 'appassets.androidplatform.net',
 };
+const iosShell = {
+  href: 'http://127.0.0.1:47821/index.html',
+  origin: 'http://127.0.0.1:47821',
+  hostname: '127.0.0.1',
+  port: '47821',
+};
 const desktop = { hostname: 'localhost', origin: 'http://localhost:5173' };
 const TILE =
   'https://tiles.openfreemap.org/planet/20261018_080001_pt/14/8387/13455.pbf';
@@ -23,7 +29,17 @@ test('tile reads are relayed only inside the shell, and only for the tiles', () 
     '/api/upstream?url=https%3A%2F%2Ftiles.openfreemap.org%2Fplanet',
     'and for the TileJSON that names the version in use',
   );
+  assert.equal(
+    relayedTileUrl(TILE, iosShell),
+    `/api/upstream?url=${encodeURIComponent(TILE)}`,
+    'the iOS shell asks its own relay for the bytes too',
+  );
   assert.equal(relayedTileUrl(TILE, desktop), null, 'a desktop read stands');
+  assert.equal(
+    relayedTileUrl(TILE, { ...iosShell, port: '5173' }),
+    null,
+    'another loopback port is an ordinary dev server, not the shell',
+  );
   for (const raw of [
     // Another host, another shape on this host, and anything unparsable: the
     // relay would refuse each of these, so none of them is asked of it.

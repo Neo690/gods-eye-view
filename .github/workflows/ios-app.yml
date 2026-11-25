@@ -212,7 +212,7 @@ jobs:
           if [ -n "$GEV_API_BASE" ]; then
             echo "Live data server: $GEV_API_BASE"
           else
-            echo "Live data server: none (the live layers report unavailable)"
+            echo "Live data server: none (the in-app keyless API answers the public feeds)"
           fi
           npm run ios:payload
 

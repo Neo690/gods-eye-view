@@ -22,6 +22,8 @@ import {
   gnssAnchorFromSearch,
   gnssIntegrityResponse,
   inAndroidShell,
+  inIOSShell,
+  inShell,
   installInAppApi,
 } from './inAppApi.js';
 import { GNSS_CLASSIFIER } from '../layers/gnss/records.js';
@@ -54,13 +56,32 @@ const okUpstream = async () =>
     headers: { 'content-type': 'application/json' },
   });
 
-test('only the Android asset origin counts as the shell', () => {
+test('only the Android asset origin counts as the Android shell', () => {
   assert.equal(inAndroidShell(shell), true);
   assert.equal(
     inAndroidShell({ hostname: 'localhost', origin: 'http://localhost:4173' }),
     false,
   );
   assert.equal(inAndroidShell(undefined), false);
+});
+
+test('the iOS loopback origin is a shell too, and only on its fixed port', () => {
+  const iosShell = {
+    href: 'http://127.0.0.1:47821/index.html',
+    origin: 'http://127.0.0.1:47821',
+    hostname: '127.0.0.1',
+    port: '47821',
+  };
+  assert.equal(inIOSShell(iosShell), true);
+  assert.equal(inShell(iosShell), true);
+  assert.equal(inShell(shell), true);
+  assert.equal(inIOSShell({ ...iosShell, port: '5173' }), false);
+  assert.equal(inShell({ hostname: '127.0.0.1', port: '5173' }), false);
+  assert.equal(
+    inShell({ hostname: '127.0.0.1', origin: 'http://127.0.0.1' }),
+    false,
+  );
+  assert.equal(inShell(undefined), false);
 });
 
 test('the view is snapped to a whole degree, like the server', () => {
@@ -686,6 +707,33 @@ test('radiationResponse returns 503 when all networks and space data fail', asyn
   assert.equal(response.status, 503);
   const body = await response.json();
   assert.equal(body.error, 'radiation_unavailable');
+});
+
+test('the iOS loopback origin gets the same in-page routes', async () => {
+  const original = globalThis.fetch;
+  const iosLocation = {
+    href: 'http://127.0.0.1:47821/index.html',
+    origin: 'http://127.0.0.1:47821',
+    hostname: '127.0.0.1',
+    port: '47821',
+  };
+  try {
+    const installed = installInAppApi({
+      location: iosLocation,
+      fetchImpl: async () => {
+        throw new Error('the shim must answer this route itself');
+      },
+      upstream: async () => {
+        throw new Error('this route needs no upstream');
+      },
+    });
+    assert.equal(installed, true);
+    const response = await globalThis.fetch('/api/wind/status');
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { model: 'gfs', overlay: 'none' });
+  } finally {
+    globalThis.fetch = original;
+  }
 });
 
 test('installing outside the shell changes nothing', async () => {

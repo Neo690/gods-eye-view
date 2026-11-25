@@ -79,6 +79,24 @@ test('an iOS bundle id drift is caught', () => {
   assert.ok(failed(evaluatePlatformContracts(files), 'bundle.ios'));
 });
 
+test('an iOS keyless port drift is caught', () => {
+  const files = mutate(
+    'ios/GodsEyeView/LocalServer.swift',
+    'static let port: UInt16 = 47821',
+    'static let port: UInt16 = 47822',
+  );
+  assert.ok(failed(evaluatePlatformContracts(files), 'ios.keyless-api'));
+});
+
+test('a page shim that stops recognising the iOS origin is caught', () => {
+  const files = mutate(
+    'src/data/inAppApi.js',
+    "const IOS_SHELL_PORT = '47821'",
+    "const IOS_SHELL_PORT = '47822'",
+  );
+  assert.ok(failed(evaluatePlatformContracts(files), 'ios.keyless-api'));
+});
+
 test('a publisher that no longer runs from main is caught', () => {
   const files = mutate(
     '.github/workflows/android-apk.yml',

@@ -16,8 +16,8 @@ trustworthy, so that is what the bundle is served from:
 
 - geolocation and the microphone work, with the plist purpose strings and one
   capture grant from `WKUIDelegate`;
-- `/api/*` stays **same-origin**, so the page's existing fetches reach
-  `ApiForwarder` with no CORS and no second origin;
+- `/api/*` stays **same-origin**, so the page's existing fetches reach the
+  shell's in-app API (or `ApiForwarder`) with no CORS and no second origin;
 - `localStorage` — where Provider Settings keeps the operator's keys — is keyed
   by origin, so the port is **fixed**. A port that moved between launches would
   silently lose every saved key.
@@ -39,7 +39,8 @@ npm ci
 npm run build
 
 # optional: point the shell at a hosted copy of this repository, exactly as the
-# APK uses GEV_API_BASE. Must be https — ATS allows plain HTTP only for loopback.
+# APK uses GEV_API_BASE, for routes the in-app keyless API does not serve.
+# Must be https — ATS allows plain HTTP only for loopback.
 GEV_API_BASE=https://gev.example.com npm run ios:payload
 
 cd ios
@@ -280,6 +281,34 @@ Windows — which re-sign it with a free Apple ID and install it over USB. That
 profile expires after seven days; re-running the tool renews it, and the
 WebView's storage, where Provider Settings keeps the keys, survives the
 renewal. No Mac is needed for that second step, only for the build above.
+
+## Keyless live data, without a server
+
+The app is not a read-only copy of the console. As in the APK, two layers answer
+`/api/*` from inside the app when the build has no `GEV_API_BASE`:
+
+- `src/data/inAppApi.js` — already in the bundle — recognises the loopback
+  origin and answers the routes whose logic ships with the page: GNSS integrity,
+  fire perimeters, cyclones, NASA FIRMS, NOAA weather and wind manifests, the
+  radio directory, terrain heights, transit feeds and GBFS. It runs the same
+  normalisers the Node server runs.
+- `LiveApi.swift` answers the plain-fetch routes: CelesTrak TLEs, OpenSky state
+  vectors and tracks (with the 250 nm adsb.lol fallback), ADS-B military feeds,
+  adsbdb enrichment, Launch Library 2 and `/api/health`. It also owns the
+  bounded `GET /api/upstream?url=…` read-through the page needs for feeds that
+  send no CORS headers — the same fixed host list as `LiveApi.java`.
+
+So satellites, flights, military aircraft, launches, weather, wind, fires,
+cyclones, radiation, space weather, radio, transit and bikeshare draw on a
+keyless build, exactly as they do in the APK. A source that genuinely needs a
+credential — TomTom traffic flow, the AIS vessel stream, Global Fishing Watch —
+answers `503 {"error":"no_key"}` with the route that needs it, so the layer
+reports a missing key and falls back to its keyless path (OSM roads for traffic)
+instead of showing an outage.
+
+A hosted copy is still useful: when `GEV_API_BASE` is set it answers first, and
+the in-app API steps in only for a 5xx, a 429 or a refused `/api/upstream`, so a
+server's address problem never empties a layer the phone could read itself.
 
 ## What the shell provides
 

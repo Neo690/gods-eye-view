@@ -4601,6 +4601,17 @@ the same route carries GTFS-RT protobuf and JSON. Any other URL answers 403
 without a network call — the point is that a request cannot name a host the
 catalogue never cleared.
 
+The iOS shell serves the same bundle from `http://127.0.0.1:47821` and mirrors
+that parity: `ios/GodsEyeView/LiveApi.swift` answers CelesTrak, OpenSky flights
+and tracks, the merged keyless ADS-B military feeds, adsbdb enrichment, Launch
+Library 2 and `/api/health`, and owns the same bounded `/api/upstream` host
+list; `src/data/inAppApi.js` recognises the loopback origin and answers the
+routes whose normalisers already ship in the bundle. A route that needs a
+credential (TomTom flow, AIS vessels, Global Fishing Watch) answers
+`503 {"error":"no_key"}` so the layer reports a missing key. A configured
+`GEV_API_BASE` is still read first, with the in-app answer used for a 5xx, a
+429 or a refused `/api/upstream`.
+
 **Rail line labels.** A French tram or metro carries a small pill beside its
 glyph showing the line name the operator publishes (`route_short_name`, so
 Nice's line is "B" and Rouen's tramway is "Métro"), filled with the operator's

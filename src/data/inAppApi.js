@@ -1,14 +1,15 @@
 /**
- * The `/api/*` routes the page answers itself inside the Android shell.
+ * The `/api/*` routes the page answers itself inside a mobile shell.
  *
- * A standalone APK has no Node process, so a route the shell does not know
- * lands on the asset store. `LiveApi` (Java) serves the keyless feeds whose
+ * A standalone APK or iOS app has no Node process, so a route the shell does
+ * not know lands on the asset store. `LiveApi` (Java for the APK,
+ * `ios/GodsEyeView/LiveApi.swift` for iOS) serves the keyless feeds whose
  * contract is a plain fetch; this module covers the routes whose logic already
  * lives in the bundle — the page runs the same normaliser the server runs, and
  * only the cross-origin GET it cannot make itself goes through the shell's
  * fixed-host `/api/upstream` read-through.
  *
- * Installing the shim is a no-op outside the shell, so the same build keeps
+ * Installing the shim is a no-op outside the shells, so the same build keeps
  * talking to its own origin on the desktop and in the browser.
  */
 
@@ -72,6 +73,9 @@ import {
 } from './storedApiKeys.js';
 
 const SHELL_HOST = 'appassets.androidplatform.net';
+/** The iOS shell serves the bundle on its fixed loopback origin. */
+const IOS_SHELL_HOST = '127.0.0.1';
+const IOS_SHELL_PORT = '47821';
 /** adsb.lol regional snapshot, the same radius the server asks for. */
 const GNSS_RADIUS_NM = 250;
 
@@ -81,6 +85,25 @@ const GNSS_RADIUS_NM = 250;
  */
 export function inAndroidShell(location = globalThis.location) {
   return location?.hostname === SHELL_HOST;
+}
+
+/**
+ * @param {?Location} [location]
+ * @returns {boolean} Whether the page is running from the iOS loopback origin.
+ */
+export function inIOSShell(location = globalThis.location) {
+  return (
+    location?.hostname === IOS_SHELL_HOST &&
+    String(location?.port ?? '') === IOS_SHELL_PORT
+  );
+}
+
+/**
+ * @param {?Location} [location]
+ * @returns {boolean} Whether the page is running inside a mobile shell.
+ */
+export function inShell(location = globalThis.location) {
+  return inAndroidShell(location) || inIOSShell(location);
 }
 
 /**
@@ -1424,8 +1447,7 @@ export function installInAppApi({
   fetchImpl = globalThis.fetch,
   upstream,
 } = {}) {
-  if (!inAndroidShell(location) || typeof fetchImpl !== 'function')
-    return false;
+  if (!inShell(location) || typeof fetchImpl !== 'function') return false;
   if (fetchImpl.__gevInAppApi) return false;
   const context = {
     upstream: upstream || ((input) => fetchImpl(input, { cache: 'no-store' })),

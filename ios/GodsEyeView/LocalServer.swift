@@ -54,12 +54,14 @@ final class LocalServer {
 
   private let assets: BundleAssets
   private let forwarder: ApiForwarder
+  private let liveApi: LiveApi
   private var listener: NWListener?
   private let queue = DispatchQueue(label: "com.godseye.view.server")
 
-  init(assets: BundleAssets, forwarder: ApiForwarder) {
+  init(assets: BundleAssets, forwarder: ApiForwarder, liveApi: LiveApi) {
     self.assets = assets
     self.forwarder = forwarder
+    self.liveApi = liveApi
   }
 
   var origin: URL? {
@@ -194,12 +196,27 @@ final class LocalServer {
 
   private func route(_ request: HTTPRequest) async -> HTTPResponse {
     if request.path == "/api" || request.path.hasPrefix("/api/") {
-      return await forwarder.handle(request)
+      return await apiResponse(request)
     }
     if request.method != "GET" && request.method != "HEAD" {
       return .text(405, "Method Not Allowed")
     }
     return assets.response(for: request.path)
+  }
+
+  /// A hosted copy answers first when the build was given one. Without it, the
+  /// in-app keyless API answers; a route it does not serve says so instead of
+  /// falling through to the asset store's 404.
+  private func apiResponse(_ request: HTTPRequest) async -> HTTPResponse {
+    guard forwarder.isEnabled else {
+      return await liveApi.handle(request)
+        ?? .json(404, ["error": "not_proxied"])
+    }
+    let forwarded = await forwarder.handle(request)
+    if let rescued = await liveApi.rescue(request, forwarded: forwarded) {
+      return rescued
+    }
+    return forwarded
   }
 
   private func respond(

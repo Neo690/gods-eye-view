@@ -27,24 +27,38 @@ import { getApiKey } from '../data/storedApiKeys.js';
 export { createReferenceSources as createStandaloneReferenceSources } from '../sources/reference.js';
 
 /**
- * The asset origin the APK serves its bundle from (mirrors `inAppApi.js`).
+ * The origins a mobile shell serves its bundle from (mirrors `inAppApi.js`).
  *
  * Kept local because this module is a package entry of its own: importing the
  * in-app API would pull every route it answers into this boundary.
  */
 const SHELL_HOST = 'appassets.androidplatform.net';
+const IOS_SHELL_HOST = '127.0.0.1';
+const IOS_SHELL_PORT = '47821';
+
+/**
+ * @param {?Location} [location]
+ * @returns {boolean} Whether the page is served by one of the mobile shells.
+ */
+function inShellLocation(location) {
+  if (location?.hostname === SHELL_HOST) return true;
+  return (
+    location?.hostname === IOS_SHELL_HOST &&
+    String(location?.port ?? '') === IOS_SHELL_PORT
+  );
+}
 
 /**
  * The tile reads the shell cannot make for itself.
  *
  * OpenFreeMap publishes the street geometry behind the traffic and
- * mapped-installation layers as immutable planet tiles. From the asset origin
- * those reads are cross-origin, and on the phone they did not fail fast: a tile
- * request hung for tens of seconds, past the road pass deadline, so the layer
- * drew no roads at all. The shell's relay fetches the bytes instead, from a
- * server that reaches OpenFreeMap normally. The URL is allow-listed there by
- * origin and tile shape, never by a wildcard; the same shapes are pinned here so
- * a read that the relay would refuse is not turned into a refused call.
+ * mapped-installation layers as immutable planet tiles. From a mobile shell's
+ * origin those reads are cross-origin, and on the phone they did not fail
+ * fast: a tile request hung for tens of seconds, past the road pass deadline,
+ * so the layer drew no roads at all. The shell's relay fetches the bytes
+ * instead. The URL is allow-listed there by origin and tile shape, never by a
+ * wildcard; the same shapes are pinned here so a read that the relay would
+ * refuse is not turned into a refused call.
  */
 const RELAYED_TILE_ORIGINS = Object.freeze(['https://tiles.openfreemap.org']);
 const RELAYED_TILE_PATHS = Object.freeze([
@@ -60,7 +74,7 @@ const RELAYED_TILE_PATHS = Object.freeze([
  * @returns {?string} `/api/upstream?url=…`, or `null` when the read stands.
  */
 export function relayedTileUrl(raw, location = globalThis.location) {
-  if (location?.hostname !== SHELL_HOST || typeof raw !== 'string') return null;
+  if (!inShellLocation(location) || typeof raw !== 'string') return null;
   let url;
   try {
     url = new URL(raw);

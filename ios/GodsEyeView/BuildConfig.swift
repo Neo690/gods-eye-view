@@ -7,7 +7,8 @@ import Foundation
 /// inlines them into `www/` at build time, the same way the APK gets them.
 enum BuildConfig {
   /// Origin of a hosted copy of this repository, e.g. `https://gev.example.com`.
-  /// Empty means "no server": the shell answers `/api/*` with a JSON 503 that
-  /// names the missing configuration, and every live layer reports it.
+  /// Empty means "no server": the in-app keyless API answers `/api/*` itself,
+  /// and a route that needs a provider key reports `no_key` instead of an
+  /// outage.
   static let apiBase = ""
 }

@@ -11,8 +11,9 @@ import { setSplitFlapText } from './splitFlap.js';
 // that is still only `started` 30 s in as a cover nobody lifted.
 document.documentElement.dataset.boot = 'started';
 
-// Inside the Android shell the page answers the routes whose logic it already
-// carries; outside it this is a no-op. Installed before anything can fetch.
+// Inside a mobile shell (the APK's asset origin or the iOS loopback origin)
+// the page answers the routes whose logic it already carries; outside them this
+// is a no-op. Installed before anything can fetch.
 installInAppApi();
 
 const pageParams = new URLSearchParams(location.search);
