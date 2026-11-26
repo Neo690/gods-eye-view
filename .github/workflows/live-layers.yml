@@ -6,6 +6,11 @@ name: Live layer canary
 # answer. It runs on a schedule, not on pull requests: an upstream outage must
 # not turn every review red.
 #
+# A cheap `select` job resolves the dispatch filter and which keyed credentials
+# exist before anything is installed, so the canary's concurrency group and the
+# work each gate does are decided in seconds, and a run that cannot pass fails
+# there.
+#
 # One live job runs both gates so checkout, install, build and Chrome are paid
 # once. The keyless preview is started WITHOUT provider secrets, keeping that
 # gate honest; a second preview on another port is started only when keyed
@@ -16,6 +21,11 @@ name: Live layer canary
 # an uncaught page error always exits 1. A missing or rejected credential is
 # never classified as EXTERNAL. Use the manual dispatch with `strict` when the
 # providers are known healthy and PASS-only is wanted for both gates.
+#
+# A manual dispatch can also narrow the run to named layers (`layers`). The
+# filter is resolved against both manifests, so a keyed id skips the keyless
+# preview and gate entirely and a keyless id skips the keyed ones; asking for a
+# keyed layer whose credential is unset fails instead of testing nothing.
 on:
   schedule:
     - cron: '41 6 * * *'
@@ -25,13 +35,13 @@ on:
         description: Fail on EMPTY, UNCONFIGURED and EXTERNAL outcomes too
         type: boolean
         default: false
+      layers:
+        description: Comma-separated layer ids to run (empty runs every live layer)
+        type: string
+        default: ''
 
 permissions:
   contents: read
-
-concurrency:
-  group: live-layer-canary
-  cancel-in-progress: true
 
 env:
   GEV_REQUIRE_ALLOCATION_GATE: '0'
@@ -40,10 +50,19 @@ env:
   KEYED_PREVIEW_PORT: '4174'
 
 jobs:
-  live:
-    name: Live layer canary
+  # Resolved before the canary because `concurrency.group` cannot read a step
+  # output, a filtered dispatch must not cancel an in-flight nightly run (or the
+  # reverse), and a bad filter or missing credential should fail before the
+  # install. This job reads only the manifests, so it stays cheap.
+  select:
+    name: Resolve layer selection
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 10
+    outputs:
+      group: ${{ steps.selection.outputs.group }}
+      filtered: ${{ steps.selection.outputs.filtered }}
+      keyless: ${{ steps.selection.outputs.keyless }}
+      only: ${{ steps.selection.outputs.only }}
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -58,15 +77,22 @@ jobs:
 
       # Secrets cannot be read in a job-level `if:`, but they can be read here.
       # The output is only the fixed list of layer ids whose credentials exist;
-      # no secret value is printed. An empty list skips the keyed preview.
+      # no secret value is printed.
+      #
+      # The env mapping and the select lines are GENERATED from KEYED_LAYERS by
+      # scripts/keyed-live-layers-workflow.mjs; a new keyed layer needs only a
+      # KEYED_LAYERS entry, then `node scripts/keyed-live-layers-workflow.mjs
+      # --write`. The unit suite fails when this block drifts from the manifest.
       - name: Detect keyed provider secrets
         id: keys
+        # BEGIN GENERATED keyed-detection
         env:
           FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
           ACLED_EMAIL: ${{ secrets.ACLED_EMAIL }}
           ACLED_PASSWORD: ${{ secrets.ACLED_PASSWORD }}
           GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
           TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
+          AISSTREAM_API_KEY: ${{ secrets.AISSTREAM_API_KEY }}
         run: |
           set -euo pipefail
           only=""
@@ -75,10 +101,42 @@ jobs:
           if [ -n "${ACLED_EMAIL:-}" ] && [ -n "${ACLED_PASSWORD:-}" ]; then add conflict-events; fi
           if [ -n "${GFW_API_TOKEN:-}" ]; then add fishing-effort; fi
           if [ -n "${TOMTOM_API_KEY:-}" ]; then add traffic; fi
+          if [ -n "${AISSTREAM_API_KEY:-}" ]; then add ais-live-vessels; fi
           echo "only=$only" >> "$GITHUB_OUTPUT"
           if [ -z "$only" ]; then
             echo "::notice::No keyed provider secrets are configured; the keyed live canary is skipped."
           fi
+        # END GENERATED keyed-detection
+
+      - name: Resolve layer selection
+        id: selection
+        env:
+          LAYERS: ${{ inputs.layers }}
+          DETECTED: ${{ steps.keys.outputs.only }}
+        run: node scripts/live-layer-selection.mjs --layers "$LAYERS" --detected "$DETECTED" >> "$GITHUB_OUTPUT"
+
+  live:
+    name: Live layer canary
+    needs: select
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # The group carries the resolved filter: `ais-live-vessels` and the nightly
+    # `full` run never cancel each other, while two runs of the same filter still
+    # cancel the older one.
+    concurrency:
+      group: live-layer-canary-${{ needs.select.outputs.group }}
+      cancel-in-progress: true
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.14.0
+          cache: npm
 
       # Same retry as the other browser jobs: the ffmpeg-static post-install
       # downloads its binary from a GitHub release asset, which 504s in bursts.
@@ -98,7 +156,7 @@ jobs:
       # Catch a stale canary contract before spending time on a browser or a
       # build. These are the same static tests CI runs.
       - name: Static canary contracts
-        run: node --test scripts/qa-keyless-live-layers.test.mjs scripts/qa-layer-activation-matrix.test.mjs
+        run: node --test scripts/qa-keyless-live-layers.test.mjs scripts/live-layer-selection.test.mjs scripts/qa-layer-activation-matrix.test.mjs
 
       # npm does not run dependency install scripts, so the Puppeteer
       # postinstall is skipped. Install the browser at the pinned version.
@@ -110,6 +168,7 @@ jobs:
         run: npm run build
 
       - name: Start keyless preview
+        if: ${{ !cancelled() && (needs.select.outputs.filtered != 'true' || needs.select.outputs.keyless != '') }}
         run: |
           npx vite preview --port "$PREVIEW_PORT" --strictPort > preview-keyless.log 2>&1 &
           for attempt in $(seq 1 90); do
@@ -120,13 +179,18 @@ jobs:
           exit 1
 
       - name: Keyless live layer gate
+        if: ${{ !cancelled() && (needs.select.outputs.filtered != 'true' || needs.select.outputs.keyless != '') }}
         env:
           STRICT: ${{ inputs.strict }}
+          KEYLESS_ONLY: ${{ needs.select.outputs.keyless }}
         run: |
           args=(
             --url "http://127.0.0.1:$PREVIEW_PORT"
             --json qa-artifacts/keyless-live/report.json
           )
+          if [ -n "$KEYLESS_ONLY" ]; then
+            args+=(--only "$KEYLESS_ONLY")
+          fi
           if [ "$STRICT" = "true" ]; then
             args+=(--strict)
           fi
@@ -138,13 +202,16 @@ jobs:
       # keyless-preview failure on its port does not.
       - name: Start keyed preview
         id: keyed-preview
-        if: ${{ !cancelled() && steps.keys.outputs.only != '' && steps.build.outcome == 'success' }}
+        if: ${{ !cancelled() && needs.select.outputs.only != '' && steps.build.outcome == 'success' }}
+        # BEGIN GENERATED keyed-preview-env
         env:
           FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
           ACLED_EMAIL: ${{ secrets.ACLED_EMAIL }}
           ACLED_PASSWORD: ${{ secrets.ACLED_PASSWORD }}
           GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
           TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
+          AISSTREAM_API_KEY: ${{ secrets.AISSTREAM_API_KEY }}
+        # END GENERATED keyed-preview-env
         run: |
           npx vite preview --port "$KEYED_PREVIEW_PORT" --strictPort > preview-keyed.log 2>&1 &
           for attempt in $(seq 1 90); do
@@ -157,7 +224,7 @@ jobs:
       - name: Keyed live layer gate
         if: ${{ !cancelled() && steps.keyed-preview.outcome == 'success' }}
         env:
-          ONLY: ${{ steps.keys.outputs.only }}
+          ONLY: ${{ needs.select.outputs.only }}
           STRICT: ${{ inputs.strict }}
         run: |
           args=(

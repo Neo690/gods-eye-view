@@ -62,6 +62,13 @@ import {
 import { KEY_SETUP_KEYS } from '../src/keySetupCore.mjs';
 import { chromeExecutablePath } from './qa-chrome.mjs';
 
+// The manifests are a browser-free module so the workflow can resolve a
+// dispatch filter before installing dependencies; re-exported here so every
+// existing import of the runner keeps working.
+import { KEYED_LAYERS, KEYLESS_LAYERS } from './live-layer-manifests.mjs';
+
+export { KEYED_LAYERS, KEYLESS_LAYERS };
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..');
 const argv = process.argv.slice(2);
@@ -112,78 +119,62 @@ const C = {
 };
 
 /**
- * The gate's contract. These 15 layers were the temporary live pass; keeping
- * them in one list makes the policy for each upstream reviewable. The list is
- * an execution policy, not the inventory: validateKeylessInventory() derives
- * the full keyless candidate set from the layers' key declarations and
- * requires every candidate to have an include or exclude decision below.
- *
- * - expect.min is the number of rows a healthy keyless source provides.
- * - externalFailure says an outage of that provider is a classified EXTERNAL
- *   outcome, not an app failure. apiPrefix scopes the evidence to the app route
- *   that proxies that provider.
- * - allowEmpty says a zero-row feed is legitimate only when the layer marks
- *   stats[statsFlag] true (it distinguishes "no storms" from "failed").
- * - unconfigured says the layer is opt-in, and names the capability probe that
- *   must confirm the omission before the outcome is accepted.
+ * Required-key layers deliberately left out of the keyed canary. Every entry
+ * needs a reason, and the static coverage test rejects an exemption that names
+ * a keyless layer, duplicates a canary entry or has no reason.
  */
-export const KEYED_LAYERS = [
-  {
-    id: 'local-firms',
-    provider: 'NASA FIRMS',
-    keyId: 'firms',
-    env: ['FIRMS_MAP_KEY'],
-    expect: { min: 1 },
-    timeoutMs: 90_000,
-    externalFailure: {
-      apiPrefix: '/api/firms',
-      reason:
-        'NASA FIRMS can rate-limit or time out; /api/firms serves its stale cache instead of returning a fresh failure.',
-    },
-  },
-  {
-    id: 'conflict-events',
-    provider: 'ACLED',
-    keyId: 'acled',
-    env: ['ACLED_EMAIL', 'ACLED_PASSWORD'],
-    expect: { min: 1 },
-    timeoutMs: 90_000,
-    externalFailure: {
-      apiPrefix: '/api/conflicts',
-      reason:
-        'ACLED can fail upstream while the proxy is healthy; the layer then has no fresh conflict snapshot.',
-    },
-  },
-  {
-    id: 'fishing-effort',
-    provider: 'Global Fishing Watch',
-    keyId: 'global-fishing-watch',
-    env: ['GFW_API_TOKEN'],
-    expect: { min: 1 },
-    timeoutMs: 90_000,
-    externalFailure: {
-      apiPrefix: '/api/fishing-effort',
-      reason:
-        'Global Fishing Watch can rate-limit or time out independently of the app proxy.',
-    },
-  },
-  {
-    id: 'traffic',
-    provider: 'TomTom',
-    keyId: 'tomtom',
-    env: ['TOMTOM_API_KEY'],
-    // The layer can always draw simulated traffic; only the live mode proves
-    // the credential reached the server-side proxy.
-    expect: { min: 1, mode: 'live' },
-    view: { lat: 30.2672, lon: -97.7431, alt: 2500 },
-    timeoutMs: 90_000,
-    externalFailure: {
-      apiPrefix: '/api/tomtom',
-      reason:
-        'TomTom can rate-limit or time out; the tile proxy then has no live flow to prove the key against.',
-    },
-  },
-];
+export const KEYED_CANARY_EXEMPTIONS = Object.freeze({
+  // '<layer-id>': 'Why this required-key layer cannot run in the keyed canary.',
+});
+
+/**
+ * Require every layer whose declaration sets `required: true` to be either in
+ * KEYED_LAYERS or in KEYED_CANARY_EXEMPTIONS with a written reason. A new
+ * mandatory credential therefore fails the static gate instead of silently
+ * staying out of the canary.
+ */
+export function validateKeyedCoverage({
+  declarations = LAYER_KEY_DECLARATIONS,
+  manifest = KEYED_LAYERS,
+  exemptions = KEYED_CANARY_EXEMPTIONS,
+} = {}) {
+  const errors = [];
+  const canaryIds = new Set(
+    (Array.isArray(manifest) ? manifest : [])
+      .map((entry) => entry?.id)
+      .filter((id) => typeof id === 'string' && id.length > 0),
+  );
+
+  for (const [id, declaration] of Object.entries(declarations)) {
+    if (declaration?.required !== true) continue;
+    const reason = exemptions[id];
+    const inCanary = canaryIds.has(id);
+    if (inCanary && reason !== undefined) {
+      errors.push(
+        `${id}: has both a keyed canary entry and an exemption; keep one`,
+      );
+    }
+    if (!inCanary && (typeof reason !== 'string' || !reason.trim())) {
+      errors.push(
+        `${id}: requires a key but has no keyed canary entry or motivated exemption`,
+      );
+    }
+  }
+
+  for (const [id, reason] of Object.entries(exemptions)) {
+    if (declarations[id]?.required !== true) {
+      errors.push(`${id}: exemption names a layer that does not require a key`);
+    }
+    if (canaryIds.has(id)) {
+      errors.push(`${id}: exemption duplicates a keyed canary entry`);
+    }
+    if (typeof reason !== 'string' || !reason.trim()) {
+      errors.push(`${id}: exemption needs a reason`);
+    }
+  }
+
+  return { ok: errors.length === 0, errors };
+}
 
 /**
  * A decision is required for EVERY layer the key declarations classify as
@@ -363,103 +354,6 @@ export const KEYLESS_CANARY_DECISIONS = Object.freeze({
   }),
 });
 
-export const KEYLESS_LAYERS = [
-  {
-    id: 'earthquakes',
-    provider: 'USGS',
-    expect: { min: 1 },
-  },
-  {
-    id: 'emsc-seismic',
-    provider: 'EMSC',
-    expect: { min: 1 },
-  },
-  {
-    id: 'global-disasters',
-    provider: 'GDACS / EFFIS / Copernicus',
-    expect: { min: 1 },
-  },
-  {
-    id: 'satellites',
-    provider: 'CelesTrak',
-    expect: { min: 1 },
-    timeoutMs: 60_000,
-    externalFailure: {
-      apiPrefix: '/api/celestrak/',
-      reason:
-        'CelesTrak regularly 502s or times out; the app surfaces "CelesTrak unreachable" and keeps its previous catalog.',
-    },
-  },
-  {
-    id: 'space-weather',
-    provider: 'NOAA SWPC',
-    expect: { min: 1 },
-  },
-  {
-    id: 'weather-radar',
-    provider: 'NOAA nowCOAST',
-    expect: { min: 1 },
-  },
-  {
-    id: 'weather-satellite',
-    provider: 'NOAA nowCOAST',
-    expect: { min: 1 },
-  },
-  {
-    id: 'weather-lightning',
-    provider: 'NOAA nowCOAST',
-    expect: { min: 1 },
-  },
-  {
-    id: 'weather-cyclones',
-    provider: 'NOAA NHC / CPHC',
-    expect: { min: 1 },
-    allowEmpty: {
-      statsFlag: 'empty',
-      reason:
-        'NOAA CurrentStorms.json legitimately reports activeStorms: []; the layer marks stats.empty instead of treating it as an outage.',
-    },
-  },
-  {
-    id: 'radio',
-    provider: 'Radio Browser',
-    expect: { min: 1 },
-  },
-  {
-    id: 'osm-places',
-    provider: 'OpenStreetMap / Overpass',
-    expect: { min: 1 },
-    unconfigured: {
-      env: 'OVERPASS_UPSTREAMS',
-      statusPath: '/api/overpass/status',
-      errorPattern: 'Overpass endpoint not configured',
-      reason:
-        'The Overpass proxy is opt-in via OVERPASS_UPSTREAMS; with no operator upstream the layer reports unconfigured and skips the query.',
-    },
-  },
-  {
-    id: 'flights',
-    provider: 'OpenSky / adsb.lol',
-    expect: { min: 1 },
-  },
-  {
-    id: 'military',
-    provider: 'adsb.lol',
-    expect: { min: 1 },
-  },
-  {
-    id: 'fire-perimeters',
-    provider: 'NIFC WFIGS',
-    expect: { min: 1 },
-  },
-  {
-    id: 'bikeshare',
-    provider: 'GBFS',
-    expect: { min: 1 },
-    timeoutMs: 60_000,
-  },
-];
-
 const ACTIVE_LAYERS = KEYED ? KEYED_LAYERS : KEYLESS_LAYERS;
 
 /**
@@ -587,6 +481,10 @@ export function validateKeylessManifest(manifest = KEYLESS_LAYERS) {
  * candidate. A new layer is keyless unless its declaration says a credential
  * is required, so adding one without either a key declaration or a decision is
  * a gate failure rather than a silently untested feed.
+ *
+ * Required-key layers get the same treatment: every `required: true`
+ * declaration must be included in the keyed manifest or carry a motivated
+ * exemption. A new mandatory key cannot stay outside the keyed canary.
  */
 export function validateKeylessInventory({
   layers = APPLICATION_LAYER_METADATA,
@@ -594,6 +492,8 @@ export function validateKeylessInventory({
   declarations = LAYER_KEY_DECLARATIONS,
   decisions = KEYLESS_CANARY_DECISIONS,
   manifest = KEYLESS_LAYERS,
+  keyedManifest = KEYED_LAYERS,
+  keyedExemptions = KEYED_CANARY_EXEMPTIONS,
   keys = KEY_SETUP_KEYS,
 } = {}) {
   const errors = [];
@@ -688,7 +588,7 @@ export function validateKeylessInventory({
       );
   }
 
-  for (const entry of KEYED_LAYERS) {
+  for (const entry of keyedManifest) {
     const declaration = declarations[entry.id];
     if (!declaration) {
       errors.push(`${entry.id}: keyed canary entry has no key declaration`);
@@ -709,6 +609,13 @@ export function validateKeylessInventory({
     }
   }
 
+  const keyedCoverage = validateKeyedCoverage({
+    declarations,
+    manifest: keyedManifest,
+    exemptions: keyedExemptions,
+  });
+  errors.push(...keyedCoverage.errors);
+
   return {
     ok: errors.length === 0,
     errors,
@@ -720,7 +627,7 @@ export function validateKeylessInventory({
 }
 
 const CREDENTIAL_FAILURE =
-  /(?:\bno[_ -]?key\b|\bmissing[_ -]?key\b|\bkey required\b|\bneeds? (?:an? )?(?:api[ _-]?)?(?:key|token)\b|\bapi[ _-]?key\b|\bkey rejected\b|\binvalid (?:api[ _-]?)?key\b|\bunauthori[sz]ed\b|\bforbidden\b|\bauth\b|\btoken (?:missing|invalid|rejected|not set)\b)/i;
+  /(?:\bno[_ -]?key\b|\bmissing[_ -]?key\b|\bkey required\b|\bneeds? (?:an? )?(?:api[ _-]?)?(?:key|token)\b|(?:^|[^A-Za-z0-9])api[ _-]?key\b|\bkey rejected\b|\binvalid (?:api[ _-]?)?key\b|\bunauthori[sz]ed\b|\bforbidden\b|\bauth\b|\btoken (?:missing|invalid|rejected|not set)\b)/i;
 
 /** A missing/rejected credential is a configuration failure, not an outage. */
 export function isCredentialFailure(error, stats = null) {
@@ -1192,7 +1099,7 @@ function printList(manifest) {
 async function main() {
   const inventory = validateKeylessInventory();
   if (!inventory.ok) {
-    console.error(C.red('keyless layer inventory is invalid:'));
+    console.error(C.red('live layer inventory is invalid:'));
     for (const error of inventory.errors) console.error(`  - ${error}`);
     return 1;
   }

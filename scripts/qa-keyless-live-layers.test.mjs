@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   APPLICATION_LAYER_METADATA,
@@ -16,9 +17,15 @@ import {
   KEYLESS_LAYERS,
   classifyLayerOutcome,
   isCredentialFailure,
+  validateKeyedCoverage,
   validateKeylessInventory,
   validateKeylessManifest,
 } from './qa-keyless-live-layers.mjs';
+import {
+  REGIONS,
+  applyKeyedWorkflow,
+  validateKeyedWorkflowManifest,
+} from './keyed-live-layers-workflow.mjs';
 
 const catalogIds = new Set(APPLICATION_LAYER_METADATA.map(({ id }) => id));
 const localOnlyIds = new Set(LOCAL_ONLY_LAYER_METADATA.map(({ id }) => id));
@@ -142,15 +149,76 @@ test('a new keyless layer without a canary decision fails closed', () => {
   );
 });
 
-test('declaring a required key moves a new layer out of the keyless inventory', () => {
+test('a required key needs an explicit keyed canary decision', () => {
   const layers = [...APPLICATION_LAYER_METADATA, { id: 'new-keyed-layer' }];
   const declarations = {
     ...LAYER_KEY_DECLARATIONS,
     'new-keyed-layer': { keys: ['firms'], required: true },
   };
-  const inventory = validateKeylessInventory({ layers, declarations });
-  assert.equal(inventory.ok, true, inventory.errors.join('\n'));
-  assert.ok(!inventory.keylessIds.includes('new-keyed-layer'));
+
+  const missing = validateKeylessInventory({ layers, declarations });
+  assert.equal(missing.ok, false);
+  assert.ok(
+    missing.errors.some(
+      (error) =>
+        error.includes('new-keyed-layer') &&
+        error.includes('no keyed canary entry or motivated exemption'),
+    ),
+    missing.errors.join('\n'),
+  );
+
+  const keyedManifest = [
+    ...KEYED_LAYERS,
+    { id: 'new-keyed-layer', keyId: 'firms', env: ['FIRMS_MAP_KEY'] },
+  ];
+  const included = validateKeylessInventory({
+    layers,
+    declarations,
+    keyedManifest,
+  });
+  assert.equal(included.ok, true, included.errors.join('\n'));
+  assert.ok(!included.keylessIds.includes('new-keyed-layer'));
+
+  const exempted = validateKeylessInventory({
+    layers,
+    declarations,
+    keyedExemptions: {
+      'new-keyed-layer':
+        'The provider cannot be exercised without a contract we do not have.',
+    },
+  });
+  assert.equal(exempted.ok, true, exempted.errors.join('\n'));
+
+  const blank = validateKeylessInventory({
+    layers,
+    declarations,
+    keyedExemptions: { 'new-keyed-layer': '   ' },
+  });
+  assert.equal(blank.ok, false);
+  assert.ok(
+    blank.errors.some(
+      (error) =>
+        error.includes('new-keyed-layer') &&
+        error.includes('no keyed canary entry or motivated exemption'),
+    ),
+    blank.errors.join('\n'),
+  );
+});
+
+test('removing AIS from the keyed manifest fails validation', () => {
+  const keyedManifest = KEYED_LAYERS.filter(
+    ({ id }) => id !== 'ais-live-vessels',
+  );
+  const inventory = validateKeylessInventory({ keyedManifest });
+  assert.equal(inventory.ok, false);
+  assert.ok(
+    inventory.errors.some(
+      (error) =>
+        error.includes('ais-live-vessels') &&
+        error.includes('no keyed canary entry or motivated exemption'),
+    ),
+    inventory.errors.join('\n'),
+  );
 });
 
 test('a decision for a keyed layer is rejected as stale', () => {
@@ -188,7 +256,13 @@ test('the keyed manifest names only catalog layers and registry env vars', () =>
   assert.equal(validation.ok, true, validation.errors.join('\n'));
   assert.deepEqual(
     KEYED_LAYERS.map((entry) => entry.id),
-    ['local-firms', 'conflict-events', 'fishing-effort', 'traffic'],
+    [
+      'local-firms',
+      'conflict-events',
+      'fishing-effort',
+      'traffic',
+      'ais-live-vessels',
+    ],
   );
   for (const entry of KEYED_LAYERS) {
     assert.ok(
@@ -209,6 +283,295 @@ test('the keyed manifest names only catalog layers and registry env vars', () =>
       `${entry.id} must declare the provider route used to classify an outage`,
     );
   }
+});
+
+test('the live workflow wires every keyed secret only into the keyed preview', () => {
+  const workflow = readFileSync(
+    new URL('../.github/workflows/live-layers.yml', import.meta.url),
+    'utf8',
+  );
+  const between = (start, end) => {
+    const from = workflow.indexOf(start);
+    assert.ok(from >= 0, `workflow is missing ${start}`);
+    const to = workflow.indexOf(end, from);
+    assert.ok(to > from, `workflow is missing ${end} after ${start}`);
+    return workflow.slice(from, to);
+  };
+  const detection = between(
+    'Detect keyed provider secrets',
+    'Resolve layer selection',
+  );
+  const keylessPreview = between(
+    'Start keyless preview',
+    'Keyless live layer gate',
+  );
+  const keyedPreview = between('Start keyed preview', 'Keyed live layer gate');
+
+  assert.doesNotMatch(
+    keylessPreview,
+    /\$\{\{\s*secrets\./,
+    'the keyless preview must never receive provider secrets',
+  );
+
+  for (const { id, env } of KEYED_LAYERS) {
+    assert.match(
+      detection,
+      new RegExp(`add ${id};`),
+      `${id} is in KEYED_LAYERS but the workflow never selects it`,
+    );
+    for (const name of env) {
+      const secret = new RegExp(`\\$\\{\\{ secrets\\.${name} \\}\\}`);
+      assert.match(
+        detection,
+        secret,
+        `${name} is not read by keyed secret detection`,
+      );
+      assert.match(
+        keyedPreview,
+        secret,
+        `${name} is not passed to the keyed preview`,
+      );
+    }
+  }
+});
+
+const readWorkflow = () =>
+  readFileSync(
+    new URL('../.github/workflows/live-layers.yml', import.meta.url),
+    'utf8',
+  );
+
+/** Drop both generated region bodies, leaving markers and hand-written YAML. */
+const withoutGeneratedRegions = (source) => {
+  let text = source;
+  for (const region of Object.values(REGIONS)) {
+    const begin = text.indexOf(`# BEGIN GENERATED ${region}`);
+    assert.ok(begin >= 0, `workflow is missing the ${region} begin marker`);
+    const endMarker = `# END GENERATED ${region}`;
+    const end = text.indexOf(endMarker, begin);
+    assert.ok(end > begin, `workflow is missing the ${region} end marker`);
+    text = `${text.slice(0, begin)}${text.slice(end + endMarker.length)}`;
+  }
+  return text;
+};
+
+test('the workflow keyed wiring is exactly what KEYED_LAYERS generates', () => {
+  const workflow = readWorkflow();
+
+  assert.equal(
+    applyKeyedWorkflow(workflow),
+    workflow,
+    'the keyed wiring in .github/workflows/live-layers.yml no longer matches KEYED_LAYERS; run "node scripts/keyed-live-layers-workflow.mjs --write" and commit the result',
+  );
+
+  // Every secret the workflow touches comes out of the generated regions, so
+  // a hand-written mapping cannot reintroduce the duplicated list and the
+  // keyless preview cannot acquire a credential by accident.
+  assert.doesNotMatch(
+    withoutGeneratedRegions(workflow),
+    /\$\{\{\s*secrets\./,
+    'a provider secret is wired outside the generated keyed regions',
+  );
+});
+
+test('the workflow can run one layer on dispatch without the other gate', () => {
+  const workflow = readWorkflow();
+  const between = (start, end) => {
+    const from = workflow.indexOf(start);
+    assert.ok(from >= 0, `workflow is missing ${start}`);
+    const to = workflow.indexOf(end, from);
+    assert.ok(to > from, `workflow is missing ${end} after ${start}`);
+    return workflow.slice(from, to);
+  };
+
+  assert.match(
+    between('workflow_dispatch:', 'permissions:'),
+    /layers:\n\s+description:/,
+    'the dispatch needs a layers input',
+  );
+
+  const selection = between('select:', 'live:');
+  assert.match(selection, /scripts\/live-layer-selection\.mjs/);
+  assert.match(selection, /--layers "\$LAYERS" --detected "\$DETECTED"/);
+  assert.match(selection, /DETECTED: \$\{\{ steps\.keys\.outputs\.only \}\}/);
+  assert.match(selection, /only: \$\{\{ steps\.selection\.outputs\.only \}\}/);
+  assert.match(
+    selection,
+    /group: \$\{\{ steps\.selection\.outputs\.group \}\}/,
+  );
+
+  // The canary job waits for the resolved filter and keys its concurrency group
+  // on it, so a filtered dispatch cannot cancel the nightly run or the reverse.
+  const live = workflow.slice(workflow.indexOf('live:'));
+  assert.match(live, /needs: select/);
+  assert.match(
+    live,
+    /group: live-layer-canary-\$\{\{ needs\.select\.outputs\.group \}\}/,
+  );
+  assert.match(live, /cancel-in-progress: true/);
+  assert.doesNotMatch(
+    live,
+    /steps\.(selection|keys)/,
+    'the canary job must read the resolved selection from the select job',
+  );
+  assert.doesNotMatch(
+    workflow.slice(0, workflow.indexOf('jobs:')),
+    /^concurrency:/m,
+    'a fixed workflow-level concurrency group would cancel the nightly run',
+  );
+
+  // A keyless-only selection must skip both keyless steps' partner gate, and
+  // the keyless preview must still never receive a secret.
+  const keylessPreview = between(
+    'Start keyless preview',
+    'Keyless live layer gate',
+  );
+  assert.match(keylessPreview, /needs\.select\.outputs\.keyless/);
+  assert.doesNotMatch(keylessPreview, /\$\{\{\s*secrets\./);
+
+  const keylessGate = between('Keyless live layer gate', 'Start keyed preview');
+  assert.match(keylessGate, /needs\.select\.outputs\.keyless/);
+  assert.match(keylessGate, /--only "\$KEYLESS_ONLY"/);
+
+  // The keyed path runs exactly the layers the select job resolved, so a
+  // filtered run cannot quietly start the keyed preview for other layers.
+  assert.match(
+    between('Start keyed preview', 'Keyed live layer gate'),
+    /needs\.select\.outputs\.only != ''/,
+  );
+  assert.match(
+    between('Keyed live layer gate', 'Preview server logs'),
+    /ONLY: \$\{\{ needs\.select\.outputs\.only \}\}/,
+  );
+});
+
+test('the workflow drift check catches a keyed layer missing from the wiring', () => {
+  const workflow = readWorkflow();
+
+  const added = [
+    ...KEYED_LAYERS,
+    { id: 'new-keyed-feed', keyId: 'firms', env: ['NEW_FEED_TOKEN'] },
+  ];
+  const withFeed = applyKeyedWorkflow(workflow, { manifest: added });
+  assert.notEqual(withFeed, workflow);
+  assert.match(
+    withFeed,
+    /if \[ -n "\$\{NEW_FEED_TOKEN:-\}" \]; then add new-keyed-feed; fi/,
+  );
+  // Detection and the keyed preview each need the secret; nothing else does.
+  assert.equal(
+    withFeed.match(/NEW_FEED_TOKEN: \$\{\{ secrets\.NEW_FEED_TOKEN \}\}/g)
+      ?.length,
+    2,
+  );
+
+  const removed = applyKeyedWorkflow(workflow, {
+    manifest: KEYED_LAYERS.filter(({ id }) => id !== 'traffic'),
+  });
+  assert.doesNotMatch(removed, /add traffic;/);
+  assert.doesNotMatch(removed, /TOMTOM_API_KEY/);
+  assert.match(removed, /add ais-live-vessels;/);
+});
+
+test('a keyed layer that cannot be rendered into the workflow is refused', () => {
+  const workflow = readWorkflow();
+
+  const injection = [
+    ...KEYED_LAYERS,
+    { id: 'bad-id; curl attacker', env: ['TOKEN'] },
+  ];
+  const idValidation = validateKeyedWorkflowManifest(injection);
+  assert.equal(idValidation.ok, false);
+  assert.ok(
+    idValidation.errors.some((error) => error.includes('shell-safe')),
+    idValidation.errors.join('\n'),
+  );
+  assert.throws(
+    () => applyKeyedWorkflow(workflow, { manifest: injection }),
+    /cannot be rendered/,
+  );
+
+  const badEnv = [
+    ...KEYED_LAYERS,
+    { id: 'new-keyed-feed', env: ['lower_case_name'] },
+  ];
+  assert.equal(validateKeyedWorkflowManifest(badEnv).ok, false);
+  assert.throws(() => applyKeyedWorkflow(workflow, { manifest: badEnv }));
+});
+
+test('every required-key layer has a keyed entry or a motivated exemption', () => {
+  const live = validateKeyedCoverage();
+  assert.equal(live.ok, true, live.errors.join('\n'));
+
+  const declarations = {
+    ...LAYER_KEY_DECLARATIONS,
+    'new-required-layer': { keys: ['firms'], required: true },
+  };
+  const missing = validateKeyedCoverage({ declarations });
+  assert.equal(missing.ok, false);
+  assert.ok(
+    missing.errors.some(
+      (error) =>
+        error.includes('new-required-layer') &&
+        error.includes('no keyed canary entry or motivated exemption'),
+    ),
+    missing.errors.join('\n'),
+  );
+
+  const exemptions = {
+    'new-required-layer':
+      'The provider only exposes a keyed endpoint that needs a contract we do not have.',
+  };
+  const exempted = validateKeyedCoverage({ declarations, exemptions });
+  assert.equal(exempted.ok, true, exempted.errors.join('\n'));
+
+  const blank = validateKeyedCoverage({
+    declarations,
+    exemptions: { 'new-required-layer': '   ' },
+  });
+  assert.equal(blank.ok, false);
+  assert.ok(
+    blank.errors.some((error) => error.includes('exemption needs a reason')),
+    blank.errors.join('\n'),
+  );
+
+  const stale = validateKeyedCoverage({
+    exemptions: { flights: 'Not a required-key layer.' },
+  });
+  assert.equal(stale.ok, false);
+  assert.ok(
+    stale.errors.some(
+      (error) =>
+        error.includes('flights') && error.includes('does not require a key'),
+    ),
+    stale.errors.join('\n'),
+  );
+});
+
+test('the keyed AIS canary treats a missing key and an outage differently', () => {
+  const ais = KEYED_LAYERS.find(({ id }) => id === 'ais-live-vessels');
+  assert.ok(ais);
+
+  const missing = classifyLayerOutcome({
+    layer: ais,
+    snapshot: snapshot({
+      stats: { count: 0, error: 'AISSTREAM_API_KEY is not set' },
+    }),
+    evidence: [{ status: 503, url: '/api/vessels' }],
+  });
+  assert.equal(missing.status, 'FAIL');
+  assert.match(missing.reason, /credential failure/);
+  assert.ok(isCredentialFailure('AISSTREAM_API_KEY not set'));
+
+  const outage = classifyLayerOutcome({
+    layer: ais,
+    snapshot: snapshot({
+      stats: { count: 0, error: 'AISStream feed unavailable' },
+    }),
+    evidence: [{ status: 503, url: '/api/vessels' }],
+  });
+  assert.equal(outage.status, 'EXTERNAL');
+  assert.match(outage.reason, /AISStream/);
 });
 
 test('a keyed outage is EXTERNAL but a missing credential is not', () => {
