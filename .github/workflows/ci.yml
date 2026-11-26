@@ -37,9 +37,10 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
-      # actionlint checks the workflows against the real Actions schema, which
-      # no Node test can do: it reads `needs.select.outputs.*` against the jobs
-      # and outputs that exist, and it validates every expression. It is a
+      # actionlint checks the workflows against the real Actions schema: a
+      # renamed job, a `needs.<job>.outputs.<name>` that no job declares, a
+      # `steps.<id>` that no step defines or an expression that cannot evaluate
+      # is an error here instead of a surprise in a scheduled canary run. It is a
       # release binary rather than an npm dependency, so it is pinned by version
       # and checked against a recorded checksum instead of the lockfile.
       - name: Lint GitHub Actions workflows

@@ -14,10 +14,16 @@ import { KEYED_LAYERS, KEYLESS_LAYERS } from './live-layer-manifests.mjs';
 
 const SIX_HOURLY = Object.keys(SCHEDULED_LAYERS)[0];
 
+/** The secret names that let the given keyed layers run. */
+const secretsFor = (...ids) =>
+  KEYED_LAYERS.filter((layer) => ids.includes(layer.id)).flatMap(
+    (layer) => layer.env ?? [],
+  );
+
 test('a filtered run narrows each gate to the requested layers', () => {
   const keyed = resolveLayerSelection({
     requested: ['ais-live-vessels'],
-    detected: ['local-firms', 'traffic', 'ais-live-vessels'],
+    present: secretsFor('local-firms', 'traffic', 'ais-live-vessels'),
   });
   assert.equal(keyed.ok, true, keyed.errors.join('\n'));
   assert.equal(keyed.filtered, true);
@@ -26,7 +32,7 @@ test('a filtered run narrows each gate to the requested layers', () => {
 
   const keyless = resolveLayerSelection({
     requested: ['earthquakes'],
-    detected: ['traffic'],
+    present: secretsFor('traffic'),
   });
   assert.equal(keyless.ok, true, keyless.errors.join('\n'));
   assert.equal(keyless.keyless, 'earthquakes');
@@ -37,7 +43,7 @@ test('a filtered run narrows each gate to the requested layers', () => {
 test('a mixed filter keeps the requested order inside each gate', () => {
   const selection = resolveLayerSelection({
     requested: ['earthquakes', 'traffic', 'satellites', 'local-firms'],
-    detected: ['traffic', 'local-firms'],
+    present: secretsFor('traffic', 'local-firms'),
   });
   assert.equal(selection.ok, true, selection.errors.join('\n'));
   assert.equal(selection.keyless, 'earthquakes,satellites');
@@ -47,7 +53,7 @@ test('a mixed filter keeps the requested order inside each gate', () => {
 test('an unfiltered run keeps every keyed layer with a credential', () => {
   const selection = resolveLayerSelection({
     requested: [],
-    detected: ['local-firms', 'traffic'],
+    present: secretsFor('local-firms', 'traffic'),
   });
   assert.equal(selection.ok, true);
   // `filtered: false` is what tells the gates to run their whole manifest;
@@ -62,7 +68,7 @@ test('an unfiltered run keeps every keyed layer with a credential', () => {
 test('a requested keyed layer without a credential fails the dispatch', () => {
   const missing = resolveLayerSelection({
     requested: ['ais-live-vessels', 'traffic'],
-    detected: ['traffic'],
+    present: secretsFor('traffic'),
   });
   assert.equal(missing.ok, false);
   assert.match(missing.errors[0], /ais-live-vessels/);
@@ -70,7 +76,7 @@ test('a requested keyed layer without a credential fails the dispatch', () => {
 
   const unconfigured = resolveLayerSelection({
     requested: ['ais-live-vessels'],
-    detected: [],
+    present: [],
   });
   assert.equal(unconfigured.ok, false);
 });
@@ -141,14 +147,16 @@ test('the present secret names decide which keyed layers can run', () => {
 
 test('a present name list resolves to the layers it can run', () => {
   const selection = resolveLayerSelection({
-    present: ['TOMTOM_API_KEY', 'AISSTREAM_API_KEY'],
+    present: ['TOMTOM_API_KEY', 'AISSTREAM_API_KEY', 'ACLED_EMAIL'],
   });
   assert.equal(selection.ok, true);
   assert.equal(selection.only, 'traffic,ais-live-vessels');
   assert.equal(selection.filtered, false);
+  // A full run reports the half-configured pair only: a secret nobody set is
+  // the normal state of a fork, not something a nightly summary should list.
   assert.deepEqual(
     selection.skipped.map((entry) => entry.id),
-    ['local-firms', 'conflict-events', 'fishing-effort'],
+    ['conflict-events'],
   );
 });
 
@@ -212,7 +220,7 @@ test('the GitHub output is one key per line with an explicit filtered flag', () 
     renderGithubOutput(
       resolveLayerSelection({
         requested: ['traffic'],
-        detected: ['traffic'],
+        present: secretsFor('traffic'),
       }),
     ),
     'filtered=true\nsource=dispatch\nkeyless=\nonly=traffic\ngroup=filter-traffic\nskipped=[]\n',
@@ -221,7 +229,7 @@ test('the GitHub output is one key per line with an explicit filtered flag', () 
     renderGithubOutput(
       resolveLayerSelection({ requested: [], present: ['ACLED_EMAIL'] }),
     ),
-    'filtered=false\nsource=full\nkeyless=\nonly=\ngroup=full\nskipped=[{"id":"local-firms","provider":"NASA FIRMS","partial":false,"reason":"no credential set (needs FIRMS_MAP_KEY)"},{"id":"conflict-events","provider":"ACLED","partial":true,"reason":"partial credential: ACLED_EMAIL is set but ACLED_PASSWORD is missing"},{"id":"fishing-effort","provider":"Global Fishing Watch","partial":false,"reason":"no credential set (needs GFW_API_TOKEN)"},{"id":"traffic","provider":"TomTom","partial":false,"reason":"no credential set (needs TOMTOM_API_KEY)"},{"id":"ais-live-vessels","provider":"AISStream","partial":false,"reason":"no credential set (needs AISSTREAM_API_KEY)"}]\n',
+    'filtered=false\nsource=full\nkeyless=\nonly=\ngroup=full\nskipped=[{"id":"conflict-events","provider":"ACLED","partial":true,"reason":"partial credential: ACLED_EMAIL is set but ACLED_PASSWORD is missing"}]\n',
   );
   // The skipped list is one line, so it survives a step output.
   assert.doesNotMatch(
@@ -241,14 +249,14 @@ test('the concurrency key follows the resolved filter and never collides with th
   assert.equal(
     resolveLayerSelection({
       requested: ['ais-live-vessels'],
-      detected: ['ais-live-vessels'],
+      present: secretsFor('ais-live-vessels'),
     }).group,
     'filter-ais-live-vessels',
   );
   assert.equal(
     resolveLayerSelection({
       requested: ['traffic', 'earthquakes'],
-      detected: ['traffic'],
+      present: secretsFor('traffic'),
     }).group,
     'filter-earthquakes+traffic',
   );

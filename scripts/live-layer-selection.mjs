@@ -14,7 +14,9 @@
  *   - the keyed layers whose credentials are present, narrowed to the requested
  *     ones (an unfiltered run keeps its historic "whatever has a credential"),
  *     plus the layers that could not run and why — a half-configured credential
- *     pair is the case worth a warning, because it looks configured;
+ *     pair is the case worth a warning, because it looks configured, while an
+ *     absent one is the normal state of a fork and only matters when a filter
+ *     asked for that layer;
  *   - the layer list a non-nightly schedule runs;
  *   - the concurrency key, which cannot read a step output.
  *
@@ -37,7 +39,9 @@
  *   keyless=<comma list>    keyless layers to run; empty means "no --only"
  *   only=<comma list>       keyed layers to run; empty skips the keyed gate
  *   group=<key>             concurrency key, `full` when unfiltered
- *   skipped=[{id,reason}]   keyed layers this run cannot exercise, one line JSON
+ *   skipped=[{id,reason}]   the keyed layers this run cannot exercise, one line
+ *                           JSON: the requested ones a filter cannot run, plus
+ *                           any half-configured pair on a full run
  *
  * Exit codes: 0 a usable selection · 1 an unknown id or a missing credential on
  * a manual dispatch (a scheduled run skips that layer instead of failing).
@@ -134,8 +138,7 @@ export function detectKeyedLayers(present = []) {
  */
 export function resolveLayerSelection({
   requested = [],
-  detected = null,
-  present = null,
+  present = [],
   schedule = '',
 } = {}) {
   const scheduled = requested.length ? [] : scheduledLayers(schedule);
@@ -145,10 +148,7 @@ export function resolveLayerSelection({
     : scheduled.length
       ? 'schedule'
       : 'full';
-  const credentials =
-    present === null
-      ? { detected: Array.isArray(detected) ? [...detected] : [], skipped: [] }
-      : detectKeyedLayers(present);
+  const credentials = detectKeyedLayers(present);
 
   const keyless = [];
   const keyed = [];
@@ -171,6 +171,13 @@ export function resolveLayerSelection({
       `no credential is configured for the requested keyed layer(s): ${missing.join(', ')}`,
     );
   }
+  // Report only what this run was expected to exercise: the requested layers a
+  // filter could not run, or — on a full run — the half-configured pairs. A
+  // fork with no provider secrets would otherwise list every keyed layer in
+  // every nightly summary.
+  const skipped = credentials.skipped.filter((entry) =>
+    filtered ? keyed.includes(entry.id) : entry.partial,
+  );
 
   if (errors.length) {
     return {
@@ -181,7 +188,7 @@ export function resolveLayerSelection({
       keyless: '',
       only: '',
       group: '',
-      skipped: credentials.skipped,
+      skipped,
     };
   }
 
@@ -193,7 +200,7 @@ export function resolveLayerSelection({
     keyless: keyless.join(','),
     only: (filtered ? runnable : credentials.detected).join(','),
     group: concurrencyGroup(ids),
-    skipped: credentials.skipped,
+    skipped,
   };
 }
 
@@ -220,10 +227,7 @@ function main(argv = process.argv.slice(2)) {
   const selection = resolveLayerSelection({
     requested: parseLayerFilter(option(argv, '--layers')),
     schedule: option(argv, '--schedule'),
-    present: argv.includes('--present')
-      ? parseLayerFilter(option(argv, '--present'))
-      : null,
-    detected: parseLayerFilter(option(argv, '--detected')),
+    present: parseLayerFilter(option(argv, '--present')),
   });
   if (!selection.ok) {
     for (const error of selection.errors)
@@ -239,8 +243,9 @@ function main(argv = process.argv.slice(2)) {
     );
   }
   if (selection.source === 'schedule' && !selection.only) {
+    const ids = selection.skipped.map((entry) => entry.id).join(', ');
     console.error(
-      `::notice::the scheduled keyed run has no credential for ${scheduledLayers(option(argv, '--schedule')).join(', ') || 'its layer'}; the canary job is skipped.`,
+      `::notice::the scheduled keyed run has no credential for ${ids || 'its layer'}; the canary job is skipped.`,
     );
   }
   process.stdout.write(renderGithubOutput(selection));

@@ -90,7 +90,6 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24.14.0
-          cache: npm
 
       # Secrets cannot be read in a job-level `if:`, but they can be read here.
       # The output is only the fixed list of secret names that exist; no secret
@@ -137,11 +136,12 @@ jobs:
     needs: select
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # A scheduled single-layer run whose credential is absent selects nothing,
-    # and installing, building and launching Chrome to exercise no layer costs
-    # more than it proves. A dispatch always gets here: a bad filter or a
-    # missing credential fails in `select` first.
-    if: ${{ needs.select.outputs.filtered != 'true' || needs.select.outputs.keyless != '' || needs.select.outputs.only != '' }}
+    # The two layer lists are the whole condition. An unfiltered run always
+    # lists keyless layers and a dispatch always lists at least one gate's, so
+    # both lists empty is exactly the scheduled run whose only layer has no
+    # credential — and installing, building and launching Chrome to exercise no
+    # layer costs more than it proves.
+    if: ${{ needs.select.outputs.keyless != '' || needs.select.outputs.only != '' }}
     permissions:
       contents: read
       # The last step records the run in the canary's tracking issue and labels
@@ -183,7 +183,7 @@ jobs:
       # Catch a stale canary contract before spending time on a browser or a
       # build. These are the same static tests CI runs.
       - name: Static canary contracts
-        run: node --test scripts/qa-keyless-live-layers.test.mjs scripts/live-layer-selection.test.mjs scripts/live-layer-canary.test.mjs scripts/check-workflow-contracts.test.mjs scripts/qa-layer-activation-matrix.test.mjs
+        run: node --test scripts/qa-keyless-live-layers.test.mjs scripts/live-layer-selection.test.mjs scripts/live-layer-canary.test.mjs scripts/qa-layer-activation-matrix.test.mjs
 
       # npm does not run dependency install scripts, so the Puppeteer
       # postinstall is skipped. Install the browser at the pinned version.
@@ -194,8 +194,13 @@ jobs:
         id: build
         run: npm run build
 
+      # Both gates need a successful build, so both check it: a preview started
+      # without a bundle only tests that vite can serve a 404. `!cancelled()`
+      # keeps the keyed path running after a keyless failure; a failed build
+      # skips both gates, and the step summary reports what did not run.
       - name: Start keyless preview
-        if: ${{ !cancelled() && (needs.select.outputs.filtered != 'true' || needs.select.outputs.keyless != '') }}
+        id: keyless-preview
+        if: ${{ !cancelled() && needs.select.outputs.keyless != '' && steps.build.outcome == 'success' }}
         run: |
           npx vite preview --port "$PREVIEW_PORT" --strictPort > preview-keyless.log 2>&1 &
           for attempt in $(seq 1 90); do
@@ -206,7 +211,7 @@ jobs:
           exit 1
 
       - name: Keyless live layer gate
-        if: ${{ !cancelled() && (needs.select.outputs.filtered != 'true' || needs.select.outputs.keyless != '') }}
+        if: ${{ !cancelled() && steps.keyless-preview.outcome == 'success' }}
         env:
           STRICT: ${{ inputs.strict }}
           KEYLESS_ONLY: ${{ needs.select.outputs.keyless }}
@@ -224,9 +229,8 @@ jobs:
           npm run qa:keyless-layers -- "${args[@]}"
 
       # A keyed failure must not hide the keyless result, so this starts even
-      # when the keyless gate failed. A successful build is the only prerequisite:
-      # an install/static-test/build failure skips the keyed path, while a
-      # keyless-preview failure on its port does not.
+      # when the keyless gate failed. A successful build is the only
+      # prerequisite: a keyless-preview failure on its port does not stop it.
       - name: Start keyed preview
         id: keyed-preview
         if: ${{ !cancelled() && needs.select.outputs.only != '' && steps.build.outcome == 'success' }}
