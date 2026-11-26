@@ -3499,5 +3499,6 @@
   "Confirm the install in the system dialog.": "Confirmez l'installation dans la fenêtre du système.",
   "Installed. Reopen the app to use it.": "Installée. Rouvrez l'application pour l'utiliser.",
   "The update could not be installed: {message}": "La mise à jour n'a pas pu être installée : {message}",
-  "Restarting to apply the update…": "Redémarrage pour appliquer la mise à jour…"
+  "Restarting to apply the update…": "Redémarrage pour appliquer la mise à jour…",
+  "Nuclear Plants": "Centrales nucléaires"
 }

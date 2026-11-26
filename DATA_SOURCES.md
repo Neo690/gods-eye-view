@@ -283,6 +283,7 @@ The [Bhote Koshi event pack](public/events/bhote-koshi-2026/README.md), under `p
 | -------------------------------------------------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------- |
 | **Datacenters** (4,351)                                                                            | `datacenters/`                    | **ODbL 1.0** (OpenStreetMap extract)                                                                      | ✅ (attribution + share-alike on data)           | © OpenStreetMap contributors (shared credit)                                |
 | **Dams** (704)                                                                                     | `dams/`                           | **ODbL 1.0** (OpenInfraMap / OSM extract)                                                                 | ✅ (attribution + share-alike on data)           | © OpenStreetMap contributors (shared credit) + Open Infrastructure Map      |
+| **Nuclear power plants** (201)                                                                     | `nuclear/`                        | **CC0 1.0** (Wikidata extract)                                                                            | ✅ (no restrictions)                             | "Nuclear power plants: Wikidata (CC0 1.0)"                                  |
 | **Military area names** (36,466)                                                                   | `osm_military_names/`             | **ODbL 1.0** (OpenStreetMap, via Overture Maps)                                                           | ✅ (attribution + share-alike on data)           | © OpenStreetMap contributors (shared credit) + Overture Maps Foundation     |
 | **TeleGeography Submarine Cable Map** (712 cables + 1,917 landing points)                          | `telegeography_submarine_cables/` | **CC BY-NC-SA 3.0**                                                                                       | ❌ **NonCommercial — remove for commercial use** | "© TeleGeography — submarinecablemap.com"                                   |
 | **Natural Earth physical regions** (1,046 land + 292 marine named polygons)                        | `natural_earth/`                  | **Public domain**                                                                                         | ✅ (no restrictions)                             | "Made with Natural Earth" (courtesy credit — not legally required)          |
@@ -347,6 +348,10 @@ credits it anyway as `SPECS: CCTV-DATABASE.COM` beside any spec line it renders.
 ### Bundled OpenStreetMap data
 
 Bundled OSM-derived data is distributed under [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/), separately from the MIT code: [datacenters](src/data/local_data/datacenters/), [dams](src/data/local_data/dams/) (via Open Infrastructure Map), [military names](src/data/local_data/osm_military_names/), and [OSM test fixtures](src/data/fixtures/). Keep © OpenStreetMap contributors and offer modified databases under ODbL.
+
+### Bundled Wikidata nuclear plants
+
+The [nuclear power plants](src/data/local_data/nuclear/) snapshot (201 features, Wikidata query recorded in its README) comes from **Wikidata**, dedicated to the public domain under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). The app credits "Nuclear power plants: Wikidata (CC0 1.0)". Positions, capacity, operator and build state are Wikidata's claims, not a live reactor-status feed.
 
 ### NASA FIRMS acknowledgement
 

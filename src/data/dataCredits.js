@@ -584,6 +584,14 @@ export const DATA_CREDITS = [
     html: 'Dams: Open Infrastructure Map',
   },
   {
+    key: 'nuclear-plants',
+    html:
+      'Nuclear power plants: ' +
+      '<a href="https://www.wikidata.org" target="_blank" rel="noopener">Wikidata</a> ' +
+      '(<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">CC0 1.0</a>); ' +
+      'positions, capacity and operator as recorded there',
+  },
+  {
     key: 'firms',
     html:
       'Active fires: NASA FIRMS — we acknowledge the use of data and/or imagery ' +

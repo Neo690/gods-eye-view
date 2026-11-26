@@ -86,6 +86,33 @@ export function localInfrastructureOverlayCopy(properties, layerId) {
     if (river && river.toLocaleLowerCase() !== title.toLocaleLowerCase()) {
       details.push(clampCardLine(river));
     }
+  } else if (layerId === 'local-nuclear') {
+    const operator = firstClean([
+      tags.operator,
+      props.operator,
+      tags['operator:short'],
+    ]);
+    const output = firstClean([props.output, tags['plant:output:electricity']]);
+    const line = [operator, output]
+      .filter(
+        (value, index, values) => value && values.indexOf(value) === index,
+      )
+      .filter(
+        (value) => value.toLocaleLowerCase() !== title.toLocaleLowerCase(),
+      )
+      .join(' · ');
+    if (line) details.push(clampCardLine(line));
+    // Country and build state on one line: where the plant is, and whether it
+    // is running or still being built.
+    const place = [
+      firstClean([tags.country, props.country]),
+      nuclearStatusLabel(firstClean([props.status, tags['plant:status']])),
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    if (place && place.toLocaleLowerCase() !== title.toLocaleLowerCase()) {
+      details.push(clampCardLine(place));
+    }
   }
 
   return { title, details };
@@ -1243,6 +1270,7 @@ function labelPriorityFromProperties(props, layerId) {
   if (cleanLabel(tags.operator) || cleanLabel(props.operator)) score += 180;
   if (props.output || tags['plant:output:electricity']) score += 120;
   if (layerId === 'local-dams') score += 80;
+  if (layerId === 'local-nuclear') score += 70;
   if (layerId === 'local-datacenters') score += 60;
   return score;
 }
@@ -1277,6 +1305,23 @@ function cleanLabel(value) {
 
 function firstClean(values) {
   return values.map(cleanLabel).find(Boolean) || '';
+}
+
+/**
+ * Short, readable build state for a nuclear plant card. Wikidata's state of use
+ * labels are full phrases ("building or structure under construction"); a card
+ * line only has room for the short form.
+ * @param {string} status Wikidata `state of use` label.
+ * @returns {string} Short label, or '' when the plant has no recorded state.
+ */
+function nuclearStatusLabel(status) {
+  const text = cleanLabel(status).toLocaleLowerCase();
+  if (!text) return '';
+  if (text === 'in use') return 'operating';
+  if (text.includes('under construction')) return 'under construction';
+  if (text === 'in partial operation') return 'partially operating';
+  if (text === 'starting up') return 'starting up';
+  return '';
 }
 
 function clampLabel(value) {

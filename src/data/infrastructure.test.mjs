@@ -66,6 +66,7 @@ test('infrastructure factory preserves identity and creates independent state wi
     [
       { id: 'local-datacenters', name: 'Datacenters', source: 'Local' },
       { id: 'local-dams', name: 'Dams', source: 'USACE' },
+      { id: 'local-nuclear', name: 'Nuclear Plants', source: 'Wikidata' },
     ],
   );
   first.forEach((layer, index) => {
@@ -84,6 +85,7 @@ test('dataset URLs still name the complete bundled sources', () => {
   for (const [file, count] of [
     ['datacenters', 4351],
     ['dams', 704],
+    ['nuclear', 201],
   ]) {
     const lines = readFileSync(
       new URL(`./local_data/${file}/${file}.geojsonl`, import.meta.url),
@@ -202,7 +204,7 @@ test('consumer build includes only infrastructure code and resolves assets under
     ['cesium'],
     'the viewer supplies the same Cesium dependency',
   );
-  for (const name of ['datacenters', 'dams']) {
+  for (const name of ['datacenters', 'dams', 'nuclear']) {
     const asset = output.find(
       (item) => item.type === 'asset' && item.fileName.includes(name),
     );

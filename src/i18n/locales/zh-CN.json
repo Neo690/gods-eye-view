@@ -3347,5 +3347,6 @@
   "Confirm the install in the system dialog.": "请在系统对话框中确认安装。",
   "Installed. Reopen the app to use it.": "已安装。请重新打开应用。",
   "The update could not be installed: {message}": "无法安装更新：{message}",
-  "Restarting to apply the update…": "正在重启以应用更新…"
+  "Restarting to apply the update…": "正在重启以应用更新…",
+  "Nuclear Plants": "核电站"
 }

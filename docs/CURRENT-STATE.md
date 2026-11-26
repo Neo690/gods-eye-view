@@ -970,7 +970,7 @@ query. Movement within an accepted or pending query reuses it. Markers retain
 their Cesium identity while their geometry is unchanged; refreshes preserve
 selection without replaying a click event.
 
-Data Centers, Dams and Submarine Cables release their built Cesium data sources
+Data Centers, Dams, Nuclear Plants and Submarine Cables release their built Cesium data sources
 and record references when disabled. Parsed datasets remain cached for the layer
 lifetime, so re-enable rebuilds entities without downloading or parsing again;
 this can take longer than simply revealing hidden entities. Destruction clears
@@ -2052,8 +2052,8 @@ loading keeps the result hidden; destruction aborts the fetch and rejects late
 parse/add results. Destruction and failed setup remove owned context records,
 so replacing a layer cannot retain stale entities or listeners.
 
-Datacenters and dams retain their full datasets while limiting active marker
-stems per layer: 80 at camera heights of 3,000 km or above, 200 from 200 km,
+Datacenters, dams and nuclear plants retain their full datasets while limiting
+active marker stems per layer: 80 at camera heights of 3,000 km or above, 200 from 200 km,
 and 420 below 200 km. Selection favors existing label priority and nearby
 features, retains stable choices across small camera movements, and refreshes
 during continuous motion. Disable/re-enable resets selection cleanly.
@@ -3954,6 +3954,7 @@ its criteria cannot be silently ignored.
 | Directions 🧭          | OSRM on FOSSGIS servers (OpenStreetMap)                                                                                                                                                         | `src/data/directions.js`                              | `/api/route` (`steps=1`)                                 | on placement / mode change                                                        |
 | Datacenters ▣          | OSM extract (bundled)                                                                                                                                                                           | `src/data/infrastructure.js`                          | —                                                        | static                                                                            |
 | Dams ▰                 | OpenInfraMap/OSM extract (bundled)                                                                                                                                                              | `src/data/infrastructure.js`                          | —                                                        | static                                                                            |
+| Nuclear Plants ☢      | Wikidata nuclear power plants, CC0 (bundled; operator, capacity, country and build state on the card)                                                                                          | `src/data/infrastructure.js`                          | —                                                        | static                                                                            |
 | Submarine Cables ◠     | TeleGeography public map (bundled)                                                                                                                                                              | `src/data/telegeographySubmarineCables.js`            | —                                                        | static                                                                            |
 | FIRMS Active Fires ▲   | NASA FIRMS live (VIIRS ×3 NRT + MODIS NRT, trailing 24h)                                                                                                                                        | `src/data/firmsHeatmap.js`                            | `/api/firms` (`FIRMS_MAP_KEY`)                           | 10 min (proxy TTL 30 min)                                                         |
 | Street Level 📷 | Mapillary street-level imagery (vector tiles, Graph API, MapillaryJS) | `src/layers/streetLevel/` via `src/app/layers/streetLevel.js` | `/api/mapillary/status`, `/api/mapillary/tiles/coverage/{z}/{x}/{y}` (`MAPILLARY_CLIENT_TOKEN`) | camera-driven (320 ms debounce, ≤9 tiles, server memory cache 24 h) |
@@ -6651,7 +6652,8 @@ the standalone layer defaults to the hourly tile source.
 OSM-derived layers share one OpenStreetMap data attribution entry. Displayed
 OSM data retains a short inline OpenStreetMap credit, plus OpenMapTiles while
 OpenFreeMap tiles are used; its display follows the existing map-credit rules. Routing, Warendorf cameras,
-datacenters, dams and the Nepal locator retain that shared credit while displayed.
+datacenters, dams and the Nepal locator retain that shared credit while displayed;
+nuclear plants carry their own Wikidata CC0 credit.
 
 Military fragments stitch by source identity. Different mapped parcels merge only
 when their footprints touch or contain one another, never across a seam tolerance gap.

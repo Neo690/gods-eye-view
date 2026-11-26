@@ -56,7 +56,7 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // layer extends it too, with its own aliases and noQuery hint. The
     // conflict-events, insider and device-sweep layers each add their own
     // aliases and noQuery hint.
-    'dff266625168c81259d66a5dfb88b6e90851233ae86b767196275fc40424fdfc',
+    '52563fbbde16f84a5842ef670e229abac341677a6368167ee68e858cee119102',
   );
 });
 

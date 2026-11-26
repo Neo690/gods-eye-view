@@ -1,6 +1,6 @@
 /**
- * Bundled OpenStreetMap infrastructure layers (datacenters and dams): their
- * data files, line-delimited GeoJSON parsing and analyst records.
+ * Bundled infrastructure layers (datacenters, dams, nuclear plants): their data
+ * files, line-delimited GeoJSON parsing and analyst records.
  */
 
 // Resolved by Vite in builds and relative to this module in other consumers,
@@ -16,6 +16,12 @@ export const INFRASTRUCTURE_DATA_URLS = Object.freeze({
     return new URL('../data/local_data/dams/dams.geojsonl', import.meta.url)
       .href;
   },
+  get 'local-nuclear'() {
+    return new URL(
+      '../data/local_data/nuclear/nuclear.geojsonl',
+      import.meta.url,
+    ).href;
+  },
 });
 
 /** Parse GeoJSON Lines: one Feature per non-empty line. */
@@ -30,6 +36,7 @@ export function parseGeojsonLines(text) {
 export function layerTitle(layerId) {
   if (layerId === 'local-datacenters') return 'Datacenter';
   if (layerId === 'local-dams') return 'Dam';
+  if (layerId === 'local-nuclear') return 'Nuclear Plant';
   return 'Feature';
 }
 
@@ -42,7 +49,8 @@ export function layerTitle(layerId) {
  * Names are unclamped — overlay cards shorten for paint; queries need the
  * full source string ("Usina Hidrelétrica de Itaipu").
  * @param {Object|null|undefined} raw - {id, lat, lon, properties}.
- * @param {string} [layerId] Local layer id (`local-datacenters` / `local-dams`).
+ * @param {string} [layerId] Local layer id (`local-datacenters` / `local-dams` /
+ *   `local-nuclear`).
  * @returns {{id: string, name: string|null, lat: number|null, lon: number|null,
  *   operator: string|null, capacity: string|null, river: string|null,
  *   output: string|null}}
@@ -90,7 +98,7 @@ export function mapAnalystRecord(raw, layerId = '') {
         text(tags['river:name'])
       : null;
   const output =
-    layerId === 'local-dams'
+    layerId === 'local-dams' || layerId === 'local-nuclear'
       ? text(props.output) || text(tags['plant:output:electricity'])
       : null;
   return {

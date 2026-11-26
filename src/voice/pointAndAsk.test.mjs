@@ -351,10 +351,10 @@ test('deixis prompt lint: one short rule, and every sentinel it names exists in 
   // localized layer) brought it to 52,514. The Russian, zh-CN and Arabic
   // leading names per localized layer brought it to 52,642. Camera advisories
   // and the merged upstream layer set (GhostMaps, and the local layers it
-  // carries) brought it to 54,102. The ceiling follows with headroom; a new
-  // tool or rule has to fit under it.
+  // carries) brought it to 54,102, and the nuclear-plant layer to 54,589. The
+  // ceiling follows with headroom; a new tool or rule has to fit under it.
   const size = instructions.length + JSON.stringify(GEV_REALTIME_TOOLS).length;
-  assert.ok(size <= 54500, `prompt size ${size}`);
+  assert.ok(size <= 54800, `prompt size ${size}`);
 });
 
 test('after-tool speech allows returned items to answer requested lists and rankings', () => {

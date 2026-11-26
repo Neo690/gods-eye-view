@@ -3499,5 +3499,6 @@
   "Confirm the install in the system dialog.": "Confirma la instalación en el diálogo del sistema.",
   "Installed. Reopen the app to use it.": "Instalada. Vuelve a abrir la aplicación para usarla.",
   "The update could not be installed: {message}": "La actualización no se pudo instalar: {message}",
-  "Restarting to apply the update…": "Reiniciando para aplicar la actualización…"
+  "Restarting to apply the update…": "Reiniciando para aplicar la actualización…",
+  "Nuclear Plants": "Centrales nucleares"
 }

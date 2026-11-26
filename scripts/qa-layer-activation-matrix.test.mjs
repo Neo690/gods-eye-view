@@ -36,8 +36,8 @@ const schemaSnapshot = JSON.parse(
 );
 
 test('the coverage manifest matches the application catalog one-for-one', () => {
-  assert.equal(catalogIds.length, 54);
-  assert.equal(new Set(catalogIds).size, 54);
+  assert.equal(catalogIds.length, 55);
+  assert.equal(new Set(catalogIds).size, 55);
   assert.deepEqual(
     Object.keys(manifest.layers).sort(),
     [...catalogIds].sort(),
@@ -47,7 +47,7 @@ test('the coverage manifest matches the application catalog one-for-one', () => 
 
 test('coverage manifest names every runtime layer with a fixture or an exception', () => {
   const entries = Object.entries(manifest.layers);
-  assert.equal(entries.length, 54, 'the runtime registry has 54 layers');
+  assert.equal(entries.length, 55, 'the runtime registry has 55 layers');
   for (const [id, entry] of entries) {
     const fixtures = Array.isArray(entry.fixtures) ? entry.fixtures : [];
     assert.ok(
@@ -170,7 +170,7 @@ test('every fixture the manifest references exists in the network registry', () 
 
 test('the coverage contract is enforced and cannot silently regress', () => {
   assert.equal(manifest.contract.fixtureBackedMin, 37);
-  assert.equal(manifest.contract.exceptionsMax, 17);
+  assert.equal(manifest.contract.exceptionsMax, 18);
 
   // Moving a fixture-backed layer to an exception must fail both bounds.
   const regressed = structuredClone(manifest);

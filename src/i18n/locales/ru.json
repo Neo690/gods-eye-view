@@ -3575,5 +3575,6 @@
   "Confirm the install in the system dialog.": "Подтвердите установку в системном окне.",
   "Installed. Reopen the app to use it.": "Установлено. Откройте приложение заново.",
   "The update could not be installed: {message}": "Не удалось установить обновление: {message}",
-  "Restarting to apply the update…": "Перезапуск для применения обновления…"
+  "Restarting to apply the update…": "Перезапуск для применения обновления…",
+  "Nuclear Plants": "АЭС"
 }

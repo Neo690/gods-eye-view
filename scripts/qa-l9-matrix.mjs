@@ -175,6 +175,7 @@ const CREDIT_EXPECTATIONS = {
   'military-installations': /OpenStreetMap/i,
   'local-datacenters': /OpenStreetMap/i,
   'local-dams': /OpenStreetMap/i,
+  'local-nuclear': /Wikidata/i,
   'local-firms': /FIRMS/i,
   'telegeography-submarine-cables': /TeleGeography/i,
   'local-neighborhoods': /DataSF|San Francisco/i,
@@ -1649,7 +1650,12 @@ async function runBrowserGroup(record) {
     }, null, 30000);
     await new Promise((r) => setTimeout(r, 2000));
 
-    const bundled = ['local-datacenters', 'local-dams', 'telegeography-submarine-cables'];
+    const bundled = [
+      'local-datacenters',
+      'local-dams',
+      'local-nuclear',
+      'telegeography-submarine-cables',
+    ];
     const out = [];
     const stillLoading = [];
     let loadNote = '';

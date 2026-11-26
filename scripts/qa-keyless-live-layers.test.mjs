@@ -76,9 +76,9 @@ test('the keyless manifest is valid and covers the temporary live set', () => {
 test('the keyless inventory is derived from key declarations and fully decided', () => {
   const inventory = validateKeylessInventory();
   assert.equal(inventory.ok, true, inventory.errors.join('\n'));
-  assert.equal(inventory.keylessIds.length, 50);
+  assert.equal(inventory.keylessIds.length, 51);
   assert.equal(inventory.included, 15);
-  assert.equal(inventory.excluded, 35);
+  assert.equal(inventory.excluded, 36);
   assert.deepEqual(
     inventory.keylessIds,
     deriveKeylessLayerIds(APPLICATION_LAYER_METADATA),
@@ -111,7 +111,7 @@ test('the keyless inventory is derived from key declarations and fully decided',
 
 test('the keyless canary contract cannot silently shrink', () => {
   assert.equal(KEYLESS_CANARY_CONTRACT.includedMin, 15);
-  assert.equal(KEYLESS_CANARY_CONTRACT.excludedMax, 35);
+  assert.equal(KEYLESS_CANARY_CONTRACT.excludedMax, 36);
 
   // Moving a live layer to the exclusion column would leave the canary
   // deliberately smaller, so the contract must fail until the number is

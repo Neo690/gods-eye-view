@@ -46,7 +46,7 @@ const APP_URL = getOpt('--url', 'http://localhost:5180');
 const CONTROL = argv.includes('--control');
 const HEADFUL = argv.includes('--headful');
 
-const INFRA_LAYER_IDS = ['local-datacenters', 'local-dams'];
+const INFRA_LAYER_IDS = ['local-datacenters', 'local-dams', 'local-nuclear'];
 const CABLE_LAYER_ID = 'telegeography-submarine-cables';
 
 const results = [];

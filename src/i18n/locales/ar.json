@@ -3727,5 +3727,6 @@
   "Confirm the install in the system dialog.": "أكّد التثبيت في نافذة النظام.",
   "Installed. Reopen the app to use it.": "تم التثبيت. أعد فتح التطبيق لاستخدامه.",
   "The update could not be installed: {message}": "تعذّر تثبيت التحديث: {message}",
-  "Restarting to apply the update…": "جارٍ إعادة التشغيل لتطبيق التحديث…"
+  "Restarting to apply the update…": "جارٍ إعادة التشغيل لتطبيق التحديث…",
+  "Nuclear Plants": "محطات نووية"
 }

@@ -1061,11 +1061,12 @@ test('the voice TOOL SCHEMA matches the pinned contract — the mission mapping 
   // with its own aliases and noQuery hint. GhostMaps adds its generated layer
   // enum value and spoken aliases on top of both, and OSM Places does the same.
   // The conflict-events, insider and device-sweep layers add their own aliases
-  // and noQuery hints to the generated layer enums.
-  assert.equal(block.length, 33316, 'serialized tool schema length drifted');
+  // and noQuery hints to the generated layer enums. The nuclear-plant layer
+  // adds its own generated enum value and spoken aliases.
+  assert.equal(block.length, 33473, 'serialized tool schema length drifted');
   assert.equal(
     crypto.createHash('sha256').update(block).digest('hex'),
-    'ab2015a9754ce95788225b99c00fb642ab3fd3128230fd2a351116175554fa05',
+    'fa69f33567fadbe62e8af23ccbd9556a6888d07d2d1afa29292303d3ae795bbb',
     'the first-run missions must ride EXISTING tools: no schema edit, no cache bust',
   );
   const instructions = fs.readFileSync(

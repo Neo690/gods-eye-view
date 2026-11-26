@@ -25,6 +25,7 @@
   ["local-dams", "q"],
   ["local-datacenters", "d"],
   ["local-firms", "w"],
+  ["local-nuclear", "0f"],
   ["military", "m"],
   ["military-awareness", "g"],
   ["military-installations", "i"],

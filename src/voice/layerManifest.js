@@ -543,6 +543,14 @@ const layers = [
     },
   },
   {
+    id: 'local-nuclear',
+    aliases: ['nuclear plants', 'nuclear power plants', 'nuclear'],
+    context: true,
+    query: {
+      fields: { name: ['t'], operator: ['t'], output: ['t'] },
+    },
+  },
+  {
     id: 'telegeography-submarine-cables',
     aliases: ['submarine cables', 'undersea cables', 'cables', 'telegeography'],
     context: false,

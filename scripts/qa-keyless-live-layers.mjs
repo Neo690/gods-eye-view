@@ -191,7 +191,7 @@ export function validateKeyedCoverage({
  */
 export const KEYLESS_CANARY_CONTRACT = Object.freeze({
   includedMin: 15,
-  excludedMax: 35,
+  excludedMax: 36,
 });
 
 export const KEYLESS_CANARY_DECISIONS = Object.freeze({
@@ -280,6 +280,10 @@ export const KEYLESS_CANARY_DECISIONS = Object.freeze({
     reason: 'Bundled local catalogue; no live provider.',
   }),
   'local-datacenters': Object.freeze({
+    decision: 'exclude',
+    reason: 'Bundled local catalogue; no live provider.',
+  }),
+  'local-nuclear': Object.freeze({
     decision: 'exclude',
     reason: 'Bundled local catalogue; no live provider.',
   }),
