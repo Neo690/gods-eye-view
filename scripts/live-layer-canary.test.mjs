@@ -140,7 +140,7 @@ test('a streak counts consecutive non-PASS outcomes and a PASS ends it', () => {
   assert.equal(layerStreak(runs, 'satellites'), 2);
   assert.equal(layerStreak(runs, 'radio'), 0);
   assert.deepEqual(escalatedLayers(runs), []);
-  assert.deepEqual(escalatedLayers(runs, { threshold: 2 }), ['satellites']);
+  assert.deepEqual(escalatedLayers(runs, 2), ['satellites']);
 
   // A run that did not exercise the layer is stepped over, not counted as a
   // break, so a partial dispatch cannot hide a real streak.
@@ -280,7 +280,7 @@ test('the summary labels a filtered run as partial and says what it skipped', ()
   assert.match(summary, /Trigger: \*\*scheduled keyed run\*\*/);
   assert.match(summary, /### Keyed layers skipped/);
   assert.match(summary, /partial credential: ACLED_EMAIL/);
-  assert.match(summary, /\*\*Partial credential:\*\* `conflict-events`/);
+  assert.match(summary, /\| conflict-events \| partial credential/);
   assert.match(summary, /### Keyed live layers/);
   assert.match(summary, /\| ais-live-vessels \| PASS \| — \|/);
 });

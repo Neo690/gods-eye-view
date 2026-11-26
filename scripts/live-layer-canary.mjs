@@ -14,7 +14,7 @@
  *   - the step summary, which labels a filtered run as partial and shows each
  *     layer's previous status, the layers that broke or recovered since the
  *     previous run, and the keyed layers this run skipped with the reason (a
- *     half-configured credential pair is called out, never its value);
+ *     half-configured pair names its missing variable, never a value);
  *   - the failure and recovery comments plus the `live-layer-canary-failing`
  *     label on the tracking issue.
  *
@@ -30,6 +30,16 @@
  *   node scripts/live-layer-canary.mjs report \
  *     --keyless qa-artifacts/keyless-live/report.json \
  *     --keyed qa-artifacts/keyed-live/report.json
+ *
+ * The issue path is the one part of the alerting no live run has exercised yet,
+ * so `applyTracking` takes its runner as an argument and the runner honours
+ * `CANARY_GH`. Either way the real create/edit/comment code runs, against a
+ * stand-in instead of the GitHub API:
+ *
+ *   CANARY_GH=scripts/fixtures/live-layer-canary/fake-gh.mjs \
+ *   FAKE_GH_STATE=/tmp/canary/issue.json GH_TOKEN=local \
+ *   GITHUB_STEP_SUMMARY=/tmp/canary/summary.md \
+ *     node scripts/live-layer-canary.mjs report --keyless report.json
  *
  * Exit codes: 0 report written · 1 a report could not be read at all.
  */
@@ -78,18 +88,16 @@ export function readReport(path) {
 /** Flatten both gates' per-layer statuses into one map. */
 export function summarizeReports(reports = []) {
   const layers = {};
-  const totals = {};
   const failed = [];
   for (const { report } of reports) {
     if (!report) continue;
     for (const layer of report.layers ?? []) {
       const status = String(layer.status ?? 'UNKNOWN');
       layers[layer.id] = status;
-      totals[status] = (totals[status] ?? 0) + 1;
       if (BLOCKING_STATUSES.includes(status)) failed.push(layer.id);
     }
   }
-  return { layers, totals, failed };
+  return { layers, failed };
 }
 
 /** The compact record one run contributes to the history. */
@@ -110,7 +118,6 @@ export function buildRun({
     conclusion,
     partial: Boolean(selection.filtered),
     layers: outcome.layers,
-    totals: outcome.totals,
     failed: outcome.failed,
     skipped: skipped.map((entry) => entry.id),
   };
@@ -162,10 +169,7 @@ export function layerStreak(runs = [], id) {
 }
 
 /** Layers that have returned a non-PASS upstream outcome too many times running. */
-export function escalatedLayers(
-  runs = [],
-  { threshold = ESCALATION_THRESHOLD } = {},
-) {
+export function escalatedLayers(runs = [], threshold = ESCALATION_THRESHOLD) {
   const ids = new Set(runs.flatMap((run) => Object.keys(run.layers ?? {})));
   return [...ids].filter((id) => layerStreak(runs, id) >= threshold).sort();
 }
@@ -197,13 +201,12 @@ export function recordRun(state = { version: 1, runs: [] }, run) {
   };
 }
 
-function priorFailing(runs, threshold) {
-  if (!runs.length) return false;
-  const last = runs[runs.length - 1];
+/** Whether a recorded run is an alert: red, a failed layer, or a streak. */
+function isFailing(run, runs, threshold = ESCALATION_THRESHOLD) {
   return (
-    last.conclusion === 'failure' ||
-    (last.failed ?? []).length > 0 ||
-    escalatedLayers(runs, { threshold }).length > 0
+    run.conclusion === 'failure' ||
+    (run.failed ?? []).length > 0 ||
+    escalatedLayers(runs, threshold).length > 0
   );
 }
 
@@ -215,12 +218,11 @@ export function planTracking({ state, run, threshold = ESCALATION_THRESHOLD }) {
   const priorRuns = state?.runs ?? [];
   const previous = priorRuns.length ? priorRuns[priorRuns.length - 1] : null;
   const next = recordRun(state, run);
-  const escalated = escalatedLayers(next.runs, { threshold });
-  const failing =
-    run.conclusion === 'failure' ||
-    (run.failed ?? []).length > 0 ||
-    escalated.length > 0;
-  const wasFailing = priorFailing(priorRuns, threshold);
+  const escalated = escalatedLayers(next.runs, threshold);
+  const failing = isFailing(run, next.runs, threshold);
+  const wasFailing = previous
+    ? isFailing(previous, priorRuns, threshold)
+    : false;
   const action =
     failing && !wasFailing
       ? 'open'
@@ -282,8 +284,7 @@ export function renderSummary({
     );
   }
 
-  const trigger =
-    TRIGGER_LABELS[selection.source ?? 'full'] ?? selection.source;
+  const trigger = TRIGGER_LABELS[selection.source ?? 'full'];
   lines.push(
     `Trigger: **${trigger}**${selection.group ? ` · concurrency group \`${selection.group}\`` : ''}`,
     '',
@@ -300,13 +301,6 @@ export function renderSummary({
       ),
       '',
     );
-    const partial = skipped.filter((entry) => entry.partial);
-    if (partial.length) {
-      lines.push(
-        `> **Partial credential:** ${list(partial.map((entry) => entry.id))} ${partial.length === 1 ? 'has' : 'have'} only part of the secret pair configured, so ${partial.length === 1 ? 'it was' : 'they were'} not tested at all.`,
-        '',
-      );
-    }
   }
 
   if (!reports.length) {
@@ -462,13 +456,20 @@ export function renderTrackingComment(plan) {
   return `${lines.join('\n').trimEnd()}\n`;
 }
 
-function gh(args) {
-  return execFileSync('gh', args, { encoding: 'utf8' });
+/**
+ * Run one gh call and return its stdout. `CANARY_GH` names a command line to run
+ * instead of `gh` (split on whitespace, so `node fake-gh.mjs` works): it is the
+ * seam the tests and the local exercise use, never a runtime option.
+ */
+function runGh(args) {
+  const override = String(process.env.CANARY_GH ?? '').trim();
+  const [command, ...prefix] = override ? override.split(/\s+/) : ['gh'];
+  return execFileSync(command, [...prefix, ...args], { encoding: 'utf8' });
 }
 
-function option(argv, name, fallback = '') {
+function option(argv, name) {
   const index = argv.indexOf(name);
-  return index >= 0 ? String(argv[index + 1] ?? fallback) : fallback;
+  return index >= 0 ? String(argv[index + 1] ?? '') : '';
 }
 
 function parseJson(value, fallback) {
@@ -480,8 +481,15 @@ function parseJson(value, fallback) {
   }
 }
 
-/** Read the tracking issue, if the token allows it. */
-function loadTracking() {
+/**
+ * Read the tracking issue, if the token allows it. Closed trackers are listed
+ * too: a tracker someone closed by hand still holds the history, and creating a
+ * second one would split it and reset the streaks. `applyTracking` reopens it
+ * when the run has something to say. `gh issue list` promises an order by
+ * creation, not that it survives filtering client-side, so the candidates are
+ * sorted by number: the newest tracker (open first) is the one chosen.
+ */
+export function loadTracking({ gh = runGh } = {}) {
   const issues = JSON.parse(
     gh([
       'issue',
@@ -489,39 +497,48 @@ function loadTracking() {
       '--label',
       TRACKING_LABEL,
       '--state',
-      'open',
+      'all',
       '--limit',
       '20',
       '--json',
-      'number,title,body',
+      'number,title,body,state',
     ]),
   );
-  const issue = issues.find((entry) => entry.title === TRACKING_TITLE) ?? null;
+  const trackers = issues
+    .filter((entry) => entry.title === TRACKING_TITLE)
+    .sort((left, right) => right.number - left.number);
+  const issue =
+    trackers.find(
+      (entry) => String(entry.state ?? '').toUpperCase() === 'OPEN',
+    ) ??
+    trackers[0] ??
+    null;
   return {
     issue,
     state: issue ? parseTrackingBody(issue.body) : { version: 1, runs: [] },
   };
 }
 
-function ensureLabel(name, color, description) {
-  try {
-    gh([
-      'label',
-      'create',
-      name,
-      '--color',
-      color,
-      '--description',
-      description,
-    ]);
-  } catch {
-    // The label already exists, or the token cannot create one; the issue body
-    // and its comments still carry the signal.
-  }
+/**
+ * Create the label or update it in place. `--force` makes that one idempotent
+ * call: without it, every run after the first would fail on an existing label
+ * and the canary would have to distinguish that failure from a real one.
+ */
+function setLabel(gh, name, color, description) {
+  gh([
+    'label',
+    'create',
+    name,
+    '--color',
+    color,
+    '--description',
+    description,
+    '--force',
+  ]);
 }
 
 /** Write the history back, open or reopen the alert, and comment if needed. */
-function applyTracking(plan, tracking) {
+export function applyTracking(plan, tracking, { gh = runGh } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'gev-live-canary-'));
   const bodyPath = join(dir, 'body.md');
   writeFileSync(bodyPath, renderTrackingBody(plan.next));
@@ -530,7 +547,8 @@ function applyTracking(plan, tracking) {
   if (number) {
     gh(['issue', 'edit', String(number), '--body-file', bodyPath]);
   } else {
-    ensureLabel(
+    setLabel(
+      gh,
       TRACKING_LABEL,
       '0e8a16',
       'Live layer canary history and alerts',
@@ -550,18 +568,18 @@ function applyTracking(plan, tracking) {
 
   if (shouldComment(plan)) {
     // A closed tracker still accepts a comment, but nobody is notified of it;
-    // a reopened one puts the alert back on the board.
-    const state = JSON.parse(
-      gh(['issue', 'view', String(number), '--json', 'state']),
-    ).state;
-    if (state !== 'OPEN') gh(['issue', 'reopen', String(number)]);
+    // a reopened one puts the alert back on the board. The state is the one the
+    // lookup already read, so this costs no extra gh call.
+    const open =
+      String(tracking.issue?.state ?? 'OPEN').toUpperCase() === 'OPEN';
+    if (!open) gh(['issue', 'reopen', String(number)]);
     const commentPath = join(dir, 'comment.md');
     writeFileSync(commentPath, renderTrackingComment(plan));
     gh(['issue', 'comment', String(number), '--body-file', commentPath]);
   }
 
   if (plan.failing) {
-    ensureLabel(FAILING_LABEL, 'b60205', 'The live layer canary is failing');
+    setLabel(gh, FAILING_LABEL, 'b60205', 'The live layer canary is failing');
     gh(['issue', 'edit', String(number), '--add-label', FAILING_LABEL]);
   } else if (plan.wasFailing) {
     gh(['issue', 'edit', String(number), '--remove-label', FAILING_LABEL]);
