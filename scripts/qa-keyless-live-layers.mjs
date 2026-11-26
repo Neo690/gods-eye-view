@@ -635,6 +635,63 @@ export function isCredentialFailure(error, stats = null) {
   return CREDENTIAL_FAILURE.test(String(error || ''));
 }
 
+/** The env vars the keyed manifest needs; only their names are ever printed. */
+const SECRET_ENV_NAMES = [
+  ...new Set(KEYED_LAYERS.flatMap((layer) => layer.env ?? [])),
+];
+const SECRET_QUERY_PARAMS =
+  /^(?:api[_-]?key|apikey|key|token|access[_-]?token|auth|authorization|password|secret|signature|sig|credential)$/i;
+
+/** Env values shorter than this are too generic to replace safely. */
+const MIN_REDACTABLE_LENGTH = 6;
+
+/**
+ * Remove provider credentials from text that leaves this process.
+ *
+ * The reports are uploaded as a build artifact, and a failed request's URL can
+ * carry the key that built it: a proxy that puts the provider key in a query
+ * string would otherwise publish that key with the artifact. Two passes cover
+ * it — the value of every secret the canary knows, and any query parameter that
+ * is named like a credential — because a key can reach a URL through a query
+ * parameter whose value this process never sees in its own environment.
+ */
+export function redactSecrets(
+  value,
+  { secrets = SECRET_ENV_NAMES, minimumLength = MIN_REDACTABLE_LENGTH } = {},
+) {
+  let text = String(value ?? '');
+  text = text.replace(
+    /([?&]([^=&#\s]+)=)([^&#\s]*)/g,
+    (match, prefix, name) => {
+      let decoded = name;
+      try {
+        decoded = decodeURIComponent(name);
+      } catch {
+        /* a malformed escape is still checked as written */
+      }
+      return SECRET_QUERY_PARAMS.test(decoded) ? `${prefix}REDACTED` : match;
+    },
+  );
+  for (const name of secrets) {
+    const secret = String(process.env[name] ?? '').trim();
+    if (secret.length < minimumLength) continue;
+    text = text.split(secret).join('REDACTED');
+  }
+  return text;
+}
+
+/** Redact every string in a report, so no evidence path escapes unredacted. */
+export function redactReport(value) {
+  if (typeof value === 'string') return redactSecrets(value);
+  if (Array.isArray(value)) return value.map(redactReport);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, redactReport(entry)]),
+    );
+  }
+  return value;
+}
+
 const minRows = (layer) => Number(layer.expect?.min ?? 1);
 
 const TRANSIENT_UPSTREAM_STATUSES = new Set([429, 502, 503, 504]);
@@ -1043,7 +1100,10 @@ async function probeOverpass(appUrl) {
 function writeReport(report) {
   try {
     mkdirSync(dirname(REPORT_PATH), { recursive: true });
-    writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`);
+    writeFileSync(
+      REPORT_PATH,
+      `${JSON.stringify(redactReport(report), null, 2)}\n`,
+    );
     return REPORT_PATH;
   } catch (error) {
     console.error(C.yellow(`could not write report: ${error.message}`));
@@ -1066,11 +1126,11 @@ function printLayerResult(result) {
     `  ${color(result.status.padEnd(13))} ${result.id.padEnd(22)} ${result.provider.padEnd(29)}${count} ${C.dim(`${result.durationMs}ms`)}`,
   );
   if (result.status !== 'PASS') {
-    console.log(`       ${C.dim(result.reason)}`);
+    console.log(`       ${C.dim(redactSecrets(result.reason))}`);
   }
   if (!result.teardown.ok) {
     console.log(
-      `       ${C.red('teardown:')} ${result.teardown.reason || 'failed'}`,
+      `       ${C.red('teardown:')} ${redactSecrets(result.teardown.reason || 'failed')}`,
     );
   }
 }

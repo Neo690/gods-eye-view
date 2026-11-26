@@ -93,14 +93,18 @@ export function keyedSecretNames(manifest = KEYED_LAYERS) {
 
 const secretRef = (name) => `\${{ secrets.${name} }}`;
 
-/** `if [ -n "${A:-}" ] && [ -n "${B:-}" ]; then add <id>; fi`, one per layer. */
+/**
+ * `if [ -n "${NAME:-}" ]; then add NAME; fi`, one per unique secret name.
+ *
+ * The step reports which *names* are configured, not which layers can run:
+ * reducing names to layers needs each layer's env list, so it belongs in
+ * scripts/live-layer-selection.mjs where a partial credential pair is a tested
+ * case instead of another generated shell branch.
+ */
 export function renderDetectionScript(manifest = KEYED_LAYERS) {
-  const lines = [];
-  for (const { id, env } of manifest) {
-    const guard = env.map((name) => `[ -n "\${${name}:-}" ]`).join(' && ');
-    lines.push(`if ${guard}; then add ${id}; fi`);
-  }
-  return lines;
+  return keyedSecretNames(manifest).map(
+    (name) => `if [ -n "\${${name}:-}" ]; then add ${name}; fi`,
+  );
 }
 
 /** One `env:` mapping body line per unique secret. */
@@ -111,9 +115,9 @@ export function renderEnvMapping(manifest = KEYED_LAYERS) {
 }
 
 /**
- * The detection step's body: the env mapping plus the script that reduces the
- * present credentials to a comma-separated `only` list. No secret value is
- * echoed; the step output is the fixed set of layer ids.
+ * The detection step's body: the env mapping plus the script that collects the
+ * configured secret names into a comma-separated `present` list. No secret
+ * value is echoed; the step output is the fixed set of env var names.
  */
 export function renderDetectionRegion(manifest = KEYED_LAYERS) {
   return [
@@ -121,13 +125,10 @@ export function renderDetectionRegion(manifest = KEYED_LAYERS) {
     ...renderEnvMapping(manifest),
     'run: |',
     '  set -euo pipefail',
-    '  only=""',
-    '  add() { only="${only:+$only,}$1"; }',
+    '  present=""',
+    '  add() { present="${present:+$present,}$1"; }',
     ...renderDetectionScript(manifest).map((line) => `  ${line}`),
-    '  echo "only=$only" >> "$GITHUB_OUTPUT"',
-    '  if [ -z "$only" ]; then',
-    '    echo "::notice::No keyed provider secrets are configured; the keyed live canary is skipped."',
-    '  fi',
+    '  echo "present=$present" >> "$GITHUB_OUTPUT"',
   ];
 }
 

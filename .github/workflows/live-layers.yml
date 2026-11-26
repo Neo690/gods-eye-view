@@ -26,9 +26,24 @@ name: Live layer canary
 # filter is resolved against both manifests, so a keyed id skips the keyless
 # preview and gate entirely and a keyless id skips the keyed ones; asking for a
 # keyed layer whose credential is unset fails instead of testing nothing.
+#
+# A second, six-hourly schedule runs only the AIS layer: it is the one keyed
+# layer with no keyless fallback, so its credential and socket are what rot
+# silently between nightly runs. A scheduled layer whose credential is absent is
+# skipped and reported instead of failing, because a missing secret must not go
+# red four times a day.
+#
+# The final step reads both reports even when a gate failed. It labels a
+# filtered run as partial, shows the layers that broke or recovered since the
+# previous run, lists the keyed layers the run skipped and why, and records the
+# run in the canary's tracking issue, where a failure or a recovery is
+# commented. A provider that has returned EMPTY or EXTERNAL for three runs in a
+# row escalates to that issue too, but never to a red run: those outcomes stay
+# non-blocking by design.
 on:
   schedule:
     - cron: '41 6 * * *'
+    - cron: '17 */6 * * *'
   workflow_dispatch:
     inputs:
       strict:
@@ -61,8 +76,10 @@ jobs:
     outputs:
       group: ${{ steps.selection.outputs.group }}
       filtered: ${{ steps.selection.outputs.filtered }}
+      source: ${{ steps.selection.outputs.source }}
       keyless: ${{ steps.selection.outputs.keyless }}
       only: ${{ steps.selection.outputs.only }}
+      skipped: ${{ steps.selection.outputs.skipped }}
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -76,8 +93,9 @@ jobs:
           cache: npm
 
       # Secrets cannot be read in a job-level `if:`, but they can be read here.
-      # The output is only the fixed list of layer ids whose credentials exist;
-      # no secret value is printed.
+      # The output is only the fixed list of secret names that exist; no secret
+      # value is printed, and `Resolve layer selection` turns those names into
+      # the layers they can actually run.
       #
       # The env mapping and the select lines are GENERATED from KEYED_LAYERS by
       # scripts/keyed-live-layers-workflow.mjs; a new keyed layer needs only a
@@ -95,31 +113,40 @@ jobs:
           AISSTREAM_API_KEY: ${{ secrets.AISSTREAM_API_KEY }}
         run: |
           set -euo pipefail
-          only=""
-          add() { only="${only:+$only,}$1"; }
-          if [ -n "${FIRMS_MAP_KEY:-}" ]; then add local-firms; fi
-          if [ -n "${ACLED_EMAIL:-}" ] && [ -n "${ACLED_PASSWORD:-}" ]; then add conflict-events; fi
-          if [ -n "${GFW_API_TOKEN:-}" ]; then add fishing-effort; fi
-          if [ -n "${TOMTOM_API_KEY:-}" ]; then add traffic; fi
-          if [ -n "${AISSTREAM_API_KEY:-}" ]; then add ais-live-vessels; fi
-          echo "only=$only" >> "$GITHUB_OUTPUT"
-          if [ -z "$only" ]; then
-            echo "::notice::No keyed provider secrets are configured; the keyed live canary is skipped."
-          fi
+          present=""
+          add() { present="${present:+$present,}$1"; }
+          if [ -n "${FIRMS_MAP_KEY:-}" ]; then add FIRMS_MAP_KEY; fi
+          if [ -n "${ACLED_EMAIL:-}" ]; then add ACLED_EMAIL; fi
+          if [ -n "${ACLED_PASSWORD:-}" ]; then add ACLED_PASSWORD; fi
+          if [ -n "${GFW_API_TOKEN:-}" ]; then add GFW_API_TOKEN; fi
+          if [ -n "${TOMTOM_API_KEY:-}" ]; then add TOMTOM_API_KEY; fi
+          if [ -n "${AISSTREAM_API_KEY:-}" ]; then add AISSTREAM_API_KEY; fi
+          echo "present=$present" >> "$GITHUB_OUTPUT"
         # END GENERATED keyed-detection
 
       - name: Resolve layer selection
         id: selection
         env:
           LAYERS: ${{ inputs.layers }}
-          DETECTED: ${{ steps.keys.outputs.only }}
-        run: node scripts/live-layer-selection.mjs --layers "$LAYERS" --detected "$DETECTED" >> "$GITHUB_OUTPUT"
+          SCHEDULE: ${{ github.event.schedule }}
+          PRESENT: ${{ steps.keys.outputs.present }}
+        run: node scripts/live-layer-selection.mjs --layers "$LAYERS" --schedule "$SCHEDULE" --present "$PRESENT" >> "$GITHUB_OUTPUT"
 
   live:
     name: Live layer canary
     needs: select
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # A scheduled single-layer run whose credential is absent selects nothing,
+    # and installing, building and launching Chrome to exercise no layer costs
+    # more than it proves. A dispatch always gets here: a bad filter or a
+    # missing credential fails in `select` first.
+    if: ${{ needs.select.outputs.filtered != 'true' || needs.select.outputs.keyless != '' || needs.select.outputs.only != '' }}
+    permissions:
+      contents: read
+      # The last step records the run in the canary's tracking issue and labels
+      # it while it is failing.
+      issues: write
     # The group carries the resolved filter: `ais-live-vessels` and the nightly
     # `full` run never cancel each other, while two runs of the same filter still
     # cancel the older one.
@@ -156,7 +183,7 @@ jobs:
       # Catch a stale canary contract before spending time on a browser or a
       # build. These are the same static tests CI runs.
       - name: Static canary contracts
-        run: node --test scripts/qa-keyless-live-layers.test.mjs scripts/live-layer-selection.test.mjs scripts/qa-layer-activation-matrix.test.mjs
+        run: node --test scripts/qa-keyless-live-layers.test.mjs scripts/live-layer-selection.test.mjs scripts/live-layer-canary.test.mjs scripts/check-workflow-contracts.test.mjs scripts/qa-layer-activation-matrix.test.mjs
 
       # npm does not run dependency install scripts, so the Puppeteer
       # postinstall is skipped. Install the browser at the pinned version.
@@ -259,56 +286,25 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Summarize live layer outcomes
+      # Reads both reports even when a gate failed: the summary is the run's
+      # record, and the history step needs whatever was written. `job.status` is
+      # this job's state, so a failed gate is reported as a failure and the
+      # tracking issue is commented rather than refreshed. The script never
+      # changes the run's conclusion; the gates already decided it.
+      - name: Summarize and track live layer health
         if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          CONCLUSION: ${{ job.status }}
+          FILTERED: ${{ needs.select.outputs.filtered }}
+          SOURCE: ${{ needs.select.outputs.source }}
+          GROUP: ${{ needs.select.outputs.group }}
+          KEYLESS_ONLY: ${{ needs.select.outputs.keyless }}
+          ONLY: ${{ needs.select.outputs.only }}
+          SKIPPED: ${{ needs.select.outputs.skipped }}
         run: |
-          node --input-type=module <<'EOF'
-          import { appendFileSync, readFileSync } from 'node:fs';
-
-          const reports = [
-            ['Keyless live layers', 'qa-artifacts/keyless-live/report.json'],
-            ['Keyed live layers', 'qa-artifacts/keyed-live/report.json'],
-          ];
-          const cell = (value) =>
-            String(value ?? '')
-              .replace(/\|/g, '\\|')
-              .replace(/\r?\n/g, ' ')
-              .slice(0, 500);
-          const lines = [];
-          for (const [title, path] of reports) {
-            let report;
-            try {
-              report = JSON.parse(readFileSync(path, 'utf8'));
-            } catch {
-              continue;
-            }
-            const summary = report.summary ?? {};
-            lines.push(
-              `## ${title}`,
-              '',
-              `Overall: **${report.ok ? 'PASS' : 'FAIL'}** (${report.strict ? 'strict' : 'non-strict'})`,
-              '',
-              `PASS ${summary.pass ?? 0} · EMPTY ${summary.empty ?? 0} · UNCONFIGURED ${summary.unconfigured ?? 0} · EXTERNAL ${summary.external ?? 0} · FAIL ${summary.fail ?? 0} · MISSING ${summary.missing ?? 0}`,
-              '',
-              '| Layer | Status | Reason |',
-              '|---|---|---|',
-              ...(report.layers ?? []).map(
-                (layer) =>
-                  `| ${cell(layer.id)} | ${cell(layer.status)} | ${cell(layer.reason)} |`,
-              ),
-              '',
-            );
-          }
-          if (!lines.length) {
-            lines.push(
-              '## Live layer canary',
-              '',
-              'No live layer report was produced.',
-              '',
-            );
-          }
-          appendFileSync(
-            process.env.GITHUB_STEP_SUMMARY,
-            `${lines.join('\n')}\n`,
-          );
-          EOF
+          node scripts/live-layer-canary.mjs report \
+            --keyless qa-artifacts/keyless-live/report.json \
+            --keyed qa-artifacts/keyed-live/report.json

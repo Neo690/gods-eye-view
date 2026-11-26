@@ -13,6 +13,8 @@ import {
 import {
   KEYED_LAYERS,
   KEYLESS_CANARY_CONTRACT,
+  redactReport,
+  redactSecrets,
   KEYLESS_CANARY_DECISIONS,
   KEYLESS_LAYERS,
   classifyLayerOutcome,
@@ -313,26 +315,34 @@ test('the live workflow wires every keyed secret only into the keyed preview', (
     'the keyless preview must never receive provider secrets',
   );
 
-  for (const { id, env } of KEYED_LAYERS) {
+  // Detection reports the secret names that are set; turning those names into
+  // runnable layers is scripts/live-layer-selection.mjs's job, where a partial
+  // credential pair is a tested case instead of another shell branch.
+  for (const name of new Set(
+    KEYED_LAYERS.flatMap((layer) => layer.env ?? []),
+  )) {
+    const secret = new RegExp(`\\$\\{\\{ secrets\\.${name} \\}\\}`);
     assert.match(
       detection,
-      new RegExp(`add ${id};`),
-      `${id} is in KEYED_LAYERS but the workflow never selects it`,
+      secret,
+      `${name} is not read by keyed secret detection`,
     );
-    for (const name of env) {
-      const secret = new RegExp(`\\$\\{\\{ secrets\\.${name} \\}\\}`);
-      assert.match(
-        detection,
-        secret,
-        `${name} is not read by keyed secret detection`,
-      );
-      assert.match(
-        keyedPreview,
-        secret,
-        `${name} is not passed to the keyed preview`,
-      );
-    }
+    assert.match(
+      detection,
+      new RegExp(`if \\[ -n "\\$\\{${name}:-\\}" \\]; then add ${name}; fi`),
+      `${name} is mapped to a layer by the workflow, so a partial credential cannot be reported`,
+    );
+    assert.match(
+      keyedPreview,
+      secret,
+      `${name} is not passed to the keyed preview`,
+    );
   }
+  assert.match(
+    detection,
+    /echo "present=\$present" >> "\$GITHUB_OUTPUT"/,
+    'detection must publish the configured secret names, not the layers',
+  );
 });
 
 const readWorkflow = () =>
@@ -364,11 +374,15 @@ test('the workflow keyed wiring is exactly what KEYED_LAYERS generates', () => {
     'the keyed wiring in .github/workflows/live-layers.yml no longer matches KEYED_LAYERS; run "node scripts/keyed-live-layers-workflow.mjs --write" and commit the result',
   );
 
-  // Every secret the workflow touches comes out of the generated regions, so
-  // a hand-written mapping cannot reintroduce the duplicated list and the
-  // keyless preview cannot acquire a credential by accident.
+  // Every provider secret the workflow touches comes out of the generated
+  // regions, so a hand-written mapping cannot reintroduce the duplicated list
+  // and the keyless preview cannot acquire a credential by accident. The
+  // repository's own token is not a provider credential and is expected.
   assert.doesNotMatch(
-    withoutGeneratedRegions(workflow),
+    withoutGeneratedRegions(workflow).replaceAll(
+      '${{ secrets.GITHUB_TOKEN }}',
+      '',
+    ),
     /\$\{\{\s*secrets\./,
     'a provider secret is wired outside the generated keyed regions',
   );
@@ -392,9 +406,17 @@ test('the workflow can run one layer on dispatch without the other gate', () => 
 
   const selection = between('select:', 'live:');
   assert.match(selection, /scripts\/live-layer-selection\.mjs/);
-  assert.match(selection, /--layers "\$LAYERS" --detected "\$DETECTED"/);
-  assert.match(selection, /DETECTED: \$\{\{ steps\.keys\.outputs\.only \}\}/);
+  assert.match(
+    selection,
+    /--layers "\$LAYERS" --schedule "\$SCHEDULE" --present "\$PRESENT"/,
+  );
+  assert.match(selection, /SCHEDULE: \$\{\{ github\.event\.schedule \}\}/);
+  assert.match(selection, /PRESENT: \$\{\{ steps\.keys\.outputs\.present \}\}/);
   assert.match(selection, /only: \$\{\{ steps\.selection\.outputs\.only \}\}/);
+  assert.match(
+    selection,
+    /skipped: \$\{\{ steps\.selection\.outputs\.skipped \}\}/,
+  );
   assert.match(
     selection,
     /group: \$\{\{ steps\.selection\.outputs\.group \}\}/,
@@ -456,7 +478,7 @@ test('the workflow drift check catches a keyed layer missing from the wiring', (
   assert.notEqual(withFeed, workflow);
   assert.match(
     withFeed,
-    /if \[ -n "\$\{NEW_FEED_TOKEN:-\}" \]; then add new-keyed-feed; fi/,
+    /if \[ -n "\$\{NEW_FEED_TOKEN:-\}" \]; then add NEW_FEED_TOKEN; fi/,
   );
   // Detection and the keyed preview each need the secret; nothing else does.
   assert.equal(
@@ -468,9 +490,9 @@ test('the workflow drift check catches a keyed layer missing from the wiring', (
   const removed = applyKeyedWorkflow(workflow, {
     manifest: KEYED_LAYERS.filter(({ id }) => id !== 'traffic'),
   });
-  assert.doesNotMatch(removed, /add traffic;/);
+  assert.doesNotMatch(removed, /add TOMTOM_API_KEY;/);
   assert.doesNotMatch(removed, /TOMTOM_API_KEY/);
-  assert.match(removed, /add ais-live-vessels;/);
+  assert.match(removed, /add AISSTREAM_API_KEY;/);
 });
 
 test('a keyed layer that cannot be rendered into the workflow is refused', () => {
@@ -777,4 +799,68 @@ test('an unregistered layer or a throwing getStats is a failure', () => {
   );
   assert.equal(thrown.status, 'FAIL');
   assert.match(thrown.reason, /getStats\(\) threw/);
+});
+
+test('a provider key never reaches the uploaded report', () => {
+  const key = 'firms-secret-0123456789';
+  process.env.FIRMS_MAP_KEY = key;
+  try {
+    // The value is replaced wherever it appears, including a URL the layer
+    // built by putting the key in its own query string.
+    assert.equal(
+      redactSecrets(`HTTP 503 /api/firms?bbox=world&MAP_KEY=${key}`),
+      'HTTP 503 /api/firms?bbox=world&MAP_KEY=REDACTED',
+    );
+    assert.equal(
+      redactSecrets(`token ${key} rejected`),
+      'token REDACTED rejected',
+      'a secret value must be replaced in free text too',
+    );
+    // A key the runner never sees in its environment still cannot survive a
+    // credential-named query parameter.
+    assert.equal(
+      redactSecrets('/api/tomtom/tile/1/2/3.png?key=abcdef123456&style=main'),
+      '/api/tomtom/tile/1/2/3.png?key=REDACTED&style=main',
+    );
+    assert.equal(
+      redactSecrets('/api/firms?bbox=world', { secrets: [] }),
+      '/api/firms?bbox=world',
+    );
+
+    const report = redactReport({
+      layers: [
+        {
+          id: 'local-firms',
+          reason: `layer error ${key}`,
+          evidence: [
+            { status: 503, url: `/api/firms?bbox=world&api_key=${key}` },
+            { error: 'net::ERR_TIMED_OUT', url: '/api/firms?bbox=world' },
+          ],
+        },
+      ],
+      summary: { pass: 0, fail: 1 },
+    });
+    assert.doesNotMatch(JSON.stringify(report), new RegExp(key));
+    // Redaction must not change the classification data around it.
+    assert.deepEqual(report.summary, { pass: 0, fail: 1 });
+    assert.equal(report.layers[0].evidence[1].url, '/api/firms?bbox=world');
+  } finally {
+    delete process.env.FIRMS_MAP_KEY;
+  }
+});
+
+test('the canary workflow runs the six-hourly schedule and the health report', () => {
+  const workflow = readWorkflow();
+  assert.match(
+    workflow,
+    /- cron: '17 \*\/6 \* \* \*'/,
+    'the AIS layer needs a schedule faster than the nightly',
+  );
+  assert.match(workflow, /scripts\/live-layer-canary\.mjs report/);
+  assert.match(workflow, /CONCLUSION: \$\{\{ job\.status \}\}/);
+  assert.match(
+    workflow,
+    /issues: write/,
+    'the tracking issue cannot be written without issues: write',
+  );
 });

@@ -37,6 +37,23 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
+      # actionlint checks the workflows against the real Actions schema, which
+      # no Node test can do: it reads `needs.select.outputs.*` against the jobs
+      # and outputs that exist, and it validates every expression. It is a
+      # release binary rather than an npm dependency, so it is pinned by version
+      # and checked against a recorded checksum instead of the lockfile.
+      - name: Lint GitHub Actions workflows
+        run: |
+          set -euo pipefail
+          version=1.7.7
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl -fsSL --retry 3 -o "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${version}/actionlint_${version}_linux_amd64.tar.gz"
+          echo "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757  $archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -version
+          "$RUNNER_TEMP/actionlint" .github/workflows/*.yml
+
       # The ffmpeg-static post-install fetches its binary from a GitHub release
       # page, and the unauthenticated `/releases/download/` path has been
       # returning 504s in bursts since Nov 8 (community #212407). The failure is
