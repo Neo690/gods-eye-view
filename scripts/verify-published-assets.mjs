@@ -20,6 +20,10 @@
  *   ios      with no Apple signing secrets configured, `ios-latest` must carry
  *            no `.ipa` at all: a stale one is installable-looking and cannot be
  *            rebuilt. With the secrets configured, the `.ipa` must exist.
+ *   all      `provenance.json` names the notes' commit and version and the
+ *            downloaded bundle's size and SHA-256; `sbom.cdx.json` hashes to
+ *            the value inside the manifest, is CycloneDX for that release, and
+ *            carries the bundle's SHA-256 in its file component.
  *
  * Nothing here trusts the build: every check reads the published release over
  * the GitHub API and the bytes over the asset URL. A release that is being
@@ -66,19 +70,28 @@ const SETTLE_WAIT_MS = 5000;
 export const RELEASES = Object.freeze({
   desktop: Object.freeze({
     label: 'Windows installer',
+    platform: 'windows',
     tag: 'desktop-latest',
     assetName: 'gods-eye-view-windows-setup.exe',
     feedName: 'latest.yml',
+    provenanceName: 'provenance.json',
+    sbomName: 'sbom.cdx.json',
   }),
   android: Object.freeze({
     label: 'Android APK',
+    platform: 'android',
     tag: 'apk-latest',
     assetName: 'gods-eye-view.apk',
+    provenanceName: 'provenance.json',
+    sbomName: 'sbom.cdx.json',
   }),
   ios: Object.freeze({
     label: 'iOS IPA',
+    platform: 'ios',
     tag: 'ios-latest',
     assetName: 'gods-eye-view.ipa',
+    provenanceName: 'provenance.json',
+    sbomName: 'sbom.cdx.json',
   }),
 });
 
@@ -188,6 +201,11 @@ export function sha512Base64(buffer) {
   return createHash('sha512').update(buffer).digest('base64');
 }
 
+/** Lowercase SHA-256 hex, the encoding the provenance manifest uses. */
+export function sha256Hex(buffer) {
+  return createHash('sha256').update(buffer).digest('hex');
+}
+
 /**
  * The `(1.0.120)` version every publishing workflow writes into its release
  * notes: `Built from <sha> (<version>) on <branch>.`
@@ -200,6 +218,290 @@ export function notesVersion(body) {
   const match = /Built from\s+\S+\s+\(([^)]+)\)/i.exec(String(body ?? ''));
   const value = match?.[1]?.trim() ?? '';
   return /^\d+(?:\.\d+)+$/.test(value) ? value : null;
+}
+
+/**
+ * The commit every publishing workflow writes into its release notes:
+ * `Built from <sha> (<version>) on <branch>.`
+ *
+ * GitHub shortens it to seven characters in some views, but the workflows pass
+ * `GITHUB_SHA` whole. The manifest always carries the full value, so the gate
+ * accepts a short notes commit as a prefix of it rather than requiring one
+ * length in both places.
+ */
+export function notesCommit(body) {
+  const match = /Built from\s+([0-9a-f]{7,40})\s+\(/i.exec(
+    String(body ?? ''),
+  );
+  return match?.[1]?.toLowerCase() ?? null;
+}
+
+/**
+ * The provenance manifest and its SBOM, checked against the bundle the release
+ * actually serves.
+ *
+ * The manifest is the release's own account of itself: which commit and version
+ * produced the bytes, which file those bytes are, and which SBOM describes
+ * them. Trusting any one of those without the others is how a release page ends
+ * up saying one thing while the download says another, so every field is
+ * compared with the downloaded artifact or the release notes.
+ *
+ * @param {{channel: string, release?: object|null,
+ *   manifest?: {text: string, bytes: number, sha256: string}|null,
+ *   sbom?: {text: string, bytes: number, sha256: string}|null,
+ *   bundle?: {name: string, bytes: number, sha256: string}|null}} input
+ */
+export function verifyProvenance({
+  channel,
+  release = null,
+  manifest = null,
+  sbom = null,
+  bundle = null,
+} = {}) {
+  const spec = RELEASES[channel];
+  if (!spec) {
+    return [
+      check(
+        'provenance.platform',
+        'fail',
+        `unknown release channel ${JSON.stringify(channel)}`,
+      ),
+    ];
+  }
+  const checks = [];
+  const manifestAsset = release?.assets?.find(
+    (asset) => asset.name === spec.provenanceName,
+  );
+  const sbomAsset = release?.assets?.find(
+    (asset) => asset.name === spec.sbomName,
+  );
+
+  checks.push(
+    check(
+      'provenance.asset',
+      manifestAsset ? 'pass' : 'fail',
+      manifestAsset
+        ? `${spec.provenanceName} is published (${manifestAsset.size} bytes)`
+        : `${spec.tag} carries no ${spec.provenanceName}, so the release cannot say what it was built from`,
+    ),
+  );
+  checks.push(
+    check(
+      'provenance.sbom-asset',
+      sbomAsset ? 'pass' : 'fail',
+      sbomAsset
+        ? `${spec.sbomName} is published (${sbomAsset.size} bytes)`
+        : `${spec.tag} carries no ${spec.sbomName}, so the manifest names an SBOM the release does not have`,
+    ),
+  );
+  if (!manifestAsset || !sbomAsset) return checks;
+
+  if (!manifest) {
+    checks.push(
+      check(
+        'provenance.read',
+        'fail',
+        `${spec.provenanceName} could not be downloaded`,
+      ),
+    );
+    return checks;
+  }
+  if (manifest.bytes !== manifestAsset.size) {
+    checks.push(
+      check(
+        'provenance.read',
+        'fail',
+        `the downloaded manifest is ${manifest.bytes} bytes, the release says ${manifestAsset.size}`,
+      ),
+    );
+    return checks;
+  }
+  let document;
+  try {
+    document = JSON.parse(manifest.text);
+  } catch (error) {
+    checks.push(
+      check(
+        'provenance.read',
+        'fail',
+        `${spec.provenanceName} is not JSON: ${error.message}`,
+      ),
+    );
+    return checks;
+  }
+  if (!document || typeof document !== 'object' || Array.isArray(document)) {
+    checks.push(
+      check(
+        'provenance.read',
+        'fail',
+        `${spec.provenanceName} is not a JSON object`,
+      ),
+    );
+    return checks;
+  }
+  checks.push(check('provenance.read', 'pass', 'manifest parsed'));
+
+  const shaped =
+    document.schemaVersion === 1 &&
+    document.platform === spec.platform &&
+    document.release === spec.tag;
+  checks.push(
+    check(
+      'provenance.shape',
+      shaped ? 'pass' : 'fail',
+      shaped
+        ? `schemaVersion 1 for ${spec.platform} on ${spec.tag}`
+        : `expected schemaVersion 1, platform ${spec.platform} and release ${spec.tag}; got ${JSON.stringify(
+            {
+              schemaVersion: document.schemaVersion,
+              platform: document.platform,
+              release: document.release,
+            },
+          )}`,
+    ),
+  );
+
+  const commit = String(document.commit ?? '').toLowerCase();
+  const noteCommit = notesCommit(release.body);
+  const commitOk =
+    /^[0-9a-f]{40}$/.test(commit) &&
+    Boolean(noteCommit) &&
+    commit.startsWith(noteCommit);
+  checks.push(
+    check(
+      'provenance.commit',
+      commitOk ? 'pass' : 'fail',
+      commitOk
+        ? `commit ${commit} matches the release notes`
+        : `the manifest names ${commit || 'no commit'}, the release notes name ${noteCommit || 'none'}; the manifest must carry the full 40-hex commit`,
+    ),
+  );
+
+  const noteVersion = notesVersion(release.body);
+  const versionOk =
+    typeof document.version === 'string' &&
+    Boolean(noteVersion) &&
+    document.version === noteVersion;
+  checks.push(
+    check(
+      'provenance.version',
+      versionOk ? 'pass' : 'fail',
+      versionOk
+        ? `version ${document.version} matches the release notes`
+        : `the manifest says ${document.version ?? 'no version'}, the release notes say ${noteVersion ?? 'none'}`,
+    ),
+  );
+
+  const declared = document.bundle ?? {};
+  const bundleAsset = release.assets.find(
+    (asset) => asset.name === spec.assetName,
+  );
+  const bundleOk =
+    Boolean(bundle) &&
+    declared.name === spec.assetName &&
+    Number.isFinite(declared.size) &&
+    declared.size > 0 &&
+    declared.size === bundle.bytes &&
+    declared.sha256 === bundle.sha256 &&
+    bundle.bytes > 0 &&
+    bundle.bytes === bundleAsset?.size;
+  checks.push(
+    check(
+      'provenance.bundle',
+      bundleOk ? 'pass' : 'fail',
+      bundleOk
+        ? `${spec.assetName} is ${bundle.bytes} bytes with SHA-256 ${bundle.sha256}`
+        : `the manifest says ${declared.name ?? 'no file'} ${declared.size ?? '?'} bytes ${declared.sha256 ?? 'no sha256'}, the downloaded asset is ${bundle?.name ?? 'missing'} ${bundle?.bytes ?? '?'} bytes ${bundle?.sha256 ?? 'no sha256'}`,
+    ),
+  );
+
+  if (!sbom) {
+    checks.push(
+      check(
+        'provenance.sbom',
+        'fail',
+        `${spec.sbomName} could not be downloaded`,
+      ),
+    );
+    return checks;
+  }
+  const declaredSbom = document.sbom ?? {};
+  const sbomOk =
+    declaredSbom.name === spec.sbomName &&
+    Number.isFinite(declaredSbom.size) &&
+    declaredSbom.size === sbom.bytes &&
+    declaredSbom.sha256 === sbom.sha256 &&
+    sbom.bytes === sbomAsset.size;
+  checks.push(
+    check(
+      'provenance.sbom',
+      sbomOk ? 'pass' : 'fail',
+      sbomOk
+        ? `${spec.sbomName} is ${sbom.bytes} bytes with SHA-256 ${sbom.sha256}`
+        : `the manifest says ${declaredSbom.name ?? 'no SBOM'} ${declaredSbom.size ?? '?'} bytes ${declaredSbom.sha256 ?? 'no sha256'}, the downloaded SBOM is ${sbom.bytes} bytes ${sbom.sha256}`,
+    ),
+  );
+
+  let bom;
+  try {
+    bom = JSON.parse(sbom.text);
+  } catch (error) {
+    checks.push(
+      check(
+        'provenance.sbom-format',
+        'fail',
+        `${spec.sbomName} is not JSON: ${error.message}`,
+      ),
+    );
+    return checks;
+  }
+  const properties = new Map(
+    (Array.isArray(bom?.metadata?.properties)
+      ? bom.metadata.properties
+      : []
+    )
+      .filter((entry) => entry && typeof entry.name === 'string')
+      .map((entry) => [entry.name, String(entry.value ?? '')]),
+  );
+  const formatOk =
+    bom?.bomFormat === 'CycloneDX' &&
+    bom?.specVersion === '1.5' &&
+    declaredSbom.format === bom?.bomFormat &&
+    declaredSbom.specVersion === bom?.specVersion &&
+    bom?.metadata?.component?.version === document.version &&
+    properties.get('gev:platform') === spec.platform &&
+    properties.get('gev:release') === spec.tag &&
+    properties.get('gev:commit') === commit &&
+    Array.isArray(bom.components) &&
+    declaredSbom.components === bom.components.length;
+  checks.push(
+    check(
+      'provenance.sbom-format',
+      formatOk ? 'pass' : 'fail',
+      formatOk
+        ? `CycloneDX ${bom.specVersion}, ${bom.components.length} components for ${commit}`
+        : `the SBOM must be CycloneDX for ${spec.platform}/${spec.tag} at ${commit} with ${declaredSbom.components ?? '?'} components`,
+    ),
+  );
+
+  const file = (bom?.components ?? []).find(
+    (component) =>
+      component?.type === 'file' && component?.name === spec.assetName,
+  );
+  const fileHash = (file?.hashes ?? []).find(
+    (entry) => entry?.alg === 'SHA-256',
+  )?.content;
+  const sbomBundleOk = fileHash === bundle?.sha256;
+  checks.push(
+    check(
+      'provenance.sbom-bundle',
+      sbomBundleOk ? 'pass' : 'fail',
+      sbomBundleOk
+        ? `the SBOM's file component carries ${spec.assetName}'s SHA-256`
+        : `the SBOM's file component for ${spec.assetName} says ${fileHash ?? 'nothing'}, the bundle is ${bundle?.sha256 ?? 'missing'}`,
+    ),
+  );
+  return checks;
 }
 
 /**
@@ -705,13 +1007,19 @@ export function verifyIos({ release = null, appleSigning = 'unknown' } = {}) {
     ];
   }
   if (appleSigning === 'false') {
+    const stale = (release?.assets ?? []).filter(
+      (asset) =>
+        asset.name.endsWith('.ipa') ||
+        asset.name === spec.provenanceName ||
+        asset.name === spec.sbomName,
+    );
     return [
       check(
         'ipa.absent',
-        ipas.length ? 'fail' : 'pass',
-        ipas.length
-          ? `${spec.tag} still carries ${ipas.map((asset) => asset.name).join(', ')} while the Apple signing secrets are not configured; no run can rebuild or remove it, so it must be deleted`
-          : `the Apple signing secrets are not configured and ${spec.tag} carries no .ipa${
+        stale.length ? 'fail' : 'pass',
+        stale.length
+          ? `${spec.tag} still carries ${stale.map((asset) => asset.name).join(', ')} while the Apple signing secrets are not configured; no run can rebuild or remove it, so it must be deleted`
+          : `the Apple signing secrets are not configured and ${spec.tag} carries no .ipa, provenance or SBOM${
               release
                 ? ` (${release.assets.length} asset${release.assets.length === 1 ? '' : 's'} checked)`
                 : ' (no release)'
@@ -878,6 +1186,7 @@ export async function downloadAsset({
     throw new Error(`downloading ${asset.name} answered ${response.status}`);
   const target = path.join(directory, asset.name);
   const hash = createHash('sha512');
+  const hash256 = createHash('sha256');
   let bytes = 0;
 
   if (response.body?.getReader) {
@@ -889,6 +1198,7 @@ export async function downloadAsset({
         if (done) break;
         const chunk = Buffer.from(value);
         hash.update(chunk);
+        hash256.update(chunk);
         bytes += chunk.length;
         if (!stream.write(chunk)) await once(stream, 'drain');
       }
@@ -899,6 +1209,7 @@ export async function downloadAsset({
   } else {
     const buffer = Buffer.from(await response.arrayBuffer());
     hash.update(buffer);
+    hash256.update(buffer);
     bytes = buffer.length;
     writeFileSync(target, buffer);
   }
@@ -907,6 +1218,7 @@ export async function downloadAsset({
     name: asset.name,
     path: target,
     bytes,
+    sha256: hash256.digest('hex'),
     sha512: hash.digest('base64'),
     text: readText ? readFileSync(target, 'utf8') : undefined,
   };
@@ -1002,18 +1314,32 @@ async function runDesktop(context) {
   const { release, files } = await readStableRelease({
     repo: context.repo,
     tag: spec.tag,
-    wanted: [spec.feedName, spec.assetName],
+    wanted: [
+      spec.feedName,
+      spec.assetName,
+      spec.provenanceName,
+      spec.sbomName,
+    ],
     directory: context.directory,
     token: context.token,
     timeoutMs: context.timeoutMs,
     fetchImpl: context.fetchImpl,
-    readTextFor: (name) => name === spec.feedName,
+    readTextFor: (name) => name !== spec.assetName,
   });
   const checks = verifyDesktop({
     release,
     feedText: files[spec.feedName]?.text ?? null,
     installer: files[spec.assetName] ?? null,
   });
+  checks.push(
+    ...verifyProvenance({
+      channel: 'desktop',
+      release,
+      manifest: files[spec.provenanceName] ?? null,
+      sbom: files[spec.sbomName] ?? null,
+      bundle: files[spec.assetName] ?? null,
+    }),
+  );
   return { channel: 'desktop', status: channelStatus(checks), checks };
 }
 
@@ -1023,11 +1349,12 @@ async function runAndroid(context) {
   const { release, files } = await readStableRelease({
     repo: context.repo,
     tag: spec.tag,
-    wanted: [spec.assetName],
+    wanted: [spec.assetName, spec.provenanceName, spec.sbomName],
     directory: context.directory,
     token: context.token,
     timeoutMs: context.timeoutMs,
     fetchImpl: context.fetchImpl,
+    readTextFor: (name) => name !== spec.assetName,
   });
   const apk = files[spec.assetName] ?? null;
   let badgingText = null;
@@ -1074,19 +1401,52 @@ async function runAndroid(context) {
     signerError,
     pinnedCert: context.pinnedCert,
   });
+  checks.push(
+    ...verifyProvenance({
+      channel: 'android',
+      release,
+      manifest: files[spec.provenanceName] ?? null,
+      sbom: files[spec.sbomName] ?? null,
+      bundle: apk,
+    }),
+  );
   return { channel: 'android', status: channelStatus(checks), checks };
 }
 
 async function runIos(context) {
   const spec = RELEASES.ios;
-  const release = await readRelease({
+  if (context.appleSigning !== 'true') {
+    const release = await readRelease({
+      repo: context.repo,
+      tag: spec.tag,
+      token: context.token,
+      timeoutMs: context.timeoutMs,
+      fetchImpl: context.fetchImpl,
+    });
+    const checks = verifyIos({ release, appleSigning: context.appleSigning });
+    return { channel: 'ios', status: channelStatus(checks), checks };
+  }
+
+  const { release, files } = await readStableRelease({
     repo: context.repo,
     tag: spec.tag,
+    wanted: [spec.assetName, spec.provenanceName, spec.sbomName],
+    directory: context.directory,
     token: context.token,
     timeoutMs: context.timeoutMs,
     fetchImpl: context.fetchImpl,
+    readTextFor: (name) => name !== spec.assetName,
   });
   const checks = verifyIos({ release, appleSigning: context.appleSigning });
+  checks.push(
+    ...verifyProvenance({
+      channel: 'ios',
+      release,
+      manifest: files[spec.provenanceName] ?? null,
+      sbom: files[spec.sbomName] ?? null,
+      bundle: files[spec.assetName] ?? null,
+    }),
+  );
   return { channel: 'ios', status: channelStatus(checks), checks };
 }
 

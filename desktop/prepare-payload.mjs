@@ -43,6 +43,7 @@ const SKIP_TOP_LEVEL = new Set([
   '.gstack',
   '.gev-cache',
   '.gev-logs',
+  '.gev-tools',
   '.playwright-mcp',
   'qa-artifacts',
   'qa-shots',

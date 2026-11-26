@@ -23,6 +23,7 @@ on:
       - 'vite.config.js'
       - 'package.json'
       - 'package-lock.json'
+      - 'scripts/release-provenance.mjs'
   workflow_dispatch:
 
 permissions:
@@ -187,15 +188,34 @@ jobs:
           APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
           "$APKSIGNER" verify --print-certs "$APK"
 
+      # The APK is copied under its release name first, so the manifest's
+      # bundle name, size and SHA-256 all describe the file that is uploaded.
+      - name: Generate the release provenance and the SBOM
+        run: |
+          set -euo pipefail
+          cp android/app/build/outputs/apk/release/app-release.apk gods-eye-view.apk
+          node scripts/release-provenance.mjs \
+            --platform android \
+            --release apk-latest \
+            --version "$GEV_VERSION_NAME" \
+            --commit "$GITHUB_SHA" \
+            --artifact gods-eye-view.apk \
+            --manifest provenance.json \
+            --sbom sbom.cdx.json
+          test -s provenance.json
+          test -s sbom.cdx.json
+
       - name: Publish the APK to the rolling release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          cp android/app/build/outputs/apk/release/app-release.apk gods-eye-view.apk
           NOTES="Built from ${GITHUB_SHA} (${GEV_VERSION_NAME}) on ${GITHUB_REF_NAME}."
           gh release view apk-latest >/dev/null 2>&1 \
             || gh release create apk-latest --title "God's Eye View — Android" --notes "$NOTES" --latest
           gh release upload apk-latest gods-eye-view.apk --clobber
+          # The manifest names the SBOM's digest, so the SBOM goes up first.
+          gh release upload apk-latest sbom.cdx.json --clobber
+          gh release upload apk-latest provenance.json --clobber
           gh release edit apk-latest --notes "$NOTES" --latest
           echo "Download: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/latest/download/gods-eye-view.apk"

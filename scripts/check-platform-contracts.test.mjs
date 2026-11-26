@@ -97,6 +97,42 @@ test('a page shim that stops recognising the iOS origin is caught', () => {
   assert.ok(failed(evaluatePlatformContracts(files), 'ios.keyless-api'));
 });
 
+test('a transit host added to only one shell is caught', () => {
+  const files = mutate(
+    'android/app/src/main/java/com/godseye/view/LiveApi.java',
+    '    "cdn.mbta.com",',
+    '    "cdn.mbta.com",\n    "transit.example",',
+  );
+  assert.ok(failed(evaluatePlatformContracts(files), 'live-api.hosts'));
+});
+
+test('a transit source added without its host in both shells is caught', () => {
+  const files = mutate(
+    'src/data/transitFeeds.js',
+    "url: 'https://cdn.mbta.com/realtime/VehiclePositions.pb'",
+    "url: 'https://transit.example/vehicle-positions.pb'",
+  );
+  assert.ok(failed(evaluatePlatformContracts(files), 'live-api.hosts'));
+});
+
+test('a GBFS host added to one shell is caught', () => {
+  const files = mutate(
+    'ios/GodsEyeView/LiveApi.swift',
+    '    "gbfs.lyft.com",',
+    '    "gbfs.lyft.com",\n    "gbfs.example",',
+  );
+  assert.ok(failed(evaluatePlatformContracts(files), 'live-api.hosts'));
+});
+
+test('a keyless route added to only one shell is caught', () => {
+  const files = mutate(
+    'ios/GodsEyeView/LiveApi.swift',
+    'if path == "/api/military" || path == "/api/adsblol/mil" {',
+    'if path == "/api/military" || path == "/api/adsblol/mil" || path == "/api/transit" {',
+  );
+  assert.ok(failed(evaluatePlatformContracts(files), 'live-api.routes'));
+});
+
 test('a publisher that no longer runs from main is caught', () => {
   const files = mutate(
     '.github/workflows/android-apk.yml',
@@ -166,6 +202,15 @@ test('a release that steals the latest slot is caught', () => {
     'make_latest=true',
   );
   assert.ok(failed(evaluatePlatformContracts(files), 'release.latest-owner'));
+});
+
+test('a publisher that stops writing provenance is caught', () => {
+  const files = mutate(
+    '.github/workflows/android-apk.yml',
+    'node scripts/release-provenance.mjs',
+    'node scripts/other.mjs',
+  );
+  assert.ok(failed(evaluatePlatformContracts(files), 'release.provenance'));
 });
 
 test('a gate that stops keeping its report is caught', () => {

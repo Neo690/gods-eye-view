@@ -28,6 +28,7 @@ on:
     paths:
       - 'ios/**'
       - 'scripts/prepare-ios-payload.mjs'
+      - 'scripts/release-provenance.mjs'
       - 'src/**'
       - 'public/**'
       - 'build/**'
@@ -464,12 +465,28 @@ jobs:
 
           echo "ipa: $(du -h "$IPA" | cut -f1), $(find "$APP" -type f | wc -l | tr -d ' ') files in the app"
 
+      # The IPA is copied under its release name first, so the manifest's bundle
+      # name, size and SHA-256 all describe the file that is uploaded.
+      - name: Generate the release provenance and the SBOM
+        run: |
+          set -euo pipefail
+          cp ios/build/ipa/GodsEyeView.ipa gods-eye-view.ipa
+          node scripts/release-provenance.mjs \
+            --platform ios \
+            --release ios-latest \
+            --version "$GEV_VERSION_NAME" \
+            --commit "$GITHUB_SHA" \
+            --artifact gods-eye-view.ipa \
+            --manifest provenance.json \
+            --sbom sbom.cdx.json
+          test -s provenance.json
+          test -s sbom.cdx.json
+
       - name: Publish the IPA to the rolling release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          cp ios/build/ipa/GodsEyeView.ipa gods-eye-view.ipa
           NOTES="Built from ${GITHUB_SHA} (${GEV_VERSION_NAME}) on ${GITHUB_REF_NAME}.
 
           Ad-hoc signed: it installs only on the devices the provisioning profile
@@ -479,6 +496,9 @@ jobs:
           gh release view ios-latest >/dev/null 2>&1 \
             || gh release create ios-latest --title "God's Eye View — iOS" --notes "$NOTES"
           gh release upload ios-latest gods-eye-view.ipa --clobber
+          # The manifest names the SBOM's digest, so the SBOM goes up first.
+          gh release upload ios-latest sbom.cdx.json --clobber
+          gh release upload ios-latest provenance.json --clobber
           gh release edit ios-latest --notes "$NOTES"
 
           # Only one release per repository can be "the latest", and the Android

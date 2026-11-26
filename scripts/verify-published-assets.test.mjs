@@ -9,22 +9,81 @@ import {
   channelStatus,
   compareVersions,
   normalizeCertificateDigest,
+  notesCommit,
   notesVersion,
   parseApkSigner,
   parseBadging,
   parseLatestYml,
   resolveAndroidTool,
+  sha256Hex,
   sha512Base64,
   summarize,
   verifyApk,
   verifyDesktop,
   verifyIos,
+  verifyProvenance,
   verifyPublishedAssets,
 } from './verify-published-assets.mjs';
 
 const INSTALLER = Buffer.from('a windows installer, in miniature');
 const INSTALLER_SHA = sha512Base64(INSTALLER);
 const INSTALLER_NAME = 'gods-eye-view-windows-setup.exe';
+const COMMIT = `${'92d8f27'}${'0'.repeat(33)}`;
+
+/** A manifest and its SBOM, both matching the bytes they describe. */
+function provenanceFor({
+  tag = 'desktop-latest',
+  platform = 'windows',
+  assetName = INSTALLER_NAME,
+  bytes = INSTALLER,
+  version = '1.0.120',
+  commit = COMMIT,
+} = {}) {
+  const digest = sha256Hex(bytes);
+  const sbom = {
+    bomFormat: 'CycloneDX',
+    specVersion: '1.5',
+    metadata: {
+      component: { type: 'application', name: "God's Eye View", version },
+      properties: [
+        { name: 'gev:platform', value: platform },
+        { name: 'gev:release', value: tag },
+        { name: 'gev:commit', value: commit },
+      ],
+    },
+    components: [
+      {
+        type: 'file',
+        name: assetName,
+        hashes: [{ alg: 'SHA-256', content: digest }],
+      },
+      { type: 'library', name: 'example', version: '1.0.0' },
+    ],
+  };
+  const sbomText = `${JSON.stringify(sbom, null, 2)}\n`;
+  const manifest = {
+    schemaVersion: 1,
+    platform,
+    release: tag,
+    commit,
+    version,
+    bundle: { name: assetName, size: bytes.length, sha256: digest },
+    sbom: {
+      name: 'sbom.cdx.json',
+      format: 'CycloneDX',
+      specVersion: '1.5',
+      size: Buffer.byteLength(sbomText),
+      sha256: sha256Hex(Buffer.from(sbomText)),
+      components: sbom.components.length,
+    },
+  };
+  return {
+    manifestText: `${JSON.stringify(manifest, null, 2)}\n`,
+    sbomText,
+    manifest,
+    sbom,
+  };
+}
 
 const FEED = [
   'version: 1.0.120',
@@ -59,24 +118,37 @@ const SIGNER = [
 
 function desktopRelease({
   body = 'Built from 92d8f27 (1.0.120) on main.',
-  assets = [
-    {
-      name: 'latest.yml',
-      size: Buffer.byteLength(FEED),
-      updatedAt: '2026-11-23T00:34:33Z',
-    },
-    {
-      name: INSTALLER_NAME,
-      size: INSTALLER.length,
-      updatedAt: '2026-11-23T00:34:33Z',
-    },
-  ],
+  assets = null,
 } = {}) {
+  const provenance = provenanceFor();
   return {
     tag: 'desktop-latest',
     body,
     updatedAt: '2026-11-23T00:34:33Z',
-    assets,
+    assets:
+      assets ??
+      [
+        {
+          name: 'latest.yml',
+          size: Buffer.byteLength(FEED),
+          updatedAt: '2026-11-23T00:34:33Z',
+        },
+        {
+          name: INSTALLER_NAME,
+          size: INSTALLER.length,
+          updatedAt: '2026-11-23T00:34:33Z',
+        },
+        {
+          name: 'provenance.json',
+          size: Buffer.byteLength(provenance.manifestText),
+          updatedAt: '2026-11-23T00:34:33Z',
+        },
+        {
+          name: 'sbom.cdx.json',
+          size: Buffer.byteLength(provenance.sbomText),
+          updatedAt: '2026-11-23T00:34:33Z',
+        },
+      ],
   };
 }
 
@@ -175,6 +247,152 @@ test('the published version is read out of the notes the workflows write', () =>
   );
   assert.equal(notesVersion('Updated by hand'), null);
   assert.equal(notesVersion(''), null);
+});
+
+test('the published commit is read from the notes, short or full', () => {
+  assert.equal(notesCommit('Built from 92d8f27 (1.0.120) on main.'), '92d8f27');
+  assert.equal(
+    notesCommit(`Built from ${COMMIT} (1.0.120) on main.`),
+    COMMIT,
+  );
+  assert.equal(notesCommit('Updated by hand'), null);
+});
+
+function downloaded(text) {
+  return {
+    text,
+    bytes: Buffer.byteLength(text),
+    sha256: sha256Hex(Buffer.from(text)),
+  };
+}
+
+function bundleFor(bytes = INSTALLER) {
+  return {
+    name: INSTALLER_NAME,
+    bytes: bytes.length,
+    sha256: sha256Hex(bytes),
+  };
+}
+
+function desktopReleaseFor(manifestText, sbomText) {
+  return desktopRelease({
+    assets: [
+      { name: 'latest.yml', size: Buffer.byteLength(FEED) },
+      { name: INSTALLER_NAME, size: INSTALLER.length },
+      { name: 'provenance.json', size: Buffer.byteLength(manifestText) },
+      { name: 'sbom.cdx.json', size: Buffer.byteLength(sbomText) },
+    ],
+  });
+}
+
+test('the provenance manifest ties commit, version, bundle and SBOM together', () => {
+  const provenance = provenanceFor();
+  const checks = verifyProvenance({
+    channel: 'desktop',
+    release: desktopRelease(),
+    manifest: downloaded(provenance.manifestText),
+    sbom: downloaded(provenance.sbomText),
+    bundle: bundleFor(),
+  });
+  assert.equal(channelStatus(checks), 'pass', JSON.stringify(checks));
+  assert.equal(
+    checks.find((entry) => entry.name === 'provenance.commit').status,
+    'pass',
+  );
+});
+
+test('a manifest naming another commit than the release notes fails', () => {
+  const provenance = provenanceFor();
+  provenance.manifest.commit = 'f'.repeat(40);
+  const manifestText = `${JSON.stringify(provenance.manifest)}\n`;
+  const checks = verifyProvenance({
+    channel: 'desktop',
+    release: desktopReleaseFor(manifestText, provenance.sbomText),
+    manifest: downloaded(manifestText),
+    sbom: downloaded(provenance.sbomText),
+    bundle: bundleFor(),
+  });
+  const commit = checks.find((entry) => entry.name === 'provenance.commit');
+  assert.equal(commit.status, 'fail');
+  assert.match(commit.detail, /release notes name 92d8f27/);
+});
+
+test('a manifest whose bundle digest disagrees with the bytes fails', () => {
+  const provenance = provenanceFor();
+  provenance.manifest.bundle.sha256 = '0'.repeat(64);
+  const manifestText = `${JSON.stringify(provenance.manifest)}\n`;
+  const checks = verifyProvenance({
+    channel: 'desktop',
+    release: desktopReleaseFor(manifestText, provenance.sbomText),
+    manifest: downloaded(manifestText),
+    sbom: downloaded(provenance.sbomText),
+    bundle: bundleFor(),
+  });
+  assert.equal(
+    checks.find((entry) => entry.name === 'provenance.bundle').status,
+    'fail',
+  );
+});
+
+test('an SBOM that does not hash to the manifest value fails', () => {
+  const provenance = provenanceFor();
+  const checks = verifyProvenance({
+    channel: 'desktop',
+    release: desktopRelease(),
+    manifest: downloaded(provenance.manifestText),
+    sbom: downloaded(`${provenance.sbomText}\n`),
+    bundle: bundleFor(),
+  });
+  assert.equal(
+    checks.find((entry) => entry.name === 'provenance.sbom').status,
+    'fail',
+  );
+});
+
+test('an SBOM that is not a JSON object fails instead of crashing', () => {
+  const provenance = provenanceFor();
+  const checks = verifyProvenance({
+    channel: 'desktop',
+    release: desktopRelease(),
+    manifest: downloaded(provenance.manifestText),
+    sbom: downloaded('null\n'),
+    bundle: bundleFor(),
+  });
+  assert.equal(
+    checks.find((entry) => entry.name === 'provenance.sbom-format').status,
+    'fail',
+  );
+});
+
+test('a manifest naming another SBOM format version fails', () => {
+  const provenance = provenanceFor();
+  provenance.manifest.sbom.specVersion = '1.6';
+  const manifestText = `${JSON.stringify(provenance.manifest)}\n`;
+  const checks = verifyProvenance({
+    channel: 'desktop',
+    release: desktopReleaseFor(manifestText, provenance.sbomText),
+    manifest: downloaded(manifestText),
+    sbom: downloaded(provenance.sbomText),
+    bundle: bundleFor(),
+  });
+  assert.equal(
+    checks.find((entry) => entry.name === 'provenance.sbom-format').status,
+    'fail',
+  );
+});
+
+test('a release without provenance cannot pass the gate', () => {
+  const checks = verifyProvenance({
+    channel: 'desktop',
+    release: desktopRelease({
+      assets: [{ name: INSTALLER_NAME, size: INSTALLER.length }],
+    }),
+    manifest: null,
+    sbom: null,
+    bundle: bundleFor(),
+  });
+  assert.equal(channelStatus(checks), 'fail');
+  assert.match(checks[0].detail, /carries no provenance\.json/);
 });
 
 test('a matching feed, installer and release notes pass the desktop channel', () => {
@@ -603,6 +821,11 @@ test('the gate reads the release and its bytes as one snapshot', async () => {
   const feedUrl =
     'https://github.com/o/r/releases/download/desktop-latest/latest.yml';
   const installerUrl = `https://github.com/o/r/releases/download/desktop-latest/${INSTALLER_NAME}`;
+  const provenanceUrl =
+    'https://github.com/o/r/releases/download/desktop-latest/provenance.json';
+  const sbomUrl =
+    'https://github.com/o/r/releases/download/desktop-latest/sbom.cdx.json';
+  const provenance = provenanceFor();
   const payload = {
     tag_name: 'desktop-latest',
     body: 'Built from 92d8f27 (1.0.120) on main.',
@@ -622,6 +845,20 @@ test('the gate reads the release and its bytes as one snapshot', async () => {
         browser_download_url: installerUrl,
         url: 'unused',
       },
+      {
+        name: 'provenance.json',
+        size: Buffer.byteLength(provenance.manifestText),
+        updated_at: '2026-11-23T00:34:33Z',
+        browser_download_url: provenanceUrl,
+        url: 'unused',
+      },
+      {
+        name: 'sbom.cdx.json',
+        size: Buffer.byteLength(provenance.sbomText),
+        updated_at: '2026-11-23T00:34:33Z',
+        browser_download_url: sbomUrl,
+        url: 'unused',
+      },
     ],
   };
   const fetchImpl = async (url) => {
@@ -629,6 +866,10 @@ test('the gate reads the release and its bytes as one snapshot', async () => {
       return new Response(JSON.stringify(payload), { status: 200 });
     if (url === feedUrl) return new Response(FEED, { status: 200 });
     if (url === installerUrl) return new Response(INSTALLER, { status: 200 });
+    if (url === provenanceUrl)
+      return new Response(provenance.manifestText, { status: 200 });
+    if (url === sbomUrl)
+      return new Response(provenance.sbomText, { status: 200 });
     return new Response('not found', { status: 404 });
   };
 

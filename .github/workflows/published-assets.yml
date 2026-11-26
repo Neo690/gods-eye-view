@@ -11,8 +11,13 @@ name: Published assets gate
 #   apk-latest      the APK's package, versionName/versionCode, apksigner
 #                   signature and v2/v3 scheme; when ANDROID_CERT_SHA256 is set
 #                   the signer must also match that pinned certificate.
-#   ios-latest      no `.ipa` while the Apple signing secrets are absent; the
-#                   `.ipa` present when they are configured.
+#   all three       provenance.json names the release notes' commit and
+#                   version and the downloaded bundle's SHA-256; the
+#                   sbom.cdx.json it hashes is CycloneDX for that release and
+#                   carries the same bundle digest.
+#
+#   ios-latest      no `.ipa`, provenance or SBOM while the Apple signing
+#                   secrets are absent; all three present when configured.
 #
 # It also runs daily: removing a repository secret triggers no workflow, so a
 # schedule is the only way the "no IPA without signing" promise is checked

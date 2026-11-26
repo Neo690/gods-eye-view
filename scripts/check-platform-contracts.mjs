@@ -5,9 +5,12 @@
 // update channel, and one set of source paths that must trigger a rebuild.
 //
 // Those values live in different languages — Gradle, XcodeGen, xtool, YAML,
-// JavaScript — so a rename in one place can leave the others pointing at the
-// previous artifact. The release page still looks fine; the phone refuses the
-// update, or the updater looks for a file the release no longer carries.
+// JavaScript, Java and Swift — so a rename in one place can leave the others
+// pointing at the previous artifact. The release page still looks fine; the
+// phone refuses the update, or the updater looks for a file the release no
+// longer carries. The two mobile shells also mirror an in-app `/api/*` surface;
+// a route or upstream host added to one LiveApi without the other is invisible
+// until that layer 404s on the platform that is missing it.
 //
 // This check reads the declarations, not a build: it is fast enough for every
 // CI run and catches drift before a publisher runs. `verify-published-assets`
@@ -27,6 +30,7 @@ export const PLATFORM_FILES = Object.freeze([
   'desktop/prepare-payload.mjs',
   'android/app/build.gradle',
   'android/app/src/main/AndroidManifest.xml',
+  'android/app/src/main/java/com/godseye/view/LiveApi.java',
   'ios/project.yml',
   'ios/xtool.yml',
   'ios/Info.xtool.plist',
@@ -35,9 +39,12 @@ export const PLATFORM_FILES = Object.freeze([
   'ios/GodsEyeView/LocalServer.swift',
   'ios/Package.swift',
   'src/data/inAppApi.js',
+  'src/data/transitFeeds.js',
+  'src/data/gbfsSource.js',
   'src/standalone/layerSources.js',
   'scripts/install-latest-apk.mjs',
   'scripts/prepare-ios-payload.mjs',
+  'scripts/release-provenance.mjs',
   'scripts/verify-published-assets.mjs',
   'src/updates/updateChannel.js',
   '.github/workflows/windows-installer.yml',
@@ -51,6 +58,26 @@ export const MOBILE_BUNDLE_ID = 'com.godseye.view';
 
 /** The desktop app is deliberately a separate application id. */
 export const DESKTOP_APP_ID = 'com.godseyeview.desktop';
+
+/** The provenance files every publisher uploads beside its artifact. */
+export const RELEASE_PROVENANCE = Object.freeze({
+  manifest: 'provenance.json',
+  sbom: 'sbom.cdx.json',
+});
+
+/**
+ * Routes one shell answers and the other deliberately does not.
+ *
+ * The Android shell keeps a WMS weather-tile fallback for the observed-weather
+ * layer; the iOS shell does not need it because the in-page API
+ * (`src/data/inAppApi.js`) answers those two paths before the loopback route.
+ * This is the only permitted route asymmetry: every other route must exist in
+ * both dispatchers, so a new transit/GBFS route cannot land on one side only.
+ */
+export const LIVE_API_ROUTE_EXCEPTIONS = Object.freeze({
+  android: Object.freeze(['/api/weather/image', '/api/weather/tile']),
+  ios: Object.freeze([]),
+});
 
 /** Rolling release and asset names shared by publishers, updater and gate. */
 export const RELEASE_CHANNELS = Object.freeze({
@@ -157,6 +184,96 @@ function sameMembers(actual, expected) {
     actual.length === expected.length &&
     expected.every((value) => actual.includes(value))
   );
+}
+
+function uniqueSorted(values) {
+  return [...new Set(values)].sort();
+}
+
+/** The host allowlist a LiveApi exposes, or null when it cannot be read. */
+function liveApiHosts(text, language) {
+  const block =
+    language === 'java'
+      ? /UPSTREAM_HOSTS\s*=\s*\{([\s\S]*?)\n\s*\};/.exec(text)?.[1]
+      : /upstreamHosts\s*:\s*Set<String>\s*=\s*\[([\s\S]*?)\n\s*\]/.exec(
+          text,
+        )?.[1];
+  if (block === undefined) return null;
+  return uniqueSorted(
+    [...block.matchAll(/"([^"]+)"/g)]
+      .map((match) => match[1].trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+/** `/api/celestrak/` and `/api/celestrak?x=1` both normalise to one route. */
+function normalizeLiveApiRoute(value) {
+  const path = String(value).split(/[?#]/)[0].replace(/\/+$/, '');
+  return path || '/';
+}
+
+/** The routes one dispatcher actually matches, or null when unreadable. */
+function liveApiRoutes(text, language) {
+  const start = text.indexOf(
+    language === 'java'
+      ? 'static WebResourceResponse serve('
+      : 'func handle(_ request: HTTPRequest)',
+  );
+  const end = text.indexOf(
+    language === 'java' ? '/* ── CelesTrak' : 'func rescue(',
+    start,
+  );
+  if (start < 0 || end < 0) return null;
+  const routes = [...text.slice(start, end).matchAll(/"(\/api[^"]*)"/g)].map(
+    (match) => normalizeLiveApiRoute(match[1]),
+  );
+  return uniqueSorted(routes.filter((route) => route !== '/api'));
+}
+
+/** The hosts the transit registry actually fetches. */
+function transitSourceHosts(text) {
+  const hosts = [];
+  for (const match of text.matchAll(/^\s*url:\s*'([^']+)'/gm)) {
+    try {
+      hosts.push(new URL(match[1]).host.toLowerCase());
+    } catch {
+      // A non-URL `url:` value is not a feed endpoint; the shape checks in the
+      // transit suite own that error.
+    }
+  }
+  return hosts.length ? uniqueSorted(hosts) : null;
+}
+
+/** The explicit hosts the GBFS proxy accepts. */
+function gbfsSourceHosts(text) {
+  const block = /GBFS_ALLOWED_HOSTS\s*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(
+    text,
+  )?.[1];
+  if (block === undefined) return null;
+  return uniqueSorted(
+    [...block.matchAll(/'([^']+)'/g)]
+      .map((match) => match[1].trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+function routeOnlyIn(routes, other, exceptions) {
+  return (routes ?? []).filter(
+    (route) => !(other ?? []).includes(route) && !exceptions.includes(route),
+  );
+}
+
+function exceptionProblems(routes, other, exceptions, label) {
+  const problems = [];
+  for (const route of exceptions) {
+    if (!(routes ?? []).includes(route)) {
+      problems.push(`${label} exception ${route} is no longer routed`);
+    }
+    if ((other ?? []).includes(route)) {
+      problems.push(`${label} exception ${route} is routed by both shells`);
+    }
+  }
+  return problems;
 }
 
 function iosPlistString(text, key) {
@@ -397,6 +514,120 @@ export function evaluatePlatformContracts(files) {
     ),
   );
 
+  const androidLiveApi = textOf(
+    files,
+    'android/app/src/main/java/com/godseye/view/LiveApi.java',
+  );
+  const androidHosts = liveApiHosts(androidLiveApi, 'java');
+  const iosHosts = liveApiHosts(iosLiveApi, 'swift');
+  const transitHosts = transitSourceHosts(
+    textOf(files, 'src/data/transitFeeds.js'),
+  );
+  const gbfsHosts = gbfsSourceHosts(textOf(files, 'src/data/gbfsSource.js'));
+  const missingFromIos = (androidHosts ?? []).filter(
+    (host) => !(iosHosts ?? []).includes(host),
+  );
+  const missingFromAndroid = (iosHosts ?? []).filter(
+    (host) => !(androidHosts ?? []).includes(host),
+  );
+  const sourceProblems = [];
+  for (const [kind, hosts] of [
+    ['transit', transitHosts],
+    ['GBFS', gbfsHosts],
+  ]) {
+    for (const host of hosts ?? []) {
+      if (!(androidHosts ?? []).includes(host)) {
+        sourceProblems.push(`${kind} source ${host} is missing from Android`);
+      }
+      if (!(iosHosts ?? []).includes(host)) {
+        sourceProblems.push(`${kind} source ${host} is missing from iOS`);
+      }
+    }
+  }
+  const sourceHostsReadable =
+    transitHosts !== null &&
+    gbfsHosts !== null &&
+    transitHosts.length > 0 &&
+    gbfsHosts.length > 0;
+  const hostsOk =
+    androidHosts !== null &&
+    iosHosts !== null &&
+    androidHosts.length > 0 &&
+    iosHosts.length > 0 &&
+    missingFromIos.length === 0 &&
+    missingFromAndroid.length === 0 &&
+    sourceHostsReadable &&
+    sourceProblems.length === 0;
+  checks.push(
+    check(
+      'live-api.hosts',
+      hostsOk,
+      hostsOk
+        ? `${androidHosts.length} hosts are identical in Android and iOS, including every transit and GBFS source`
+        : `Android ${androidHosts?.length ?? 'unreadable'}, iOS ${
+            iosHosts?.length ?? 'unreadable'
+          }; missing on iOS: ${missingFromIos.join(', ') || 'none'}; missing on Android: ${
+            missingFromAndroid.join(', ') || 'none'
+          }; ${
+            sourceProblems.join('; ') ||
+            (sourceHostsReadable
+              ? 'source hosts agree'
+              : 'the transit or GBFS host registry could not be read')
+          }`,
+    ),
+  );
+
+  const androidRoutes = liveApiRoutes(androidLiveApi, 'java');
+  const iosRoutes = liveApiRoutes(iosLiveApi, 'swift');
+  const androidOnly = routeOnlyIn(
+    androidRoutes,
+    iosRoutes,
+    LIVE_API_ROUTE_EXCEPTIONS.android,
+  );
+  const iosOnly = routeOnlyIn(
+    iosRoutes,
+    androidRoutes,
+    LIVE_API_ROUTE_EXCEPTIONS.ios,
+  );
+  const sharedRoutes = (androidRoutes ?? []).filter((route) =>
+    (iosRoutes ?? []).includes(route),
+  );
+  const routeProblems = [
+    ...exceptionProblems(
+      androidRoutes,
+      iosRoutes,
+      LIVE_API_ROUTE_EXCEPTIONS.android,
+      'Android',
+    ),
+    ...exceptionProblems(
+      iosRoutes,
+      androidRoutes,
+      LIVE_API_ROUTE_EXCEPTIONS.ios,
+      'iOS',
+    ),
+  ];
+  const routesOk =
+    androidRoutes !== null &&
+    iosRoutes !== null &&
+    androidRoutes.includes('/api/upstream') &&
+    iosRoutes.includes('/api/upstream') &&
+    androidOnly.length === 0 &&
+    iosOnly.length === 0 &&
+    routeProblems.length === 0;
+  checks.push(
+    check(
+      'live-api.routes',
+      routesOk,
+      routesOk
+        ? `${sharedRoutes.length} routes are shared by Android and iOS, plus ${LIVE_API_ROUTE_EXCEPTIONS.android.length} documented Android-only weather fallbacks`
+        : `Android ${androidRoutes?.length ?? 'unreadable'} routes, iOS ${
+            iosRoutes?.length ?? 'unreadable'
+          }; only on Android: ${androidOnly.join(', ') || 'none'}; only on iOS: ${
+            iosOnly.join(', ') || 'none'
+          }; ${routeProblems.join('; ') || 'both shells answer /api/upstream'}`,
+    ),
+  );
+
   checks.push(
     check(
       'desktop.version',
@@ -477,6 +708,32 @@ export function evaluatePlatformContracts(files) {
   );
 
   const gateWorkflow = textOf(files, '.github/workflows/published-assets.yml');
+  const provenance = textOf(files, 'scripts/release-provenance.mjs');
+  const provenanceWorkflows = Object.values(RELEASE_CHANNELS).map(
+    (channel) => channel.workflow,
+  );
+  checks.push(
+    check(
+      'release.provenance',
+      provenance.includes(
+        `PROVENANCE_ASSET = '${RELEASE_PROVENANCE.manifest}'`,
+      ) &&
+        provenance.includes(`SBOM_ASSET = '${RELEASE_PROVENANCE.sbom}'`) &&
+        gate.includes(`provenanceName: '${RELEASE_PROVENANCE.manifest}'`) &&
+        gate.includes(`sbomName: '${RELEASE_PROVENANCE.sbom}'`) &&
+        gate.includes('verifyProvenance') &&
+        provenanceWorkflows.every(
+          (workflow) =>
+            textOf(files, workflow).includes(
+              'node scripts/release-provenance.mjs',
+            ) &&
+            textOf(files, workflow).includes(RELEASE_PROVENANCE.manifest) &&
+            textOf(files, workflow).includes(RELEASE_PROVENANCE.sbom),
+        ),
+      'the generator, the gate and all three publishers agree on provenance.json and sbom.cdx.json',
+    ),
+  );
+
   checks.push(
     check(
       'release.gate',

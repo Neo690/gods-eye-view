@@ -21,6 +21,7 @@ on:
       - 'vite.config.js'
       - 'package.json'
       - 'package-lock.json'
+      - 'scripts/release-provenance.mjs'
   workflow_dispatch:
 
 permissions:
@@ -136,6 +137,20 @@ jobs:
           if ($app.ExitCode -ne 0) { throw "the packaged app did not answer /api/setup/status (exit $($app.ExitCode))" }
           'the packaged app answered /api/setup/status'
 
+      # The manifest is written from the bytes that were just packaged, not from
+      # the source checkout, so its SHA-256 is the file the release will serve.
+      - name: Generate the release provenance and the SBOM
+        shell: pwsh
+        run: |
+          node scripts/release-provenance.mjs `
+            --platform windows `
+            --release desktop-latest `
+            --version $env:GEV_DESKTOP_VERSION `
+            --commit $env:GITHUB_SHA `
+            --artifact desktop/release/gods-eye-view-windows-setup.exe `
+            --manifest desktop/release/provenance.json `
+            --sbom desktop/release/sbom.cdx.json
+
       - name: Publish the installer to the rolling release
         shell: pwsh
         env:
@@ -163,6 +178,14 @@ jobs:
           $blockmap = Get-ChildItem desktop/release/*.blockmap |
             Select-Object -First 1
           if ($blockmap) { gh release upload desktop-latest $blockmap.FullName --clobber }
+          # The manifest names the SBOM's digest, so the SBOM goes up first and
+          # the feed that points at the installer goes up last.
+          $provenance = 'desktop/release/provenance.json'
+          $sbom = 'desktop/release/sbom.cdx.json'
+          if (-not (Test-Path $provenance)) { throw 'no provenance.json was produced' }
+          if (-not (Test-Path $sbom)) { throw 'no sbom.cdx.json was produced' }
+          gh release upload desktop-latest $sbom --clobber
+          gh release upload desktop-latest $provenance --clobber
           gh release upload desktop-latest $feed --clobber
           gh release edit desktop-latest --notes $notes
 
